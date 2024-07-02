@@ -21,76 +21,45 @@ Modes can be set via command line arguments:
 Press 'R' to reset the  simulation
 """
 
-import numpy as np
-from isaacgym import gymutil
-from isaacgym import gymapi
-from math import sqrt
-
 import pathlib
-from tqdm import tqdm
 import random
-from typing import List, Tuple, Set
+from math import sqrt
+from typing import List, Set, Tuple
 
-from get_a_grip import get_data_folder
+import numpy as np
+from get_a_grip import get_assets_folder
 from get_a_grip.dataset_generation.utils.allegro_hand_info import (
     ALLEGRO_HAND_ROOT_HAND_FILE,
 )
+from isaacgym import gymapi, gymutil
+from tqdm import tqdm
 
 
-def get_test_object_set() -> Set[str]:
-    # HACK: Hardcoded path
-    TRAIN_VAL_TEST_SPLIT_DIR = pathlib.Path(
-        "/juno/u/tylerlum/github_repos/DexGraspNet/2024-06-02_NEW_train_val_test_splits/"
-    )
-    assert TRAIN_VAL_TEST_SPLIT_DIR.exists()
-
-    read_in_test_object_code_and_scale_list = []
-    with open(TRAIN_VAL_TEST_SPLIT_DIR / "test.txt", "r") as file:
-        for line in file:
-            read_in_test_object_code_and_scale_list.append(line.strip())
-
-    TEST_SET_OBJECT_CODES_AND_SCALES = set(read_in_test_object_code_and_scale_list)
-    print(f"Test: {len(TEST_SET_OBJECT_CODES_AND_SCALES)}")
-    return TEST_SET_OBJECT_CODES_AND_SCALES
-
-
-def get_test_object_codes_and_scales() -> Tuple[List[str], List[float]]:
-    TEST_SET_OBJECT_CODES_AND_SCALES = get_test_object_set()
-
-    test_object_codes = []
-    test_object_scales = []
-    for object_code_and_scale in TEST_SET_OBJECT_CODES_AND_SCALES:
-        idx = object_code_and_scale.index("_0_")
-        object_code = object_code_and_scale[:idx]
-        object_scale = float(object_code_and_scale[idx + 1 :].replace("_", "."))
-
-        # HACK: No guns
-        if "gun" in object_code.lower() or "pistol" in object_code.lower():
-            continue
-
-        test_object_codes.append(object_code)
-        test_object_scales.append(object_scale)
-
-    return test_object_codes, test_object_scales
-
-
-def get_subset_of_test_object_codes_and_scales(
-    num_objects: int,
+def sample_object_codes_and_scales(
+    max_n_objects: int,
+    meshdata_root_path: pathlib.Path,
 ) -> Tuple[List[str], List[float]]:
-    test_object_codes, test_object_scales = get_test_object_codes_and_scales()
-    from collections import defaultdict
+    # urdf_paths
+    assert (
+        meshdata_root_path.exists()
+    ), f"Meshdata root path {meshdata_root_path} does not exist"
 
-    object_code_to_scales = defaultdict(list)
-    for object_code, object_scale in zip(test_object_codes, test_object_scales):
-        object_code_to_scales[object_code].append(object_scale)
+    all_object_codes = [x.name for x in meshdata_root_path.iterdir() if x.is_dir()]
+    filtered_object_codes = [
+        object_code
+        for object_code in all_object_codes
+        if "pistol" not in object_code and "gun" not in object_code
+    ]
+    n_objects = (
+        max_n_objects
+        if len(filtered_object_codes) >= max_n_objects
+        else len(filtered_object_codes)
+    )
 
-    selected_object_codes, selected_object_scales = [], []
-    for object_code, object_scales in object_code_to_scales.items():
-        selected_object_codes.append(object_code)
-        selected_object_scales.append(random.choice(object_scales))
-        if len(selected_object_codes) == num_objects:
-            break
-    return selected_object_codes, selected_object_scales
+    selected_object_codes = random.sample(filtered_object_codes, k=n_objects)
+
+    scales = [random.uniform(0.05, 0.1) for _ in range(n_objects)]
+    return selected_object_codes, scales
 
 
 def get_urdf_paths(object_codes: List[str], meshdata_root_path: pathlib.Path) -> list:
@@ -161,13 +130,18 @@ args = gymutil.parse_arguments(
             "name": "--meshdata_root_path",
             "type": pathlib.Path,
             "help": "Path to meshdata root",
-        }
+        },
     ],
 )
 
 # Get urdf paths
-test_object_codes, scales = get_subset_of_test_object_codes_and_scales(num_objects=100)
-urdf_paths = get_urdf_paths(object_codes=test_object_codes, meshdata_root_path=args.meshdata_root_path)
+object_codes, scales = sample_object_codes_and_scales(
+    max_n_objects=100,
+    meshdata_root_path=args.meshdata_root_path,
+)
+urdf_paths = get_urdf_paths(
+    object_codes=object_codes, meshdata_root_path=args.meshdata_root_path
+)
 
 # configure sim
 sim_params = gymapi.SimParams()
@@ -322,10 +296,8 @@ hand_asset_options.collapse_fixed_joints = True
 hand_asset_options.fix_base_link = True
 
 # No virtual joints so it won't move
-(
-    hand_root,
-    hand_file,
-) = ALLEGRO_HAND_ROOT_HAND_FILE
+hand_root = str(get_assets_folder())
+hand_file = ALLEGRO_HAND_ROOT_HAND_FILE
 hand_asset = gym.load_asset(sim, hand_root, hand_file, hand_asset_options)
 
 hand_pose = gymapi.Transform()

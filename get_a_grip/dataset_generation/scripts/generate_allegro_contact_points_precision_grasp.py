@@ -1,5 +1,7 @@
-import numpy as np
 import json
+
+import numpy as np
+import plotly.graph_objects as go
 from get_a_grip import get_assets_folder
 
 # Number of points
@@ -22,8 +24,6 @@ z *= radius
 points = np.stack((x, y, z), axis=-1).reshape(-1, 3)
 
 # Scatter plot points in 3d using plotly.
-import plotly.graph_objects as go
-
 fig = go.Figure(
     data=[go.Scatter3d(x=points[:, 0], y=points[:, 1], z=points[:, 2], mode="markers")]
 )

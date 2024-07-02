@@ -1,22 +1,20 @@
 # %%
-from typing import Optional, Tuple
-import plotly.graph_objects as go
-import numpy as np
-import matplotlib.pyplot as plt
 import pathlib
-from scipy.spatial.transform import Rotation as R
-from tqdm import tqdm
 from collections import defaultdict
-from localscope import localscope
+from typing import Tuple
 
+import numpy as np
+import plotly.graph_objects as go
+import torch
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
-from get_a_grip.dataset_generation.utils.pose_conversion import (
-    hand_config_to_pose,
-)
 from get_a_grip.dataset_generation.utils.joint_angle_targets import (
     compute_fingertip_dirs,
 )
-import torch
+from get_a_grip.dataset_generation.utils.pose_conversion import (
+    hand_config_to_pose,
+)
+from localscope import localscope
+from tqdm import tqdm
 
 # %%
 DEBUG_NO_NOISE = False

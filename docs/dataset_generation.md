@@ -57,7 +57,8 @@ CUDA_VISIBLE_DEVICES=0 \
 python get_a_grip/dataset_generation/scripts/generate_nerf_data.py \
 --meshdata_root_path data/large/meshes \
 --output_nerfdata_path data/NEW_DATASET/nerfdata \
---only_objects_in_this_path data/NEW_DATASET/hand_config_dicts
+--only_objects_in_this_path data/NEW_DATASET/hand_config_dicts \
+--num_cameras 100
 ```
 
 <p align="center">
@@ -72,4 +73,15 @@ python get_a_grip/dataset_generation/scripts/train_nerfs.py \
 --nerfdata_name nerfdata \
 --output_nerfcheckpoints_name nerfcheckpoints \
 --max_num_iterations 400
+```
+
+## 6. Point Cloud Generation
+
+```
+python get_a_grip/dataset_generation/export_pointclouds.py \
+--experiment_name NEW_DATASET \
+--nerf-is-z-up False \
+--nerfcheckpoints_name nerfcheckpoints \
+--output_pointclouds_name pointclouds \
+--num_points 5000
 ```

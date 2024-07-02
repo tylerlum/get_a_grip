@@ -1,8 +1,7 @@
+import numpy as np
 import torch
 import transforms3d
-import numpy as np
 from get_a_grip import get_assets_folder
-
 
 ALLEGRO_HAND_JOINT_NAMES = [
     "joint_0.0",
@@ -56,8 +55,7 @@ ALLEGRO_HAND_ROOT_HAND_FILE = (
 )
 
 ALLEGRO_HAND_ROOT_HAND_FILE_WITH_VIRTUAL_JOINTS = (
-    str(get_assets_folder()),
-    "allegro_hand_description/allegro_hand_description_right_with_virtual_joints.urdf",
+    "allegro_hand_description/allegro_hand_description_right_with_virtual_joints.urdf"
 )
 
 # This is a list of allowed contact link names for precision grasps
@@ -83,3 +81,13 @@ ALLEGRO_HAND_ALLOWED_CONTACT_LINK_NAMES = [
 ]
 
 ALLEGRO_HAND_FINGER_KEYWORDS = ["3.0", "7.0", "11.0", "15.0"]
+
+ALLEGRO_HAND_URDF_PATH = (
+    get_assets_folder() / "allegro_hand_description/allegro_hand_description_right.urdf"
+)
+ALLEGRO_HAND_CONTACT_POINTS_PATH = (
+    get_assets_folder() / "allegro_hand_description/contact_points_precision_grasp.json"
+)
+ALLEGRO_HAND_PENETRATION_POINTS_PATH = (
+    get_assets_folder() / "allegro_hand_description/penetration_points.json"
+)

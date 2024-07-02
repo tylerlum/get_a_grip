@@ -1,11 +1,12 @@
-import torch
-import transforms3d
 import math
-import pytorch3d.structures
-import pytorch3d.ops
-import trimesh as tm
+
 import numpy as np
+import pytorch3d.ops
+import pytorch3d.structures
+import torch
 import torch.nn.functional
+import transforms3d
+import trimesh as tm
 from get_a_grip.dataset_generation.utils.allegro_hand_info import (
     ALLEGRO_HAND_JOINT_ANGLES_MU,
     ALLEGRO_HAND_ROTATION,
@@ -116,16 +117,16 @@ def initialize_convex_hull(
                 dtype=torch.float,
                 device=device,
             )
-        translation[
-            i * batch_size_each : (i + 1) * batch_size_each
-        ] = p - distance.unsqueeze(1) * (
-            rotation_global
-            @ rotation_local
-            @ torch.tensor([0, 0, 1], dtype=torch.float, device=device).reshape(
-                1, -1, 1
-            )
-        ).squeeze(
-            2
+        translation[i * batch_size_each : (i + 1) * batch_size_each] = (
+            p
+            - distance.unsqueeze(1)
+            * (
+                rotation_global
+                @ rotation_local
+                @ torch.tensor([0, 0, 1], dtype=torch.float, device=device).reshape(
+                    1, -1, 1
+                )
+            ).squeeze(2)
         )
         rotation_hand = ALLEGRO_HAND_ROTATION.to(device)
         rotation[i * batch_size_each : (i + 1) * batch_size_each] = (

@@ -1,59 +1,58 @@
-from isaacgym import gymapi, torch_utils, gymutil, gymtorch
+import json
 import math
-import trimesh
+import os
+import pathlib
+import shutil
+from collections import defaultdict
+from datetime import datetime
+from enum import Enum, auto
+from pathlib import Path
 from time import sleep
-from tqdm import tqdm
+from typing import Dict, List, Tuple
+
+import imageio
+import numpy as np
+import torch
+import transforms3d
+import trimesh
 from get_a_grip import get_assets_folder
 from get_a_grip.dataset_generation.utils.allegro_hand_info import (
     ALLEGRO_HAND_ALLOWED_CONTACT_LINK_NAMES,
     ALLEGRO_HAND_JOINT_NAMES,
     ALLEGRO_HAND_ROOT_HAND_FILE_WITH_VIRTUAL_JOINTS,
 )
+from get_a_grip.dataset_generation.utils.quaternions import Quaternion
 from get_a_grip.dataset_generation.utils.torch_quat_utils import (
-    pose_to_T,
     T_to_pose,
+    pose_to_T,
 )
-from collections import defaultdict
-import torch
-from enum import Enum, auto
-from typing import List, Tuple, Dict
-import transforms3d
-from datetime import datetime
+from isaacgym import gymapi, gymtorch, gymutil, torch_utils
+from PIL import Image
+from tqdm import tqdm
+
+# Spawn the hand at a far away position far away from the object
+FAR_AWAY_INIT_HAND_POS = gymapi.Vec3(0, 1, 0)
 
 # collision_filter is a bit mask that lets you filter out collision between bodies. Two bodies will not collide if their collision filters have a common bit set.
 HAND_COLLISION_FILTER = 0  # 0 means turn off collisions
 OBJ_COLLISION_FILTER = 0  # 0 means don't turn off collisions
 TABLE_COLLISION_FILTER = 0  # 0 means don't turn off collisions
-RESOLUTION_REDUCTION_FACTOR_TO_SAVE_SPACE = 1
-ISAAC_DATETIME_STR = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-ARBITRARY_INIT_HAND_POS = gymapi.Vec3(0, 1, 0)
 
-
-def assert_equals(a, b):
-    assert a == b, f"{a} != {b}"
-
-
-########## NERF GRASPING START ##########
-
-import numpy as np
-import os
-import json
-from pathlib import Path
-import shutil
-from PIL import Image
-import imageio
-import pathlib
-
-from get_a_grip.dataset_generation.utils.quaternions import Quaternion
-from datetime import datetime
-
+# Camera settings
 CAMERA_IMG_HEIGHT, CAMERA_IMG_WIDTH = 400, 400
+RESOLUTION_REDUCTION_FACTOR_TO_SAVE_SPACE = 1
 CAMERA_HORIZONTAL_FOV_DEG = 35.0
 CAMERA_VERTICAL_FOV_DEG = (
     CAMERA_IMG_HEIGHT / CAMERA_IMG_WIDTH
 ) * CAMERA_HORIZONTAL_FOV_DEG
 OBJ_SEGMENTATION_ID = 1
 TABLE_SEGMENTATION_ID = 2
+
+ISAAC_DATETIME_STR = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+
+def assert_equals(a, b):
+    assert a == b, f"{a} != {b}"
 
 
 def get_fixed_camera_transform(
@@ -86,9 +85,6 @@ def get_fixed_camera_transform(
     fixed_quat = Quaternion.fromMatrix(rot_matrix)
 
     return pos, fixed_quat
-
-
-########## NERF GRASPING END ##########
 
 
 gym = gymapi.acquire_gym()
@@ -138,10 +134,9 @@ class IsaacValidator:
         self._init_or_reset_state()
 
         # Need virtual joints to control hand position
-        (
-            self.hand_root,
-            self.hand_file,
-        ) = ALLEGRO_HAND_ROOT_HAND_FILE_WITH_VIRTUAL_JOINTS
+        self.hand_root = str(get_assets_folder())
+        self.hand_file = ALLEGRO_HAND_ROOT_HAND_FILE_WITH_VIRTUAL_JOINTS
+
         # HACK: Hardcoded virtual joint names
         self.virtual_joint_names = [
             "virtual_joint_translation_x",
@@ -419,10 +414,10 @@ class IsaacValidator:
         add_random_pose_noise: bool = False,
     ) -> None:
         # Set hand pose
-        # For now, move hand to arbitrary offset from origin
+        # For now, move hand to far away position
         # Will move hand to object later
         hand_pose = gymapi.Transform()
-        hand_pose.p = ARBITRARY_INIT_HAND_POS
+        hand_pose.p = FAR_AWAY_INIT_HAND_POS
 
         # Create hand
         hand_actor_handle = gym.create_actor(
@@ -490,7 +485,6 @@ class IsaacValidator:
                 env, hand_actor_handle, joint, gymapi.DOMAIN_ACTOR
             )
             HARD_SHAKE_STIFFNESS = 20000.0
-            LIGHT_SHAKE_STIFFNESS = 200.0
             hand_props["stiffness"][joint_idx] = HARD_SHAKE_STIFFNESS
             hand_props["damping"][joint_idx] = 10.0
 
@@ -823,7 +817,7 @@ class IsaacValidator:
         N = current_object_poses.shape[0]
         assert_equals(current_object_poses.shape, (N, 7))
 
-        # Currently: hand_pose = ARBITRARY_INIT_HAND_POS
+        # Currently: hand_pose = FAR_AWAY_INIT_HAND_POS
         # Next: hand_pose = desired_hand_pose_in_world_frame = desired_hand_pose_in_object_frame + object_pose
         # world_to_hand_transform = world_to_object_transform @ object_to_hand_transform
         desired_hand_poses_in_object_frame = self._gymapi_transforms_to_poses(
@@ -941,7 +935,7 @@ class IsaacValidator:
                     gym.step_graphics(self.sim)
                     gym.render_all_camera_sensors(self.sim)
                     for ii, env in enumerate(self.camera_envs):
-                        video_frame_rgba = gym.get_camera_image(
+                        video_frame_rgba: np.ndarray = gym.get_camera_image(
                             self.sim,
                             env,
                             self.camera_handles[ii],
@@ -951,7 +945,9 @@ class IsaacValidator:
                             self.camera_properties_list[ii].width,
                             4,  # RGBA
                         )
-                        assert isinstance(video_frame_rgba, np.ndarray), f"{type(video_frame_rgba)}"
+                        assert isinstance(
+                            video_frame_rgba, np.ndarray
+                        ), f"{type(video_frame_rgba)}"
                         video_frame = video_frame_rgba[:, :, :3]
                         self.video_frames[ii].append(video_frame)
 
@@ -1100,7 +1096,6 @@ class IsaacValidator:
     ########## HELPERS END ##########
 
     ########## VIDEO START ##########
-    # TODO: be less lazy, integrate with NeRF datagen.
     def _setup_camera(self, env) -> None:
         camera_properties = gymapi.CameraProperties()  # type: ignore
 
@@ -1710,13 +1705,13 @@ class IsaacValidator:
         env_idx = 0
         env = self.envs[env_idx]
 
-        color_image = gym.get_camera_image(
+        color_image: np.ndarray = gym.get_camera_image(
             self.sim, env, camera_handle, gymapi.IMAGE_COLOR
         )
         color_image = color_image.reshape(CAMERA_IMG_HEIGHT, CAMERA_IMG_WIDTH, -1)
         Image.fromarray(color_image).save(path / f"col_{ii}.png")
 
-        segmentation_image = gym.get_camera_image(
+        segmentation_image: np.ndarray = gym.get_camera_image(
             self.sim, env, camera_handle, gymapi.IMAGE_SEGMENTATION
         )
         segmentation_image = segmentation_image == OBJ_SEGMENTATION_ID
@@ -1725,11 +1720,12 @@ class IsaacValidator:
         ).astype(np.uint8)
         Image.fromarray(segmentation_image).convert("L").save(path / f"seg_{ii}.png")
 
-        # TODO: get_camera_image has -inf values, which can't be cast to int, should fix this for depth supervision
-        depth_image = gym.get_camera_image(
+        # get_camera_image has -inf values, which can't be cast to int, should fix this for depth supervision
+        # Clamp values to 0-2m
+        depth_image: np.ndarray = gym.get_camera_image(
             self.sim, env, camera_handle, gymapi.IMAGE_DEPTH
         )
-        # distance in units I think
+        depth_image = np.clip(depth_image, 0, 2)
         depth_image = -1000 * depth_image.reshape(CAMERA_IMG_HEIGHT, CAMERA_IMG_WIDTH)
         if numpy_depth:
             np.save(path / f"dep_{ii}.npy", depth_image)
@@ -1760,7 +1756,7 @@ class IsaacValidator:
 
         # COLOR IMAGE
         # NEED THESE TEMPORARILY FOR transforms.json
-        color_image = gym.get_camera_image(
+        color_image: np.ndarray = gym.get_camera_image(
             self.sim, env, camera_handle, gymapi.IMAGE_COLOR
         )
         color_image = color_image.reshape(CAMERA_IMG_HEIGHT, CAMERA_IMG_WIDTH, -1)
@@ -1768,7 +1764,7 @@ class IsaacValidator:
 
         # SEGMENTATION IMAGE
         if generate_seg:
-            segmentation_image = gym.get_camera_image(
+            segmentation_image: np.ndarray = gym.get_camera_image(
                 self.sim, env, camera_handle, gymapi.IMAGE_SEGMENTATION
             )
             segmentation_image = segmentation_image == OBJ_SEGMENTATION_ID
@@ -1781,7 +1777,7 @@ class IsaacValidator:
 
         # DEPTH IMAGE
         if generate_depth:
-            depth_image = gym.get_camera_image(
+            depth_image: np.ndarray = gym.get_camera_image(
                 self.sim, env, camera_handle, gymapi.IMAGE_DEPTH
             )
             depth_image = -1000 * depth_image.reshape(

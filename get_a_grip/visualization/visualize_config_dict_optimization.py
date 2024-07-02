@@ -1,23 +1,23 @@
 import os
-from tqdm import tqdm
-import plotly.graph_objects as go
-from typing import List, Tuple, Dict, Any, Optional
-from dataclasses import dataclass
-import tyro
-import numpy as np
-from visualize_optimization_helper import (
-    create_figure_with_buttons_and_slider,
-)
-from visualize_config_dict_helper import create_config_dict_fig
-
 import pathlib
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
-from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_to_pose
+import plotly.graph_objects as go
+import tyro
+from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.object_model import ObjectModel
 from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
+)
+from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_to_pose
+from tqdm import tqdm
+
+from visualize_config_dict_helper import create_config_dict_fig
+from visualize_optimization_helper import (
+    create_figure_with_buttons_and_slider,
 )
 
 
@@ -36,12 +36,12 @@ class VisualizeConfigDictOptimizationArgs:
         ...
     """
 
-    input_config_dicts_mid_optimization_path: pathlib.Path = pathlib.Path(
-        "../data/config_dicts_mid_optimization"
+    input_config_dicts_mid_optimization_path: pathlib.Path = (
+        get_data_folder() / "large/evaled_grasp_config_dicts/mid_optimization"
     )
-    meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_stable")
+    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
     object_code_and_scale_str: str = (
-        "mujoco-Olive_Kids_Butterfly_Garden_Pencil_Case_0_10"
+        "mujoco-Olive_Kids_Butterfly_Garden_Pencil_Case_0_1000"
     )
     idx_to_visualize: int = 0
     frame_duration: int = 200
@@ -127,7 +127,6 @@ def create_config_dict_figs_from_folder(
 
         # Read in data
         config_dict = np.load(filepath, allow_pickle=True).item()
-
         hand_model = get_hand_model_from_config_dicts(
             config_dict=config_dict, device=device, idx_to_visualize=idx_to_visualize
         )

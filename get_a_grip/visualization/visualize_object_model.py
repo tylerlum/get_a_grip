@@ -1,13 +1,13 @@
 import os
 import pathlib
+from dataclasses import dataclass
 
-import torch
 import plotly.graph_objects as go
+import torch
+import tyro
+from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.object_model import ObjectModel
 from get_a_grip.dataset_generation.utils.seed import set_seed
-from dataclasses import dataclass
-import tyro
-
 
 set_seed(1)
 
@@ -16,7 +16,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
 
 @dataclass
 class VisualizeObjectModelArgs:
-    meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_stable")
+    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
     object_code: str = "sem-Mug-10f6e09036350e92b3f21f1137c3c347"
     object_scale: float = 0.1
 

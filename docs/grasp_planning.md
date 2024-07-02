@@ -15,14 +15,18 @@ Grasp planning process:
 ## BPS Sampler
 
 ```
-python nerf_grasping/sim_eval_scripts/dexdiffuser.py --output_folder 2024-06-04_sim_evals/frogger/grasp_config_dicts --nerfcheckpoints_path /juno/u/tylerlum/github_repos/nerf_grasping/2024-06-04_NERF_FINAL_SIM_DATA/NERFCHECKPOINTS \
+python nerf_grasping/sim_eval_scripts/dexdiffuser.py \
+--output_folder sim_evals/frogger/grasp_config_dicts \
+--nerfcheckpoints_path data/NEW_DATASET/nerfcheckpoints \
 --num_grasps 5
 ```
 
 ## BPS Sampler + BPS Evaluator
 
 ```
-python nerf_grasping/sim_eval_scripts/dexdiffuser_bps.py --output_folder 2024-06-04_sim_evals/dexdiffuser_bps/grasp_config_dicts --nerfcheckpoints_path /juno/u/tylerlum/github_repos/nerf_grasping/2024-06-04_NERF_FINAL_SIM_DATA/NERFCHECKPOINTS \
+python nerf_grasping/sim_eval_scripts/dexdiffuser_bps.py \
+--output_folder sim_evals/dexdiffuser_bps/grasp_config_dicts \
+--nerfcheckpoints_path data/NEW_DATASET/nerfcheckpoints \
 --num_grasps 5
 ```
 
@@ -30,7 +34,7 @@ python nerf_grasping/sim_eval_scripts/dexdiffuser_bps.py --output_folder 2024-06
 
 ```
 python nerf_grasping/sim_eval_scripts/dexdiffuser_gg.py \
---output_folder 2024-06-04_sim_evals/dexdiffuser_gg/grasp_config_dicts \
+--output_folder sim_evals/dexdiffuser_gg/grasp_config_dicts \
 --nerfcheckpoints_path data/NEW_DATASET/nerfcheckpoints \
 --num_grasps 5
 ```

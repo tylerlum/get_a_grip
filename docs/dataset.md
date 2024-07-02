@@ -35,13 +35,13 @@ Create a directories `data/small` and `data/large`, then unzip into these folder
 ```
 data
 ├── small
-│   ├── grasps
+│   ├── evaled_grasp_config_dicts
 │   ├── meshes
 │   ├── nerfdata
 │   ├── nerfs
 │   └── pointclouds
 └── large
-    ├── grasps
+    ├── evaled_grasp_config_dicts
     ├── meshes
     ├── nerfdata
     ├── nerfs
@@ -55,7 +55,7 @@ data
 Directory structure:
 
 ```
-grasps
+evaled_grasp_config_dicts
 ├── <object_code_and_scale_str>.npy
 ├── <object_code_and_scale_str>.npy
 ├── <object_code_and_scale_str>.npy

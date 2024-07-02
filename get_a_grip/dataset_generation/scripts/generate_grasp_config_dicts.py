@@ -1,35 +1,34 @@
 import os
 import pathlib
-from dataclasses import dataclass, field
-import tyro
-import torch
-import numpy as np
 import random
-from tqdm import tqdm
+from dataclasses import dataclass, field
+from typing import Dict, List
+
+import numpy as np
+import torch
+import tyro
+from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
-from get_a_grip.dataset_generation.utils.object_model import ObjectModel
-from get_a_grip.dataset_generation.utils.pose_conversion import (
-    hand_config_to_pose,
-)
-from typing import List, Dict
-from get_a_grip.dataset_generation.utils.seed import set_seed
 from get_a_grip.dataset_generation.utils.joint_angle_targets import (
     compute_grasp_orientations as compute_grasp_orientations_external,
 )
+from get_a_grip.dataset_generation.utils.object_model import ObjectModel
 from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+    is_object_code_and_scale_str,
     parse_object_code_and_scale,
 )
+from get_a_grip.dataset_generation.utils.pose_conversion import (
+    hand_config_to_pose,
+)
+from get_a_grip.dataset_generation.utils.seed import set_seed
+from tqdm import tqdm
 
 
 @dataclass
 class GenerateGraspConfigDictsArgs:
-    meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2")
-    input_hand_config_dicts_path: pathlib.Path = pathlib.Path(
-        "../data/hand_config_dicts"
-    )
-    output_grasp_config_dicts_path: pathlib.Path = pathlib.Path(
-        "../data/grasp_config_dicts"
-    )
+    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    input_hand_config_dicts_path: pathlib.Path = get_data_folder() / "NEW_DATASET/hand_config_dicts"
+    output_grasp_config_dicts_path: pathlib.Path = get_data_folder() / "NEW_DATASET/grasp_config_dicts"
     gpu: int = 0
     mid_optimization_steps: List[int] = field(default_factory=list)
     seed: int = 42
@@ -114,6 +113,9 @@ def generate_grasp_config_dicts(
     )
     for hand_config_dict_filepath in pbar:
         object_code_and_scale_str = hand_config_dict_filepath.stem
+        assert is_object_code_and_scale_str(
+            object_code_and_scale_str
+        ), f"object_code_and_scale_str: {object_code_and_scale_str} is not valid."
         object_code, object_scale = parse_object_code_and_scale(
             object_code_and_scale_str
         )

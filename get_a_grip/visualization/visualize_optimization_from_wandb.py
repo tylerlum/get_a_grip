@@ -1,7 +1,9 @@
 import os
-import plotly
 from dataclasses import dataclass
+
+import plotly
 import tyro
+
 from visualize_optimization_helper import (
     create_figure_with_buttons_and_slider,
     download_plotly_files_from_wandb,

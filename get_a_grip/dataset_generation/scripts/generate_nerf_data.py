@@ -1,20 +1,23 @@
+import multiprocessing
 import os
-from dataclasses import dataclass
-import tyro
-from tqdm import tqdm
-import subprocess
-from typing import Optional, Tuple, List
 import pathlib
+import subprocess
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
+
+import tyro
+from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+    is_object_code_and_scale_str,
     parse_object_code_and_scale,
 )
-import multiprocessing
+from tqdm import tqdm
 
 
 @dataclass
 class GenerateNerfDataArgs:
-    meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2")
-    output_nerfdata_path: pathlib.Path = pathlib.Path("../data/nerfdata")
+    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    output_nerfdata_path: pathlib.Path = get_data_folder() / "NEW_DATASET/nerfdata"
     num_cameras: int = 250
     randomize_order_seed: Optional[int] = None
     only_objects_in_this_path: Optional[pathlib.Path] = None
@@ -33,11 +36,8 @@ def get_object_code_and_scale_strs_from_folder(
     object_code_and_scale_strs = []
     for file_path in folder_path.iterdir():
         object_code_and_scale_str = file_path.stem
-        try:
-            parse_object_code_and_scale(object_code_and_scale_str)
-        except Exception as e:
-            print(f"Exception: {e}")
-            print(f"Skipping {object_code_and_scale_str} and continuing")
+        if not is_object_code_and_scale_str(object_code_and_scale_str):
+            print(f"Skipping {object_code_and_scale_str} because it is not valid.")
             continue
         object_code_and_scale_strs.append(object_code_and_scale_str)
     return object_code_and_scale_strs

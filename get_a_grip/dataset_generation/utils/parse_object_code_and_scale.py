@@ -47,3 +47,22 @@ def object_code_and_scale_to_str(object_code: str, object_scale: float) -> str:
     """
     object_code_and_scale_str = f"{object_code}_{object_scale:.4f}".replace(".", "_")
     return object_code_and_scale_str
+
+
+def is_object_code_and_scale_str(x: str) -> bool:
+    try:
+        object_code, object_scale = parse_object_code_and_scale(x)
+        return True
+    except ValueError:
+        return False
+
+
+def main() -> None:
+    assert parse_object_code_and_scale("mug_0_1000") == ("mug", 0.1)
+    assert is_object_code_and_scale_str("mug_0_1000")
+    assert not is_object_code_and_scale_str("mug_0_100")
+    print("All tests passed!")
+
+
+if __name__ == "__main__":
+    main()

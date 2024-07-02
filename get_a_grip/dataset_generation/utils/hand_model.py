@@ -1,41 +1,52 @@
-import os
 import json
+import os
+import pathlib
+from collections import defaultdict
+from typing import Optional, Union
+
 import numpy as np
-import torch
-from get_a_grip.dataset_generation.utils.rot6d import robust_compute_rotation_matrix_from_ortho6d
-import pytorch_kinematics as pk
 import plotly.graph_objects as go
-import pytorch3d.structures
 import pytorch3d.ops
+import pytorch3d.structures
+import pytorch_kinematics as pk
+import torch
+import transforms3d
 import trimesh as tm
+from get_a_grip.dataset_generation.utils.allegro_hand_info import (
+    ALLEGRO_HAND_CONTACT_POINTS_PATH,
+    ALLEGRO_HAND_FINGER_KEYWORDS,
+    ALLEGRO_HAND_PENETRATION_POINTS_PATH,
+    ALLEGRO_HAND_URDF_PATH,
+)
+from get_a_grip.dataset_generation.utils.rot6d import (
+    robust_compute_rotation_matrix_from_ortho6d,
+)
 from kaolin.metrics.trianglemesh import (
     CUSTOM_index_vertices_by_faces as index_vertices_by_faces,
+)
+from kaolin.metrics.trianglemesh import (
     compute_sdf,
 )
-
-import transforms3d
-from urdf_parser_py.urdf import Robot, Box, Sphere
-from get_a_grip import get_assets_folder
-from get_a_grip.dataset_generation.utils.allegro_hand_info import (
-    ALLEGRO_HAND_FINGER_KEYWORDS,
-)
-from collections import defaultdict
+from urdf_parser_py.urdf import Box, Robot, Sphere
 
 
 class HandModel:
     def __init__(
         self,
-        n_surface_points=0,
-        device="cpu",
-    ):
+        n_surface_points: int = 0,
+        device: Union[str, torch.device] = "cpu",
+    ) -> None:
         """
         Create a Hand Model for a MJCF robot
 
         Parameters
         ----------
+        n_surface_points: int
+            number of surface points to sample
         device: str | torch.Device
             device for torch tensors
         """
+        self.n_surface_points = n_surface_points
         self.device = device
 
         # load articulation
@@ -109,11 +120,11 @@ class HandModel:
 
     def _init_allegro(
         self,
-        urdf_path=get_assets_folder() / "allegro_hand_description/allegro_hand_description_right.urdf",
-        contact_points_path=get_assets_folder() / "allegro_hand_description/contact_points_precision_grasp.json",
-        penetration_points_path=get_assets_folder() / "allegro_hand_description/penetration_points.json",
-        n_surface_points=0,
-    ):
+        urdf_path: pathlib.Path = ALLEGRO_HAND_URDF_PATH,
+        contact_points_path: pathlib.Path = ALLEGRO_HAND_CONTACT_POINTS_PATH,
+        penetration_points_path: pathlib.Path = ALLEGRO_HAND_PENETRATION_POINTS_PATH,
+        n_surface_points: int = 0,
+    ) -> None:
         device = self.device
 
         self.chain = pk.build_chain_from_urdf(open(urdf_path).read()).to(
@@ -134,10 +145,10 @@ class HandModel:
 
             # load collision mesh
             collision = link.collision
-            if type(collision.geometry) == Sphere:
+            if isinstance(collision.geometry, Sphere):
                 link_mesh = tm.primitives.Sphere(radius=collision.geometry.radius)
                 self.mesh[link.name]["radius"] = collision.geometry.radius
-            elif type(collision.geometry) == Box:
+            elif isinstance(collision.geometry, Box):
                 # link_mesh = tm.primitives.Box(extents=collision.geometry.size)
                 link_mesh = tm.load_mesh(
                     os.path.join(os.path.dirname(urdf_path), "meshes", "box.obj"),
@@ -263,7 +274,7 @@ class HandModel:
 
         self._sample_surface_points(n_surface_points)
 
-    def _sample_surface_points(self, n_surface_points):
+    def _sample_surface_points(self, n_surface_points: int) -> None:
         device = self.device
 
         total_area = sum(self.areas.values())
@@ -295,7 +306,9 @@ class HandModel:
             surface_points.to(dtype=float, device=device)
             self.mesh[link_name]["surface_points"] = surface_points
 
-    def sample_contact_points(self, total_batch_size: int, n_contacts_per_finger: int):
+    def sample_contact_points(
+        self, total_batch_size: int, n_contacts_per_finger: int
+    ) -> torch.Tensor:
         # Ensure that each finger gets sampled at least once
         # Goal: Output (B, n_fingers * n_contacts_per_finger) torch.LongTensor of sampled contact point indices
         # Each contact point is represented by a global index
@@ -351,7 +364,11 @@ class HandModel:
 
         return sampled_contact_point_idxs_list
 
-    def set_parameters(self, hand_pose, contact_point_indices=None):
+    def set_parameters(
+        self,
+        hand_pose: torch.Tensor,
+        contact_point_indices: Optional[torch.Tensor] = None,
+    ) -> None:
         """
         Set translation, rotation, joint angles, and contact points of grasps
 
@@ -408,16 +425,25 @@ class HandModel:
                 1, 2
             ) + self.global_translation.unsqueeze(1)
 
-    def cal_distance(self, x):
+    def cal_distance(self, x: torch.Tensor) -> torch.Tensor:
         return self._cal_distance_allegro(x)
 
-    def _cal_distance_allegro(self, x):
-        # x: (total_batch_size, num_samples, 3)
-        # 单独考虑每个link
-        # 先把x变换到link的局部坐标系里面，得到x_local: (total_batch_size, num_samples, 3)
-        # 然后计算dis，按照内外取符号，内部是正号
-        # 最后的dis就是所有link的dis的最大值
-        # 对于sphere的link，使用解析方法计算dis，否则用mesh的方法计算dis
+    def _cal_distance_allegro(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Calculates the distance from each point in `x` to the hand model.
+
+        Args:
+            x (torch.Tensor): Input array of shape (total_batch_size, num_samples, 3).
+
+        Procedure:
+        1. Transform `x` to the local coordinate system of each link to obtain `x_local` with shape (total_batch_size, num_samples, 3).
+        2. Compute the distance `dis` for each point in `x_local`, assigning positive values for points inside the link.
+        3. The final `dis` is the maximum distance among all links.
+        4. For links modeled as spheres, use an analytical method to compute the distance. For other links, use a mesh-based method.
+
+        Returns:
+            torch.Tensor: The computed distances for each point in `x`.
+        """
         dis = []
         x = (x - self.global_translation.unsqueeze(1)) @ self.global_rotation
         for link_name in self.mesh:
@@ -435,14 +461,13 @@ class HandModel:
         dis = torch.max(torch.stack(dis, dim=0), dim=0)[0]
         return dis
 
-    def cal_self_penetration_energy(self):
+    def cal_self_penetration_energy(self) -> torch.Tensor:
         """
         Calculate self penetration energy
 
         Returns
         -------
         E_spen: (N,) torch.Tensor
-            self penetration energy
         """
         batch_size = self.global_translation.shape[0]
         points = self.penetration_keypoints.clone().repeat(batch_size, 1, 1)
@@ -484,7 +509,13 @@ class HandModel:
         E_spen = torch.where(dis > 0, dis, torch.zeros_like(dis))
         return E_spen.sum((1, 2))
 
-    def cal_joint_limit_energy(self):
+    def cal_joint_limit_energy(self) -> torch.Tensor:
+        """
+        Calculate joint limit energy
+
+        Returns:
+        E_joints: (N,) torch.Tensor
+        """
         joint_limit_energy = torch.sum(
             (self.hand_pose[:, 9:] > self.joints_upper)
             * (self.hand_pose[:, 9:] - self.joints_upper),
@@ -496,7 +527,14 @@ class HandModel:
         )
         return joint_limit_energy
 
-    def cal_finger_finger_distance_energy(self):
+    def cal_finger_finger_distance_energy(self) -> torch.Tensor:
+        """
+        Calculate finger-finger distance energy
+
+        Returns
+        -------
+        E_ff: (N,) torch.Tensor
+        """
         batch_size = self.contact_points.shape[0]
         finger_finger_distance_energy = (
             -torch.cdist(self.contact_points, self.contact_points, p=2)
@@ -505,21 +543,69 @@ class HandModel:
         )
         return finger_finger_distance_energy
 
-    def cal_palm_finger_distance_energy(self):
+    def cal_finger_palm_distance_energy(self) -> torch.Tensor:
+        """
+        Calculate finger-palm distance energy
+
+        Returns
+        -------
+        E_fp: (N,) torch.Tensor
+        """
         palm_position = self.global_translation[:, None, :]
         palm_finger_distance_energy = (
             -(palm_position - self.contact_points).norm(dim=-1).sum(dim=-1)
         )
         return palm_finger_distance_energy
 
-    def get_surface_points(self):
+    def cal_table_penetration(
+        self, table_pos: torch.Tensor, table_normal: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Calculate table penetration energy
+
+        Args
+        ----
+        table_pos: (B, 3) torch.Tensor
+            position of table surface
+        table_normal: (B, 3) torch.Tensor
+            normal of table
+
+        Returns
+        -------
+        E_tpen: (B,) torch.Tensor
+            table penetration energy
+        """
+        # Two methods: use sampled points or meshes
+        B1, D1 = table_pos.shape
+        B2, D2 = table_normal.shape
+        assert B1 == B2
+        assert D1 == D2 == 3
+
+        sampled_points_world_frame = self.get_surface_points()
+        B, N, D = sampled_points_world_frame.shape
+        assert B == B1
+        assert D == 3
+
+        # Positive = above table, negative = below table
+        signed_distance_from_table = torch.sum(
+            (sampled_points_world_frame - table_pos.unsqueeze(1))
+            * table_normal.unsqueeze(1),
+            dim=-1,
+        )
+
+        penetration = torch.clamp(signed_distance_from_table, max=0.0)
+        penetration = -penetration
+        assert penetration.shape == (B, N)
+
+        return penetration.sum(-1)
+
+    def get_surface_points(self) -> torch.Tensor:
         """
         Get surface points
 
         Returns
         -------
         points: (N, `n_surface_points`, 3)
-            surface points
         """
         points = []
         batch_size = self.global_translation.shape[0]
@@ -538,14 +624,13 @@ class HandModel:
         ) + self.global_translation.unsqueeze(1)
         return points
 
-    def get_contact_candidates(self):
+    def get_contact_candidates(self) -> torch.Tensor:
         """
         Get all contact candidates
 
         Returns
         -------
         points: (N, `n_contact_candidates`, 3) torch.Tensor
-            contact candidates
         """
         points = []
         batch_size = self.global_translation.shape[0]
@@ -564,14 +649,13 @@ class HandModel:
         ) + self.global_translation.unsqueeze(1)
         return points
 
-    def get_penetration_keypoints(self):
+    def get_penetration_keypoints(self) -> torch.Tensor:
         """
         Get penetration keypoints
 
         Returns
         -------
         points: (N, `n_keypoints`, 3) torch.Tensor
-            penetration keypoints
         """
         points = []
         batch_size = self.global_translation.shape[0]
@@ -592,16 +676,16 @@ class HandModel:
 
     def get_plotly_data(
         self,
-        i,
-        opacity=0.5,
-        color="lightblue",
-        with_contact_points=False,
-        with_contact_candidates=False,
-        with_surface_points=False,
-        with_penetration_keypoints=False,
-        pose=None,
-        visual=True,
-    ):
+        i: int,
+        opacity: float = 0.5,
+        color: str = "lightblue",
+        with_contact_points: bool = False,
+        with_contact_candidates: bool = False,
+        with_surface_points: bool = False,
+        with_penetration_keypoints: bool = False,
+        pose: Optional[np.ndarray] = None,
+        visual: bool = False,
+    ) -> list:
         """
         Get visualization data for plotly.graph_objects
 
@@ -748,21 +832,15 @@ class HandModel:
 
         return data
 
-    @property
-    def n_fingers(self):
-        return len(ALLEGRO_HAND_FINGER_KEYWORDS)
-
-    def get_trimesh_data(self, i):
+    def get_trimesh_data(self, i: int) -> tm.Trimesh:
         """
         Get full mesh
 
         Returns
         -------
-        data: trimesh.Trimesh
+        data: tm.Trimesh
         """
-        import trimesh
-
-        data = trimesh.Trimesh()
+        data = tm.Trimesh()
         for link_name in self.mesh:
             v = self.current_status[link_name].transform_points(
                 self.mesh[link_name]["vertices"]
@@ -772,8 +850,12 @@ class HandModel:
             v = v @ self.global_rotation[i].T + self.global_translation[i]
             v = v.detach().cpu()
             f = self.mesh[link_name]["faces"].detach().cpu()
-            data += trimesh.Trimesh(vertices=v, faces=f)
+            data += tm.Trimesh(vertices=v, faces=f)
         return data
+
+    @property
+    def n_fingers(self) -> int:
+        return len(ALLEGRO_HAND_FINGER_KEYWORDS)
 
     @property
     def batch_size(self) -> int:
@@ -784,45 +866,3 @@ class HandModel:
     @property
     def num_fingers(self) -> int:
         return len(ALLEGRO_HAND_FINGER_KEYWORDS)
-
-    def cal_table_penetration(
-        self, table_pos: torch.Tensor, table_normal: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        Calculate table penetration energy
-
-        Args
-        ----
-        table_pos: (B, 3) torch.Tensor
-            position of table surface
-        table_normal: (B, 3) torch.Tensor
-            normal of table
-
-        Returns
-        -------
-        E_tpen: (B,) torch.Tensor
-            table penetration energy
-        """
-        # Two methods: use sampled points or meshes
-        B1, D1 = table_pos.shape
-        B2, D2 = table_normal.shape
-        assert B1 == B2
-        assert D1 == D2 == 3
-
-        sampled_points_world_frame = self.get_surface_points()
-        B, N, D = sampled_points_world_frame.shape
-        assert B == B1
-        assert D == 3
-
-        # Positive = above table, negative = below table
-        signed_distance_from_table = torch.sum(
-            (sampled_points_world_frame - table_pos.unsqueeze(1))
-            * table_normal.unsqueeze(1),
-            dim=-1,
-        )
-
-        penetration = torch.clamp(signed_distance_from_table, max=0.0)
-        penetration = -penetration
-        assert penetration.shape == (B, N)
-
-        return penetration.sum(-1)

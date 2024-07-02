@@ -1,14 +1,18 @@
-import subprocess
-import tyro
 import pathlib
+import subprocess
 from dataclasses import dataclass
-from get_a_grip import get_data_folder
-from tqdm import tqdm
 from typing import Optional
+
+import tyro
+from get_a_grip import get_data_folder
+from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+    is_object_code_and_scale_str,
+)
+from tqdm import tqdm
 
 
 @dataclass
-class Args:
+class TrainNerfsArgs:
     experiment_name: str
     max_num_iterations: int = 400
     nerfdata_name: str = "nerfdata"
@@ -22,10 +26,8 @@ def print_and_run(cmd: str) -> None:
     subprocess.run(cmd, shell=True, check=True)
 
 
-def train_nerfs(args: Args) -> pathlib.Path:
-    assert (
-        args.root_data_path.exists()
-    ), f"{args.root_data_path} does not exist"
+def train_nerfs(args: TrainNerfsArgs) -> pathlib.Path:
+    assert args.root_data_path.exists(), f"{args.root_data_path} does not exist"
     experiment_path = args.root_data_path / args.experiment_name
     assert experiment_path.exists(), f"{experiment_path} does not exist"
 
@@ -35,24 +37,26 @@ def train_nerfs(args: Args) -> pathlib.Path:
     output_nerfcheckpoints_path = experiment_path / args.output_nerfcheckpoints_name
     output_nerfcheckpoints_path.mkdir(exist_ok=True)
 
-    object_and_scale_nerfdata_paths = sorted(list(nerfdata_path.iterdir()))
+    object_nerfdata_paths = sorted(list(nerfdata_path.iterdir()))
 
     if args.randomize_order_seed is not None:
         import random
 
         print(f"Randomizing order with seed {args.randomize_order_seed}")
-        random.Random(args.randomize_order_seed).shuffle(
-            object_and_scale_nerfdata_paths
-        )
+        random.Random(args.randomize_order_seed).shuffle(object_nerfdata_paths)
 
-    for object_and_scale_nerfdata_path in tqdm(
-        object_and_scale_nerfdata_paths, dynamic_ncols=True, desc="Training NERF"
+    for object_nerfdata_path in tqdm(
+        object_nerfdata_paths, dynamic_ncols=True, desc="Training NERF"
     ):
-        if not object_and_scale_nerfdata_path.is_dir():
+        if not object_nerfdata_path.is_dir():
+            print(f"Skipping {object_nerfdata_path} because it is not a directory")
             continue
+        assert is_object_code_and_scale_str(
+            object_nerfdata_path.name
+        ), f"{object_nerfdata_path.name} is not an object code and scale"
 
         output_path_to_be_created = (
-            output_nerfcheckpoints_path / object_and_scale_nerfdata_path.name
+            output_nerfcheckpoints_path / object_nerfdata_path.name
         )
         if output_path_to_be_created.exists():
             print(f"Skipping {output_path_to_be_created} because it already exists")
@@ -61,7 +65,7 @@ def train_nerfs(args: Args) -> pathlib.Path:
         command = " ".join(
             [
                 "ns-train nerfacto",
-                f"--data {str(object_and_scale_nerfdata_path)}",
+                f"--data {str(object_nerfdata_path)}",
                 f"--max-num-iterations {args.max_num_iterations}",
                 f"--output-dir {str(output_nerfcheckpoints_path)}",
                 "--vis wandb",
@@ -78,7 +82,7 @@ def train_nerfs(args: Args) -> pathlib.Path:
 
 
 def main() -> None:
-    args = tyro.cli(Args)
+    args = tyro.cli(TrainNerfsArgs)
     print("=" * 80)
     print(f"{pathlib.Path(__file__).name} args: {args}")
     print("=" * 80 + "\n")

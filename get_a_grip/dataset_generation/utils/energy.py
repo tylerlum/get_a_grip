@@ -1,7 +1,8 @@
+from typing import Dict, Tuple
+
 import torch
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.object_model import ObjectModel
-from typing import Dict, Tuple
 
 ENERGY_NAMES = [
     "Force Closure",
@@ -173,7 +174,7 @@ def cal_energy(
     energy_dict["Finger Finger Distance"] = (
         hand_model.cal_finger_finger_distance_energy()
     )
-    energy_dict["Finger Palm Distance"] = hand_model.cal_palm_finger_distance_energy()
+    energy_dict["Finger Palm Distance"] = hand_model.cal_finger_palm_distance_energy()
     energy_dict["Hand Table Penetration"] = _cal_hand_table_penetration(
         hand_model, object_model
     )
