@@ -1,9 +1,3 @@
-"""
-Last modified date: 2023.02.23
-Author: Jialiang Zhang, Ruicheng Wang
-Description: initializations
-"""
-
 import torch
 import transforms3d
 import math
@@ -12,13 +6,12 @@ import pytorch3d.ops
 import trimesh as tm
 import numpy as np
 import torch.nn.functional
-from utils.hand_model_type import (
-    HandModelType,
-    handmodeltype_to_joint_angles_mu,
-    handmodeltype_to_rotation_hand,
+from get_a_grip.dataset_generation.utils.allegro_hand_info import (
+    ALLEGRO_HAND_JOINT_ANGLES_MU,
+    ALLEGRO_HAND_ROTATION,
 )
-from utils.hand_model import HandModel
-from utils.object_model import ObjectModel
+from get_a_grip.dataset_generation.utils.hand_model import HandModel
+from get_a_grip.dataset_generation.utils.object_model import ObjectModel
 
 
 def initialize_convex_hull(
@@ -28,7 +21,6 @@ def initialize_convex_hull(
     distance_upper: float,
     theta_lower: float,
     theta_upper: float,
-    hand_model_type: HandModelType,
     jitter_strength: float,
     n_contacts_per_finger: int,
 ):
@@ -48,13 +40,11 @@ def initialize_convex_hull(
     total_batch_size = n_objects * batch_size_each
 
     # initialize translation and rotation
-
     translation = torch.zeros([total_batch_size, 3], dtype=torch.float, device=device)
     rotation = torch.zeros([total_batch_size, 3, 3], dtype=torch.float, device=device)
 
     for i in range(n_objects):
         # get inflated convex hull
-
         mesh_origin = object_model.object_mesh_list[i].convex_hull
         vertices = mesh_origin.vertices.copy()
         faces = mesh_origin.faces
@@ -70,7 +60,6 @@ def initialize_convex_hull(
         )
 
         # sample points
-
         dense_point_cloud = pytorch3d.ops.sample_points_from_meshes(
             mesh_pytorch3d, num_samples=100 * batch_size_each
         )
@@ -82,7 +71,6 @@ def initialize_convex_hull(
         n = (closest_points - p) / (closest_points - p).norm(dim=1).unsqueeze(1)
 
         # sample parameters
-
         distance = distance_lower + (distance_upper - distance_lower) * torch.rand(
             [batch_size_each], dtype=torch.float, device=device
         )
@@ -104,7 +92,6 @@ def initialize_convex_hull(
         # rotation_hand: rotate the hand to align its grasping direction with the +z axis
         # rotation_local: jitter the hand's orientation in a cone
         # rotation_global and translation: transform the hand to a position corresponding to point p sampled from the inflated convex hull
-
         rotation_local = torch.zeros(
             [batch_size_each, 3, 3], dtype=torch.float, device=device
         )
@@ -140,7 +127,7 @@ def initialize_convex_hull(
         ).squeeze(
             2
         )
-        rotation_hand = handmodeltype_to_rotation_hand[hand_model_type].to(device)
+        rotation_hand = ALLEGRO_HAND_ROTATION.to(device)
         rotation[i * batch_size_each : (i + 1) * batch_size_each] = (
             rotation_global @ rotation_local @ rotation_hand
         )
@@ -148,8 +135,7 @@ def initialize_convex_hull(
     # initialize joint angles
     # joint_angles_mu: hand-crafted canonicalized hand articulation
     # use truncated normal distribution to jitter the joint angles
-
-    joint_angles_mu = handmodeltype_to_joint_angles_mu[hand_model_type].to(device)
+    joint_angles_mu = ALLEGRO_HAND_JOINT_ANGLES_MU.to(device)
     joint_angles_sigma = jitter_strength * (
         hand_model.joints_upper - hand_model.joints_lower
     )

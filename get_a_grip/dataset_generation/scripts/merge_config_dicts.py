@@ -1,15 +1,19 @@
 import numpy as np
 import pathlib
-from tap import Tap
-from typing import List, Optional
+from dataclasses import dataclass
+import tyro
+from typing import List
 
 
-class MergeConfigDictsArgumentsParser(Tap):
+@dataclass
+class MergeConfigDictsArgs:
     input_config_dicts_paths: List[pathlib.Path]
     output_config_dicts_path: pathlib.Path = pathlib.Path("../data/config_dicts")
 
 
-def main(args: MergeConfigDictsArgumentsParser) -> None:
+def main() -> None:
+    args = tyro.cli(MergeConfigDictsArgs)
+
     # Create dir
     args.output_config_dicts_path.mkdir(parents=True, exist_ok=True)
 
@@ -58,5 +62,4 @@ def main(args: MergeConfigDictsArgumentsParser) -> None:
 
 
 if __name__ == "__main__":
-    args = MergeConfigDictsArgumentsParser().parse_args()
-    main(args)
+    main()

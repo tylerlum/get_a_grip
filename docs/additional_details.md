@@ -18,7 +18,13 @@ Isaac Gym is set up so that Y-axis is up and gravity points along -Y. An object 
 
 ### NeRF Y-up Frame (Ny Frame)
 
+The NeRF Y-up frame is the same as the Isaac Gym World Y-up frame. We place the table such that the table surface is at y=0.
+
+When training the NeRF, we add training arguments that explicitly ensure that there is not adjustment to the translation, orientation, or scale so that the frames/dimensions are not different from world frame.
+
 ### Object Y-up Frame (Oy Frame)
+
+Object Y-up frame is centered at the object bounding box's center with Y-up.
 
 ### Isaacgym => NeRF Image Frames
 
@@ -62,3 +68,5 @@ Allegro urdf details:
 ## DexGraspNet
 
 Many major components of the dataset generation code originated from [DexGraspNet](https://github.com/PKU-EPIC/DexGraspNet). For additional information about mesh processing, other hand models, and more, please refer to their repository.
+
+We don't use DexGraspNet's [TorchSDF](https://github.com/wrc042/TorchSDF/tree/main) because of build issues on newer torch and cuda versions. Instead, we integrate its source code into [kaolin](https://github.com/NVIDIAGameWorks/kaolin), which is able to build it properly.

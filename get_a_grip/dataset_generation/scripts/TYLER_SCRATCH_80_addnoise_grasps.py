@@ -9,14 +9,11 @@ from tqdm import tqdm
 from collections import defaultdict
 from localscope import localscope
 
-from utils.hand_model import HandModel
-from utils.hand_model_type import (
-    HandModelType,
-)
-from utils.pose_conversion import (
+from get_a_grip.dataset_generation.utils.hand_model import HandModel
+from get_a_grip.dataset_generation.utils.pose_conversion import (
     hand_config_to_pose,
 )
-from utils.joint_angle_targets import (
+from get_a_grip.dataset_generation.utils.joint_angle_targets import (
     compute_fingertip_dirs,
 )
 import torch
@@ -124,8 +121,7 @@ def clamp_joint_angles(
 
 # %%
 device = "cuda"
-hand_model_type = HandModelType.ALLEGRO_HAND
-hand_model = HandModel(hand_model_type=hand_model_type, device=device)
+hand_model = HandModel(device=device)
 
 # %%
 ######### CREATE NEW DATASET ##################
@@ -144,11 +140,17 @@ hand_model = HandModel(hand_model_type=hand_model_type, device=device)
 # print(f"Found {len(evaled_grasp_config_dicts_paths)} evaled_grasp_config_dicts_paths")
 # print(f"Found {num_exist} existing evaled_grasp_config_dicts_paths")
 
-data_path = pathlib.Path("/juno/u/tylerlum/github_repos/nerf_grasping/2024-06-01_ALBERT_TO_TYLER/raw_grasp_config_dicts/")
+data_path = pathlib.Path(
+    "/juno/u/tylerlum/github_repos/nerf_grasping/2024-06-01_ALBERT_TO_TYLER/raw_grasp_config_dicts/"
+)
 assert data_path.exists()
-experiment_paths = sorted(list(data_path.glob("2024-05-06_rotated_stable_grasps_*")) + list(data_path.glob("2024-05-26_rotated_v2_only_grasps_*")))
+experiment_paths = sorted(
+    list(data_path.glob("2024-05-06_rotated_stable_grasps_*"))
+    + list(data_path.glob("2024-05-26_rotated_v2_only_grasps_*"))
+)
 evaled_grasp_config_dicts_paths = [
-    experiment_path / "NEW_evaled_grasp_config_dicts" for experiment_path in experiment_paths
+    experiment_path / "NEW_evaled_grasp_config_dicts"
+    for experiment_path in experiment_paths
 ]
 num_exist = 0
 for p in evaled_grasp_config_dicts_paths:
@@ -208,6 +210,7 @@ print()
 for obj, all_grasps_dict in obj_to_all_grasps.items():
     print(f"{obj}: {all_grasps_dict['passed_eval'].shape}")
 
+
 # %%
 @localscope.mfc
 def sample_noise(shape: Tuple[int], scale: float, mode: str = "halton") -> np.ndarray:
@@ -223,7 +226,7 @@ def sample_noise(shape: Tuple[int], scale: float, mode: str = "halton") -> np.nd
     elif mode == "uniform":
         noise = np.random.uniform(low=-scale, high=scale, size=(*batch_dims, d))
     elif mode == "normal":
-        noise = np.random.normal(loc=0, scale=scale/2, size=(*batch_dims, d))
+        noise = np.random.normal(loc=0, scale=scale / 2, size=(*batch_dims, d))
     else:
         raise ValueError(f"Invalid mode: {mode}")
 
@@ -322,7 +325,8 @@ def add_noise(
         hand_model=hand_model,
     )
     option_1_ok = (
-        torch.cross(center_to_tip_dirs, new_z_dirs_torch).norm(dim=-1, keepdim=True) > 1e-4
+        torch.cross(center_to_tip_dirs, new_z_dirs_torch).norm(dim=-1, keepdim=True)
+        > 1e-4
     )
 
     y_dirs = torch.where(
@@ -345,10 +349,12 @@ def add_noise(
         torch.stack([x_dirs, y_dirs, new_z_dirs_torch], dim=-1).cpu().numpy()
     )
     # Make sure y and z are orthogonal
-    assert (torch.einsum("...l,...l->...", y_dirs, new_z_dirs_torch).abs().max() < 1e-3).all(), (
+    assert (
+        torch.einsum("...l,...l->...", y_dirs, new_z_dirs_torch).abs().max() < 1e-3
+    ).all(), (
         f"y_dirs = {y_dirs}",
         f"new_z_dirs_torch = {new_z_dirs_torch}",
-        f"torch.einsum('...l,...l->...', y_dirs, new_z_dirs_torch).abs().max() = {torch.einsum('...l,...l->...', y_dirs, new_z_dirs_torch).abs().max()}"
+        f"torch.einsum('...l,...l->...', y_dirs, new_z_dirs_torch).abs().max() = {torch.einsum('...l,...l->...', y_dirs, new_z_dirs_torch).abs().max()}",
     )
     new_data_dict["grasp_orientations"] = new_grasp_orientations
 
@@ -372,8 +378,8 @@ test_output = add_noise(
 )
 
 # %%
-print(test_input['trans'].shape)
-print(test_output['trans'].shape)
+print(test_input["trans"].shape)
+print(test_output["trans"].shape)
 
 # %%
 object_idx = 1
@@ -398,7 +404,10 @@ output_hand_pose = hand_config_to_pose(
     test_output["trans"], test_output["rot"], test_output["joint_angles"]
 ).to(device)
 hand_model.set_parameters(output_hand_pose)
-output_plotly = hand_model.get_plotly_data(i=test_n_noisy * object_idx + noise_idx, color="lightgreen",)
+output_plotly = hand_model.get_plotly_data(
+    i=test_n_noisy * object_idx + noise_idx,
+    color="lightgreen",
+)
 
 # %%
 fig = go.Figure(data=input_plotly + output_plotly)
@@ -407,12 +416,14 @@ fig.show()
 # %%
 num_good_grasps = 0
 for good_grasps_dict in obj_to_good_grasps.values():
-    num_good_grasps += good_grasps_dict['trans'].shape[0]
+    num_good_grasps += good_grasps_dict["trans"].shape[0]
 num_all_grasps = 0
 for all_grasps_dict in obj_to_all_grasps.values():
-    num_all_grasps += all_grasps_dict['trans'].shape[0]
+    num_all_grasps += all_grasps_dict["trans"].shape[0]
 
-print(f"num_good_grasps/num_all_grasps: {num_good_grasps}/{num_all_grasps} = {num_good_grasps/num_all_grasps:.2f}")
+print(
+    f"num_good_grasps/num_all_grasps: {num_good_grasps}/{num_all_grasps} = {num_good_grasps/num_all_grasps:.2f}"
+)
 
 # %%
 # Step 3: Get obj_to_noisy_good_grasps, obj_to_noisy_other_grasps
@@ -480,22 +491,22 @@ print(f"n_grasps: {n_grasps}")
 #     if len(new_dict) == 0:
 #         continue
 #     obj_to_new_grasps[obj] = new_dict
-# 
+#
 # %%
 # passed_evals = [x for d in obj_to_all_grasps.values() for x in d['passed_eval']]
 # passed_sims = [x for d in obj_to_all_grasps.values() for x in d['passed_simulation']]
 # # %%
 # import matplotlib.pyplot as plt
 # plt.hist(passed_evals, bins=100)
-# 
+#
 # # %%
 # plt.hist(passed_sims, bins=100)
-# 
-# # 
-# # 
+#
+# #
+# #
 # # # %%
 # # for obj, all_dict in tqdm(obj_to_all_grasps.items()):
 # #     np.save(OUTPUT_PATH / f"{obj}.npy", all_dict)
-# # 
+# #
 # # # %%
-# # 
+# #

@@ -1,35 +1,22 @@
-"""
-Last modified date: 2023.02.23
-Author: Jialiang Zhang
-Description: visualize grasp result using plotly.graph_objects
-"""
-
-import os
-import sys
-
-# os.chdir(os.path.dirname(os.path.dirname(__file__)))
-sys.path.append(os.path.realpath("."))
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
-from tap import Tap
+from dataclasses import dataclass
+import tyro
 import numpy as np
 from typing import Dict
 
-from utils.hand_model import HandModel
-from utils.object_model import ObjectModel
-from utils.hand_model_type import HandModelType
+from get_a_grip.dataset_generation.utils.hand_model import HandModel
+from get_a_grip.dataset_generation.utils.object_model import ObjectModel
 import pathlib
 import math
 
-from utils.parse_object_code_and_scale import (
+from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
 from visualize_config_dict_helper import create_config_dict_fig
 from plotly.subplots import make_subplots
 
 
-class VisualizeConfigDictArgumentParser(Tap):
-    hand_model_type: HandModelType = HandModelType.ALLEGRO_HAND
+@dataclass
+class VisualizeConfigDictArgs:
     input_config_dicts_path: pathlib.Path = pathlib.Path(
         "../data/config_dicts"
     )  # SHOULD be able to hand most types of config dicts
@@ -46,7 +33,9 @@ class VisualizeConfigDictArgumentParser(Tap):
     skip_visualize_grasp_config_dict: bool = False
 
 
-def main(args: VisualizeConfigDictArgumentParser):
+def main() -> None:
+    args = tyro.cli(VisualizeConfigDictArgs)
+
     # load results
     config_dict: Dict[str, np.ndarray] = np.load(
         args.input_config_dicts_path / f"{args.object_code_and_scale_str}.npy",
@@ -54,7 +43,7 @@ def main(args: VisualizeConfigDictArgumentParser):
     ).item()
 
     # hand model: be careful with this, as it is stateful
-    hand_model = HandModel(hand_model_type=args.hand_model_type, device=args.device, n_surface_points=1000)
+    hand_model = HandModel(device=args.device, n_surface_points=1000)
 
     # object model
     try:
@@ -147,5 +136,4 @@ def main(args: VisualizeConfigDictArgumentParser):
 
 
 if __name__ == "__main__":
-    args = VisualizeConfigDictArgumentParser().parse_args()
-    main(args)
+    main()

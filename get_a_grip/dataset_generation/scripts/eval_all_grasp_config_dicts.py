@@ -1,24 +1,20 @@
 from __future__ import annotations
 import subprocess
 import random
-import os
 from tqdm import tqdm
-import sys
-
-sys.path.append(os.path.realpath("."))
-from utils.isaac_validator import ValidationType
-from utils.hand_model_type import HandModelType
+from get_a_grip.dataset_generation.utils.isaac_validator import ValidationType
 import multiprocessing
 
 from functools import partial
 
-from tap import Tap
+import tyro
+from dataclasses import dataclass, field
 from typing import Optional, List
 import pathlib
 
 
-class EvalAllGraspConfigDictsArgumentParser(Tap):
-    hand_model_type: HandModelType = HandModelType.ALLEGRO_HAND
+@dataclass
+class EvalAllGraspConfigDictsArgs:
     validation_type: ValidationType = ValidationType.GRAVITY_AND_TABLE
     gpu: int = 0
     max_grasps_per_batch: int = 5000
@@ -27,7 +23,9 @@ class EvalAllGraspConfigDictsArgumentParser(Tap):
         "../data/grasp_config_dicts"
     )
     use_gui: bool = False
-    use_cpu: bool = False  # NOTE: Tyler has had big discrepancy between using GPU vs CPU, hypothesize that CPU is safer
+    use_cpu: bool = (
+        False  # NOTE: Tyler has had big discrepancy between using GPU vs CPU, hypothesize that CPU is safer
+    )
     meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2")
     output_evaled_grasp_config_dicts_path: pathlib.Path = pathlib.Path(
         "../data/evaled_grasp_config_dicts"
@@ -35,7 +33,7 @@ class EvalAllGraspConfigDictsArgumentParser(Tap):
     num_random_pose_noise_samples_per_grasp: Optional[int] = None
     move_fingers_back_at_init: bool = False
     randomize_order_seed: Optional[int] = None
-    mid_optimization_steps: List[int] = []
+    mid_optimization_steps: List[int] = field(default_factory=list)
     use_multiprocess: bool = True
     num_workers: int = 3
 
@@ -83,7 +81,7 @@ def get_object_code_and_scale_strs_to_process(
 
 def print_and_run_command_safe(
     object_code_and_scale_str: str,
-    args: EvalAllGraspConfigDictsArgumentParser,
+    args: EvalAllGraspConfigDictsArgs,
     script_to_run: pathlib.Path,
     input_grasp_config_dicts_path: pathlib.Path,
     output_evaled_grasp_config_dicts_path: pathlib.Path,
@@ -92,7 +90,6 @@ def print_and_run_command_safe(
         [
             f"CUDA_VISIBLE_DEVICES={args.gpu}",
             f"python {script_to_run}",
-            f"--hand_model_type {args.hand_model_type.name}",
             f"--validation_type {args.validation_type.name}",
             f"--gpu {args.gpu}",
             f"--meshdata_root_path {args.meshdata_root_path}",
@@ -100,7 +97,11 @@ def print_and_run_command_safe(
             f"--output_evaled_grasp_config_dicts_path {output_evaled_grasp_config_dicts_path}",
             f"--object_code_and_scale_str {object_code_and_scale_str}",
             f"--max_grasps_per_batch {args.max_grasps_per_batch}",
-            f"--num_random_pose_noise_samples_per_grasp {args.num_random_pose_noise_samples_per_grasp}" if args.num_random_pose_noise_samples_per_grasp is not None else "",
+            (
+                f"--num_random_pose_noise_samples_per_grasp {args.num_random_pose_noise_samples_per_grasp}"
+                if args.num_random_pose_noise_samples_per_grasp is not None
+                else ""
+            ),
             "--move_fingers_back_at_init" if args.move_fingers_back_at_init else "",
         ]
     )
@@ -124,12 +125,13 @@ def print_and_run_command_safe(
 
 
 def eval_all_grasp_config_dicts(
-    args: EvalAllGraspConfigDictsArgumentParser,
+    args: EvalAllGraspConfigDictsArgs,
     input_grasp_config_dicts_path: pathlib.Path,
     output_evaled_grasp_config_dicts_path: pathlib.Path,
 ) -> None:
     # Check if script exists
-    script_to_run = pathlib.Path("scripts/eval_grasp_config_dict.py")
+    this_directory = pathlib.Path(__file__).parent
+    script_to_run = this_directory / "eval_grasp_config_dict.py"
     assert script_to_run.exists(), f"Script {script_to_run} does not exist"
 
     input_object_code_and_scale_strs = get_object_code_and_scale_strs_to_process(
@@ -172,7 +174,8 @@ def eval_all_grasp_config_dicts(
             )
 
 
-def main(args: EvalAllGraspConfigDictsArgumentParser):
+def main() -> None:
+    args = tyro.cli(EvalAllGraspConfigDictsArgs)
     print("=" * 80)
     print(f"args = {args}")
     print("=" * 80 + "\n")
@@ -205,5 +208,4 @@ def main(args: EvalAllGraspConfigDictsArgumentParser):
 
 
 if __name__ == "__main__":
-    args = EvalAllGraspConfigDictsArgumentParser().parse_args()
-    main(args)
+    main()

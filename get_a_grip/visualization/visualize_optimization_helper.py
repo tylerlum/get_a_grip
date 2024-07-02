@@ -1,15 +1,5 @@
-"""
-Last modified date: 2023.07.01
-Author: Tyler Lum
-Description: visualize hand model grasp optimization
-"""
-
 import os
-import sys
 from dataclasses import dataclass
-
-sys.path.append(os.path.realpath("."))
-
 import plotly.graph_objects as go
 import wandb
 from tqdm import tqdm

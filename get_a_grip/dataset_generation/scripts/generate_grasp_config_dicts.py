@@ -1,41 +1,28 @@
-"""
-Last modified date: 2023.08.23
-Author: Tyler Lum
-Description: Read in hand_config_dicts and generate grasp_config_dicts by computing grasp directions
-"""
-
 import os
-import sys
-
-sys.path.append(os.path.realpath("."))
-
 import pathlib
-from tap import Tap
+from dataclasses import dataclass, field
+import tyro
 import torch
 import numpy as np
 import random
 from tqdm import tqdm
-from utils.hand_model import HandModel
-from utils.object_model import ObjectModel
-from utils.hand_model_type import (
-    HandModelType,
-)
-from utils.pose_conversion import (
+from get_a_grip.dataset_generation.utils.hand_model import HandModel
+from get_a_grip.dataset_generation.utils.object_model import ObjectModel
+from get_a_grip.dataset_generation.utils.pose_conversion import (
     hand_config_to_pose,
 )
 from typing import List, Dict
-from utils.seed import set_seed
-from utils.joint_angle_targets import (
+from get_a_grip.dataset_generation.utils.seed import set_seed
+from get_a_grip.dataset_generation.utils.joint_angle_targets import (
     compute_grasp_orientations as compute_grasp_orientations_external,
 )
-from utils.parse_object_code_and_scale import (
+from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
 
 
-class GenerateGraspConfigDictsArgumentParser(Tap):
-    hand_model_type: HandModelType = HandModelType.ALLEGRO_HAND
-    gpu: int = 0
+@dataclass
+class GenerateGraspConfigDictsArgs:
     meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2")
     input_hand_config_dicts_path: pathlib.Path = pathlib.Path(
         "../data/hand_config_dicts"
@@ -43,13 +30,14 @@ class GenerateGraspConfigDictsArgumentParser(Tap):
     output_grasp_config_dicts_path: pathlib.Path = pathlib.Path(
         "../data/grasp_config_dicts"
     )
-    mid_optimization_steps: List[int] = []
+    gpu: int = 0
+    mid_optimization_steps: List[int] = field(default_factory=list)
     seed: int = 42
     no_continue: bool = False
 
 
 def compute_grasp_orientations(
-    args: GenerateGraspConfigDictsArgumentParser,
+    args: GenerateGraspConfigDictsArgs,
     hand_config_dict: Dict[str, np.ndarray],
     object_code: str,
     object_scale: float,
@@ -64,7 +52,7 @@ def compute_grasp_orientations(
     batch_size = hand_pose.shape[0]
 
     # hand model
-    hand_model = HandModel(hand_model_type=args.hand_model_type, device=device)
+    hand_model = HandModel(device=device)
     hand_model.set_parameters(hand_pose)
 
     # object model
@@ -85,7 +73,7 @@ def compute_grasp_orientations(
 
 
 def generate_grasp_config_dicts(
-    args: GenerateGraspConfigDictsArgumentParser,
+    args: GenerateGraspConfigDictsArgs,
     input_hand_config_dicts_path: pathlib.Path,
     output_grasp_config_dicts_path: pathlib.Path,
 ) -> None:
@@ -158,7 +146,9 @@ def generate_grasp_config_dicts(
         )
 
 
-def main(args: GenerateGraspConfigDictsArgumentParser):
+def main() -> None:
+    args = tyro.cli(GenerateGraspConfigDictsArgs)
+
     print("=" * 80)
     print(f"args = {args}")
     print("=" * 80 + "\n")
@@ -193,5 +183,4 @@ def main(args: GenerateGraspConfigDictsArgumentParser):
 
 
 if __name__ == "__main__":
-    args = GenerateGraspConfigDictsArgumentParser().parse_args()
-    main(args)
+    main()

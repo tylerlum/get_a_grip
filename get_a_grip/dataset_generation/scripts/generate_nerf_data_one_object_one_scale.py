@@ -1,22 +1,15 @@
-"""
-Last modified date: 2023.06.13
-Author: Tyler Lum
-Description: Create NeRF Data in Isaac simulator
-"""
-
 import os
-import sys
-
-sys.path.append(os.path.realpath("."))
-
-from utils.isaac_validator import IsaacValidator, ValidationType
-from utils.seed import set_seed
-from utils.parse_object_code_and_scale import object_code_and_scale_to_str
-from tap import Tap
+from get_a_grip.dataset_generation.utils.isaac_validator import IsaacValidator, ValidationType
+from get_a_grip.dataset_generation.utils.seed import set_seed
+from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import object_code_and_scale_to_str
+from dataclasses import dataclass
+import tyro
 import pathlib
+from clean_loop_timer import LoopTimer
 
 
-class GenerateNerfDataOneObjectOneScaleArgumentParser(Tap):
+@dataclass
+class GenerateNerfDataOneObjectOneScaleArgs:
     gpu: int = 0
     meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2")
     output_nerfdata_path: pathlib.Path = pathlib.Path("../data/nerfdata")
@@ -28,7 +21,9 @@ class GenerateNerfDataOneObjectOneScaleArgumentParser(Tap):
     debug_with_gui: bool = False
 
 
-def main(args: GenerateNerfDataOneObjectOneScaleArgumentParser):
+def main() -> None:
+    args = tyro.cli(GenerateNerfDataOneObjectOneScaleArgs)
+
     set_seed(42)
     os.environ.pop("CUDA_VISIBLE_DEVICES")
 
@@ -39,7 +34,6 @@ def main(args: GenerateNerfDataOneObjectOneScaleArgumentParser):
     if output_nerf_object_path.exists():
         print(f"{output_nerf_object_path} exists, skipping {object_code_and_scale_str}")
         return
-    from utils.timers import LoopTimer
 
     loop_timer = LoopTimer()
 
@@ -94,5 +88,4 @@ def main(args: GenerateNerfDataOneObjectOneScaleArgumentParser):
 
 
 if __name__ == "__main__":
-    args = GenerateNerfDataOneObjectOneScaleArgumentParser().parse_args()
-    main(args)
+    main()

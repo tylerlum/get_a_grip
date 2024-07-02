@@ -1,19 +1,12 @@
-import os
-import sys
-
-# os.chdir(os.path.dirname(os.path.dirname(__file__)))
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
 import torch
 import plotly.graph_objects as go
 from typing import Dict, Any, Optional
 import numpy as np
 
-from utils.hand_model import HandModel
-from utils.object_model import ObjectModel
-from utils.hand_model_type import handmodeltype_to_joint_names
-from utils.pose_conversion import hand_config_to_pose
-from utils.joint_angle_targets import (
+from get_a_grip.dataset_generation.utils.hand_model import HandModel
+from get_a_grip.dataset_generation.utils.object_model import ObjectModel
+from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_to_pose
+from get_a_grip.dataset_generation.utils.joint_angle_targets import (
     compute_fingertip_targets,
     compute_fingertip_mean_contact_positions,
     compute_optimized_joint_angle_targets_given_fingertip_targets,
@@ -189,7 +182,11 @@ def create_config_dict_fig(
 ) -> go.Figure:
     if object_model is not None:
         object_plotly = object_model.get_plotly_data(
-            i=0, color="lightgreen", opacity=0.5, with_surface_points=True, with_table=True
+            i=0,
+            color="lightgreen",
+            opacity=0.5,
+            with_surface_points=True,
+            with_table=True,
         )
     else:
         object_plotly = []
@@ -319,14 +316,16 @@ def create_config_dict_fig(
         loss = round(config_dict["loss"][idx_to_visualize], 3)
         predicted_score = 1 - loss
         predicted_score_str = f"predicted: {predicted_score}"
-        fig.add_annotation(text=predicted_score_str, x=0.5, y=0.25, xref="paper", yref="paper")
+        fig.add_annotation(
+            text=predicted_score_str, x=0.5, y=0.25, xref="paper", yref="paper"
+        )
         title += f" | {predicted_score_str}"
 
     # yup
     yup_camera = dict(
         up=dict(x=0, y=1, z=0),
         center=dict(x=0, y=0, z=0),
-        eye=dict(x=1.0, y=1.0, z=0.0)
+        eye=dict(x=1.0, y=1.0, z=0.0),
     )
 
     fig.update_layout(

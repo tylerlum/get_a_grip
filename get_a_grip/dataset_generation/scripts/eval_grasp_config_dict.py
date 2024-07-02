@@ -1,58 +1,50 @@
-"""
-Last modified date: 2023.08.24
-Author: Tyler Lum
-Description: eval grasps on Isaac simulator
-"""
-
 import os
-import sys
-
-sys.path.append(os.path.realpath("."))
-
-from utils.isaac_validator import IsaacValidator, ValidationType
-from tap import Tap
+from get_a_grip.dataset_generation.utils.isaac_validator import (
+    IsaacValidator,
+    ValidationType,
+)
+from dataclasses import dataclass, field
+import tyro
 import torch
 import numpy as np
 from tqdm import tqdm
-from utils.hand_model import HandModel
-from utils.hand_model_type import (
-    HandModelType,
-    handmodeltype_to_joint_names,
+from get_a_grip.dataset_generation.utils.hand_model import HandModel
+from get_a_grip.dataset_generation.utils.allegro_hand_info import (
+    ALLEGRO_HAND_JOINT_NAMES,
 )
-from utils.pose_conversion import (
+from get_a_grip.dataset_generation.utils.pose_conversion import (
     hand_config_to_pose,
 )
-from pytorch3d.transforms import matrix_to_quaternion
+from get_a_grip.dataset_generation.utils.torch_quat_utils import matrix_to_quat_wxyz
 from typing import List, Optional, Dict, Any
 import math
-from utils.seed import set_seed
-from utils.joint_angle_targets import (
+from get_a_grip.dataset_generation.utils.seed import set_seed
+from get_a_grip.dataset_generation.utils.joint_angle_targets import (
     compute_optimized_joint_angle_targets_given_grasp_orientations,
     compute_init_joint_angles_given_grasp_orientations,
 )
-from utils.parse_object_code_and_scale import (
+from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
-from utils.energy import _cal_hand_object_penetration
-from utils.object_model import ObjectModel
+from get_a_grip.dataset_generation.utils.energy import _cal_hand_object_penetration
+from get_a_grip.dataset_generation.utils.object_model import ObjectModel
 import pathlib
 
 
-class EvalGraspConfigDictArgumentParser(Tap):
-    hand_model_type: HandModelType = HandModelType.ALLEGRO_HAND
-    # validation_type: ValidationType = ValidationType.NO_GRAVITY_SHAKING
+@dataclass
+class EvalGraspConfigDictArgs:
     validation_type: ValidationType = ValidationType.GRAVITY_AND_TABLE
-    gpu: int = 0
     meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2")
     input_grasp_config_dicts_path: pathlib.Path = pathlib.Path(
         "../data/grasp_config_dicts"
     )
-    max_grasps_per_batch: int = 5000
     object_code_and_scale_str: str = "core-bottle-2722bec1947151b86e22e2d2f64c8cef_0_10"
     output_evaled_grasp_config_dicts_path: pathlib.Path = pathlib.Path(
         "../data/evaled_grasp_config_dicts"
     )
     num_random_pose_noise_samples_per_grasp: Optional[int] = None
+    gpu: int = 0
+    max_grasps_per_batch: int = 5000
     move_fingers_back_at_init: bool = False
 
     # if debug_index is received, then the debug mode is on
@@ -65,20 +57,18 @@ class EvalGraspConfigDictArgumentParser(Tap):
         False  # NOTE: Tyler has had big discrepancy between using GPU vs CPU, hypothesize that CPU is safer
     )
     penetration_threshold: Optional[float] = 5e-3  # From original DGN
-    record_indices: List[int] = []
+    record_indices: List[int] = field(default_factory=list)
 
 
 def compute_joint_angle_targets(
-    args: EvalGraspConfigDictArgumentParser,
+    args: EvalGraspConfigDictArgs,
     hand_pose: torch.Tensor,
     grasp_orientations: torch.Tensor,
 ) -> np.ndarray:
     grasp_orientations = grasp_orientations.to(hand_pose.device)
 
     # hand model
-    hand_model = HandModel(
-        hand_model_type=args.hand_model_type, device=hand_pose.device
-    )
+    hand_model = HandModel(device=hand_pose.device)
     hand_model.set_parameters(hand_pose)
 
     # Optimization
@@ -91,23 +81,21 @@ def compute_joint_angle_targets(
         grasp_orientations=grasp_orientations,
     )
 
-    num_joints = len(handmodeltype_to_joint_names[hand_model.hand_model_type])
+    num_joints = len(ALLEGRO_HAND_JOINT_NAMES)
     assert optimized_joint_angle_targets.shape == (hand_model.batch_size, num_joints)
 
     return optimized_joint_angle_targets.detach().cpu().numpy()
 
 
 def compute_init_joint_angles(
-    args: EvalGraspConfigDictArgumentParser,
+    args: EvalGraspConfigDictArgs,
     hand_pose: torch.Tensor,
     grasp_orientations: torch.Tensor,
 ) -> np.ndarray:
     grasp_orientations = grasp_orientations.to(hand_pose.device)
 
     # hand model
-    hand_model = HandModel(
-        hand_model_type=args.hand_model_type, device=hand_pose.device
-    )
+    hand_model = HandModel(device=hand_pose.device)
     hand_model.set_parameters(hand_pose)
 
     # Optimization
@@ -120,13 +108,14 @@ def compute_init_joint_angles(
         grasp_orientations=grasp_orientations,
     )
 
-    num_joints = len(handmodeltype_to_joint_names[hand_model.hand_model_type])
+    num_joints = len(ALLEGRO_HAND_JOINT_NAMES)
     assert init_joint_angles.shape == (hand_model.batch_size, num_joints)
 
     return init_joint_angles.detach().cpu().numpy()
 
 
-def main(args: EvalGraspConfigDictArgumentParser):
+def main() -> None:
+    args = tyro.cli(EvalGraspConfigDictArgs)
     print("=" * 80)
     print(f"args = {args}")
     print("=" * 80 + "\n")
@@ -154,7 +143,7 @@ def main(args: EvalGraspConfigDictArgumentParser):
     grasp_orientations: np.ndarray = grasp_config_dict["grasp_orientations"]
 
     # Compute hand pose
-    quat_wxyz = matrix_to_quaternion(torch.from_numpy(rot)).numpy()
+    quat_wxyz = matrix_to_quat_wxyz(torch.from_numpy(rot)).numpy()
     hand_pose = hand_config_to_pose(trans, rot, joint_angles).to(device)
 
     # Compute joint angle targets
@@ -176,7 +165,6 @@ def main(args: EvalGraspConfigDictArgumentParser):
     # Debug with single grasp
     if args.debug_index is not None:
         sim = IsaacValidator(
-            hand_model_type=args.hand_model_type,
             gpu=args.gpu,
             validation_type=args.validation_type,
             mode="gui" if args.use_gui else "headless",
@@ -218,7 +206,6 @@ def main(args: EvalGraspConfigDictArgumentParser):
         return
 
     sim = IsaacValidator(
-        hand_model_type=args.hand_model_type,
         gpu=args.gpu,
         validation_type=args.validation_type,
         mode="gui" if args.use_gui else "headless",
@@ -227,7 +214,7 @@ def main(args: EvalGraspConfigDictArgumentParser):
     )
     # Run validation on all grasps
     batch_size = trans.shape[0]
-    hand_model = HandModel(hand_model_type=args.hand_model_type, device=device)
+    hand_model = HandModel(device=device)
 
     # Some final shape checking.
     assert quat_wxyz.shape == (batch_size, 4)
@@ -322,7 +309,9 @@ def main(args: EvalGraspConfigDictArgumentParser):
         passed_penetration_object_test_array
     )
     passed_penetration_table_test_array = np.array(passed_penetration_table_test_array)
-    object_states_before_grasp_array = np.concatenate(object_states_before_grasp_array, axis=0)
+    object_states_before_grasp_array = np.concatenate(
+        object_states_before_grasp_array, axis=0
+    )
     E_pen_array = np.array(E_pen_array)
 
     if args.num_random_pose_noise_samples_per_grasp is not None:
@@ -483,5 +472,4 @@ def main(args: EvalGraspConfigDictArgumentParser):
 
 
 if __name__ == "__main__":
-    args = EvalGraspConfigDictArgumentParser().parse_args()
-    main(args)
+    main()

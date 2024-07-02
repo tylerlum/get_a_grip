@@ -31,8 +31,14 @@ from tqdm import tqdm
 import random
 from typing import List, Tuple, Set
 
+from get_a_grip import get_data_folder
+from get_a_grip.dataset_generation.utils.allegro_hand_info import (
+    ALLEGRO_HAND_ROOT_HAND_FILE,
+)
+
 
 def get_test_object_set() -> Set[str]:
+    # HACK: Hardcoded path
     TRAIN_VAL_TEST_SPLIT_DIR = pathlib.Path(
         "/juno/u/tylerlum/github_repos/DexGraspNet/2024-06-02_NEW_train_val_test_splits/"
     )
@@ -67,9 +73,13 @@ def get_test_object_codes_and_scales() -> Tuple[List[str], List[float]]:
 
     return test_object_codes, test_object_scales
 
-def get_subset_of_test_object_codes_and_scales(num_objects: int) -> Tuple[List[str], List[float]]:
+
+def get_subset_of_test_object_codes_and_scales(
+    num_objects: int,
+) -> Tuple[List[str], List[float]]:
     test_object_codes, test_object_scales = get_test_object_codes_and_scales()
     from collections import defaultdict
+
     object_code_to_scales = defaultdict(list)
     for object_code, object_scale in zip(test_object_codes, test_object_scales):
         object_code_to_scales[object_code].append(object_scale)
@@ -82,9 +92,9 @@ def get_subset_of_test_object_codes_and_scales(num_objects: int) -> Tuple[List[s
             break
     return selected_object_codes, selected_object_scales
 
-def get_urdf_paths(object_codes: List[str]) -> list:
+
+def get_urdf_paths(object_codes: List[str], meshdata_root_path: pathlib.Path) -> list:
     # urdf_paths
-    meshdata_root_path = pathlib.Path("../data/rotated_meshdata_v2")
     assert (
         meshdata_root_path.exists()
     ), f"Meshdata root path {meshdata_root_path} does not exist"
@@ -130,12 +140,6 @@ def load_assets(gym, sim, selected_urdf_paths) -> list:
     return assets
 
 
-
-# test_object_codes, scales = get_test_object_codes_and_scales()
-# print(len(set(test_object_codes)))
-test_object_codes, scales = get_subset_of_test_object_codes_and_scales(num_objects=100)
-urdf_paths = get_urdf_paths(object_codes=test_object_codes)
-
 # initialize gym
 gym = gymapi.acquire_gym()
 
@@ -153,8 +157,17 @@ args = gymutil.parse_arguments(
             "action": "store_true",
             "help": "Ignore all collisions",
         },
+        {
+            "name": "--meshdata_root_path",
+            "type": pathlib.Path,
+            "help": "Path to meshdata root",
+        }
     ],
 )
+
+# Get urdf paths
+test_object_codes, scales = get_subset_of_test_object_codes_and_scales(num_objects=100)
+urdf_paths = get_urdf_paths(object_codes=test_object_codes, meshdata_root_path=args.meshdata_root_path)
 
 # configure sim
 sim_params = gymapi.SimParams()
@@ -194,20 +207,6 @@ if viewer is None:
 # load assets
 assets = load_assets(gym=gym, sim=sim, selected_urdf_paths=urdf_paths)
 
-# Add hand
-
-import os
-import sys
-
-sys.path.append(os.path.realpath("."))
-from utils.hand_model_type import (
-    handmodeltype_to_allowedcontactlinknames,
-    handmodeltype_to_joint_names,
-    HandModelType,
-    handmodeltype_to_hand_root_hand_file,
-    handmodeltype_to_hand_root_hand_file_with_virtual_joints,
-)
-
 num_envs = len(assets)
 
 # set lighting
@@ -232,16 +231,16 @@ gym.subscribe_viewer_keyboard_event(viewer, gymapi.KEY_R, "reset")
 np.random.seed(17)
 
 colors = [
-    (242/255, 139/255, 130/255),  # Light Coral
-    (251/255, 188/255, 4/255),    # Light Orange
-    (255/255, 244/255, 117/255),  # Light Yellow
-    (204/255, 255/255, 144/255),  # Light Green
-    (167/255, 255/255, 235/255),  # Light Cyan
-    (203/255, 240/255, 248/255),  # Light Sky Blue
-    (174/255, 203/255, 250/255),  # Light Blue
-    (215/255, 174/255, 251/255),  # Light Purple
-    (253/255, 207/255, 232/255),  # Light Pink
-    (230/255, 201/255, 168/255),   # Light Brown
+    (242 / 255, 139 / 255, 130 / 255),  # Light Coral
+    (251 / 255, 188 / 255, 4 / 255),  # Light Orange
+    (255 / 255, 244 / 255, 117 / 255),  # Light Yellow
+    (204 / 255, 255 / 255, 144 / 255),  # Light Green
+    (167 / 255, 255 / 255, 235 / 255),  # Light Cyan
+    (203 / 255, 240 / 255, 248 / 255),  # Light Sky Blue
+    (174 / 255, 203 / 255, 250 / 255),  # Light Blue
+    (215 / 255, 174 / 255, 251 / 255),  # Light Purple
+    (253 / 255, 207 / 255, 232 / 255),  # Light Pink
+    (230 / 255, 201 / 255, 168 / 255),  # Light Brown
 ]
 # colors = [
 #     (1.0, 0.0, 0.0),  # Red
@@ -266,7 +265,7 @@ for i in range(num_envs):
     # create ball pyramid
     pose = gymapi.Transform()
     pose.r = gymapi.Quat(0, 0, 0, 1)
-    pose.p = gymapi.Vec3(0, scales[i]*1.02, 0)
+    pose.p = gymapi.Vec3(0, scales[i] * 1.02, 0)
 
     # Set up collision filtering.
     if args.all_collisions:
@@ -322,14 +321,12 @@ hand_asset_options.disable_gravity = True
 hand_asset_options.collapse_fixed_joints = True
 hand_asset_options.fix_base_link = True
 
+# No virtual joints so it won't move
 (
     hand_root,
     hand_file,
-# ) = handmodeltype_to_hand_root_hand_file_with_virtual_joints[HandModelType.ALLEGRO_HAND]
-) = handmodeltype_to_hand_root_hand_file[HandModelType.ALLEGRO_HAND]
-hand_asset = gym.load_asset(
-    sim, hand_root, hand_file, hand_asset_options
-)
+) = ALLEGRO_HAND_ROOT_HAND_FILE
+hand_asset = gym.load_asset(sim, hand_root, hand_file, hand_asset_options)
 
 hand_pose = gymapi.Transform()
 hand_pose.p = gymapi.Vec3(-0.25, 0.1, 0)

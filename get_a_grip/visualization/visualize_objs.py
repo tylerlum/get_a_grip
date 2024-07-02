@@ -6,10 +6,12 @@ import math
 import pathlib
 from typing import Tuple
 
-from tap import Tap
+from dataclasses import dataclass
+import tyro
 
 
-class ArgParser(Tap):
+@dataclass
+class VisualizeObjsArgs:
     meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2")
     max_num_objects_to_visualize: int = 10
 
@@ -36,7 +38,7 @@ def create_mesh_3d(
 
 
 def main() -> None:
-    args = ArgParser().parse_args()
+    args = tyro.cli(VisualizeObjsArgs)
     print("=" * 80)
     print(f"{pathlib.Path(__file__).name} args: {args}")
     print("=" * 80 + "\n")

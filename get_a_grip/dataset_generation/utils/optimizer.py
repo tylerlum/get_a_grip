@@ -1,11 +1,5 @@
-"""
-Last modified date: 2023.02.23
-Author: Jialiang Zhang
-Description: Class Annealing optimizer
-"""
-
 import torch
-from utils.hand_model import HandModel
+from get_a_grip.dataset_generation.utils.hand_model import HandModel
 
 
 class Annealing:
@@ -157,9 +151,9 @@ class Annealing:
         with torch.no_grad():
             reject = ~accept
             self.hand_model.hand_pose[reject] = self.old_hand_pose[reject]
-            self.hand_model.contact_point_indices[
-                reject
-            ] = self.old_contact_point_indices[reject]
+            self.hand_model.contact_point_indices[reject] = (
+                self.old_contact_point_indices[reject]
+            )
             self.hand_model.global_translation[reject] = self.old_global_transformation[
                 reject
             ]

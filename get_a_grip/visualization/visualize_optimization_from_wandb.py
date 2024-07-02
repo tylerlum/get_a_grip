@@ -1,16 +1,7 @@
-"""
-Last modified date: 2023.07.01
-Author: Tyler Lum
-Description: visualize hand model grasp optimization
-"""
-
 import os
-import sys
-
-sys.path.append(os.path.realpath("."))
-
 import plotly
-from tap import Tap
+from dataclasses import dataclass
+import tyro
 from visualize_optimization_helper import (
     create_figure_with_buttons_and_slider,
     download_plotly_files_from_wandb,
@@ -18,7 +9,8 @@ from visualize_optimization_helper import (
 )
 
 
-class VisualizeOptimizationFromWandbArgumentParser(Tap):
+@dataclass
+class VisualizeOptimizationFromWandbArgs:
     wandb_entity: str = "tylerlum"
     wandb_project: str = "DexGraspNet_v1"
     wandb_run_id: str = "qg17990t"
@@ -28,7 +20,9 @@ class VisualizeOptimizationFromWandbArgumentParser(Tap):
     save_to_html: bool = False
 
 
-def main(args: VisualizeOptimizationFromWandbArgumentParser):
+def main() -> None:
+    args = tyro.cli(VisualizeOptimizationFromWandbArgs)
+
     # Specify run
     run_path = f"{args.wandb_entity}/{args.wandb_project}/{args.wandb_run_id}"
     print(f"Run path: {run_path}")
@@ -67,4 +61,4 @@ def main(args: VisualizeOptimizationFromWandbArgumentParser):
 
 
 if __name__ == "__main__":
-    main(VisualizeOptimizationFromWandbArgumentParser().parse_args())
+    main()

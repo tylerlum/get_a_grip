@@ -6,7 +6,7 @@ def assert_equals(a, b):
     assert a == b, f"{a} != {b}"
 
 
-def quaternion_to_matrix(quaternions: torch.Tensor) -> torch.Tensor:
+def quat_wxyz_to_matrix(quaternions: torch.Tensor) -> torch.Tensor:
     """
     Convert rotations given as quaternions to rotation matrices.
     Args:
@@ -37,7 +37,7 @@ def quaternion_to_matrix(quaternions: torch.Tensor) -> torch.Tensor:
 
 def pose_to_T(pose: torch.Tensor) -> torch.Tensor:
     """
-    Convert a pose (position and quaternion) to a 4x4 transformation matrix.
+    Convert a pose (position and quat_xyzw) to a 4x4 transformation matrix.
 
     Args:
     pose (Tensor): A tensor of shape (N, 7) where N is the number of poses.
@@ -53,7 +53,7 @@ def pose_to_T(pose: torch.Tensor) -> torch.Tensor:
         [quaternion_xyzw[:, -1:], quaternion_xyzw[:, :-1]], dim=-1
     )
 
-    rotation_matrix = quaternion_to_matrix(quaternion_wxyz)
+    rotation_matrix = quat_wxyz_to_matrix(quaternion_wxyz)
 
     transformation_matrix = torch.zeros((pose.shape[0], 4, 4), device=pose.device)
     transformation_matrix[:, :3, :3] = rotation_matrix
@@ -76,7 +76,7 @@ def _sqrt_positive_part(x: torch.Tensor) -> torch.Tensor:
     return ret
 
 
-def matrix_to_quaternion(matrix: torch.Tensor) -> torch.Tensor:
+def matrix_to_quat_wxyz(matrix: torch.Tensor) -> torch.Tensor:
     """
     Convert rotations given as rotation matrices to quaternions.
     Args:
@@ -136,7 +136,7 @@ def T_to_pose(T: torch.Tensor) -> torch.Tensor:
     assert_equals(T.shape, (N, 4, 4))
     pose = torch.zeros((N, 7), device=T.device)
     pose[:, :3] = T[:, :3, 3]
-    quaternion_wxyz = matrix_to_quaternion(T[:, :3, :3])
+    quaternion_wxyz = matrix_to_quat_wxyz(T[:, :3, :3])
     quaternion_xyzw = torch.cat(
         [quaternion_wxyz[:, 1:], quaternion_wxyz[:, :1]], dim=-1
     )

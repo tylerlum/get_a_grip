@@ -1,30 +1,24 @@
-"""
-Last modified date: 2023.06.13
-Author: Tyler Lum
-Description: Create NeRF Data in Isaac simulator
-"""
-
 import os
-import sys
-
-sys.path.append(os.path.realpath("."))
-
-from tap import Tap
+from dataclasses import dataclass
+import tyro
 from tqdm import tqdm
 import subprocess
 from typing import Optional, Tuple, List
 import pathlib
-from utils.parse_object_code_and_scale import parse_object_code_and_scale
+from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+    parse_object_code_and_scale,
+)
 import multiprocessing
 
 
-class GenerateNerfDataArgumentParser(Tap):
-    gpu: int = 0
+@dataclass
+class GenerateNerfDataArgs:
     meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2")
     output_nerfdata_path: pathlib.Path = pathlib.Path("../data/nerfdata")
     num_cameras: int = 250
     randomize_order_seed: Optional[int] = None
     only_objects_in_this_path: Optional[pathlib.Path] = None
+    gpu: int = 0
     use_multiprocess: bool = True
     num_workers: int = 4
     no_continue: bool = False
@@ -50,7 +44,7 @@ def get_object_code_and_scale_strs_from_folder(
 
 
 def get_object_codes_and_scales_to_process(
-    args: GenerateNerfDataArgumentParser,
+    args: GenerateNerfDataArgs,
 ) -> Tuple[List[str], List[float]]:
     # Get input object codes
     if args.only_objects_in_this_path is None:
@@ -110,7 +104,7 @@ def get_object_codes_and_scales_to_process(
 def run_command(
     object_code: str,
     object_scale: float,
-    args: GenerateNerfDataArgumentParser,
+    args: GenerateNerfDataArgs,
     script_to_run: pathlib.Path,
 ):
     command = " ".join(
@@ -133,9 +127,12 @@ def run_command(
     print(f"Finished object {object_code}.")
 
 
-def main(args: GenerateNerfDataArgumentParser):
+def main() -> None:
+    args = tyro.cli(GenerateNerfDataArgs)
+
     # Check if script exists
-    script_to_run = pathlib.Path("scripts/generate_nerf_data_one_object_one_scale.py")
+    this_folder = pathlib.Path(__file__).parent
+    script_to_run = this_folder / "generate_nerf_data_one_object_one_scale.py"
     assert script_to_run.exists(), f"Script {script_to_run} does not exist"
 
     input_object_codes, input_object_scales = get_object_codes_and_scales_to_process(
@@ -178,5 +175,4 @@ def main(args: GenerateNerfDataArgumentParser):
 
 
 if __name__ == "__main__":
-    args = GenerateNerfDataArgumentParser().parse_args()
-    main(args)
+    main()

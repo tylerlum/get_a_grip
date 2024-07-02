@@ -1,29 +1,22 @@
-"""
-Last modified date: 2023.02.19
-Author: Ruicheng Wang
-Description: Class IsaacValidator
-"""
-
 from isaacgym import gymapi, torch_utils, gymutil, gymtorch
 import math
 import trimesh
 from time import sleep
 from tqdm import tqdm
-from utils.hand_model_type import (
-    handmodeltype_to_allowedcontactlinknames,
-    handmodeltype_to_joint_names,
-    HandModelType,
-    handmodeltype_to_hand_root_hand_file,
-    handmodeltype_to_hand_root_hand_file_with_virtual_joints,
+from get_a_grip import get_assets_folder
+from get_a_grip.dataset_generation.utils.allegro_hand_info import (
+    ALLEGRO_HAND_ALLOWED_CONTACT_LINK_NAMES,
+    ALLEGRO_HAND_JOINT_NAMES,
+    ALLEGRO_HAND_ROOT_HAND_FILE_WITH_VIRTUAL_JOINTS,
 )
-from utils.torch_quat_utils import (
+from get_a_grip.dataset_generation.utils.torch_quat_utils import (
     pose_to_T,
     T_to_pose,
 )
 from collections import defaultdict
 import torch
 from enum import Enum, auto
-from typing import List, Optional, Tuple, Dict
+from typing import List, Tuple, Dict
 import transforms3d
 from datetime import datetime
 
@@ -51,7 +44,7 @@ from PIL import Image
 import imageio
 import pathlib
 
-from utils.quaternions import Quaternion
+from get_a_grip.dataset_generation.utils.quaternions import Quaternion
 from datetime import datetime
 
 CAMERA_IMG_HEIGHT, CAMERA_IMG_WIDTH = 400, 400
@@ -130,7 +123,6 @@ class ValidationType(AutoName):
 class IsaacValidator:
     def __init__(
         self,
-        hand_model_type: HandModelType = HandModelType.ALLEGRO_HAND,
         mode: str = "headless",
         gpu: int = 0,
         start_with_step_mode: bool = False,
@@ -140,10 +132,8 @@ class IsaacValidator:
         self.gpu = gpu
         self.validation_type = validation_type
 
-        self.joint_names = handmodeltype_to_joint_names[hand_model_type]
-        self.allowed_contact_link_names = handmodeltype_to_allowedcontactlinknames[
-            hand_model_type
-        ]
+        self.joint_names = ALLEGRO_HAND_JOINT_NAMES
+        self.allowed_contact_link_names = ALLEGRO_HAND_ALLOWED_CONTACT_LINK_NAMES
 
         self._init_or_reset_state()
 
@@ -151,7 +141,7 @@ class IsaacValidator:
         (
             self.hand_root,
             self.hand_file,
-        ) = handmodeltype_to_hand_root_hand_file_with_virtual_joints[hand_model_type]
+        ) = ALLEGRO_HAND_ROOT_HAND_FILE_WITH_VIRTUAL_JOINTS
         # HACK: Hardcoded virtual joint names
         self.virtual_joint_names = [
             "virtual_joint_translation_x",
@@ -406,7 +396,7 @@ class IsaacValidator:
         # Set table texture
         if not hasattr(self, "table_texture"):
             self.table_texture = gym.create_texture_from_file(
-                self.sim, "table/wood.png"
+                self.sim, str(get_assets_folder() / "table/wood.png")
             )
         RB_IDX = 0
         gym.set_rigid_body_texture(
@@ -1097,8 +1087,8 @@ class IsaacValidator:
             table_asset_options = gymapi.AssetOptions()
             table_asset_options.fix_base_link = True
             table_root, table_file = (
-                "table",
-                "table.urdf",
+                str(get_assets_folder()),
+                "table/table.urdf",
             )
             self._table_asset = gym.load_asset(
                 self.sim, table_root, table_file, table_asset_options

@@ -1,19 +1,17 @@
 import numpy as np
 import json
+from get_a_grip import get_assets_folder
 
 # Number of points
 num_points = 128
 
 # Generate evenly spaced points on a unit hemisphere
-# phi = np.linspace(0, 2 * np.pi, int(np.sqrt(num_points)), endpoint=False)
-# theta = np.linspace(0, np.pi / 2, int(np.sqrt(num_points)), endpoint=False)
 phi = np.random.uniform(-0.6 * np.pi / 2, 0.6 * np.pi / 2, size=num_points)
 theta = np.random.uniform(0.3 * np.pi, 0.7 * np.pi, size=num_points)
 
 z = np.cos(theta)
 x = np.where(z >= 0, np.sin(theta) * np.cos(phi), np.cos(phi))
 y = np.where(z >= 0, np.sin(theta) * np.sin(phi), np.sin(phi))
-
 
 # Apply the desired radius
 radius = 0.012
@@ -41,6 +39,8 @@ for ii in range(16):
     contact_point_dictionary[f"link_{float(ii):.1f}"] = []
 # Save dictionary to json file.
 with open(
-    "allegro_hand_description/contact_points_precision_grasp_dense.json", "w"
+    get_assets_folder()
+    / "allegro_hand_description/contact_points_precision_grasp.json",
+    "w",
 ) as f:
     json.dump(contact_point_dictionary, f)

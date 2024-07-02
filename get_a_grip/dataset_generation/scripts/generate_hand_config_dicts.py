@@ -1,14 +1,4 @@
-"""
-Last modified date: 2023.02.23
-Author: Jialiang Zhang, Ruicheng Wang
-Description: generate grasps in large-scale, use multiple graphics cards, no logging
-"""
-
 import os
-import sys
-
-sys.path.append(os.path.realpath("."))
-
 import multiprocessing
 import numpy as np
 import torch
@@ -16,23 +6,30 @@ from tqdm import tqdm
 import math
 import random
 
-from utils.hand_model import HandModel
-from utils.object_model import ObjectModel
-from utils.initializations import initialize_convex_hull
-from utils.energy import cal_energy, ENERGY_NAMES, ENERGY_NAME_TO_SHORTHAND_DICT
-from utils.optimizer import Annealing
-from utils.hand_model_type import HandModelType
-from utils.pose_conversion import pose_to_hand_config
-from utils.seed import set_seed
-from utils.parse_object_code_and_scale import object_code_and_scale_to_str, parse_object_code_and_scale
-from utils.timers import LoopTimer
+from get_a_grip.dataset_generation.utils.hand_model import HandModel
+from get_a_grip.dataset_generation.utils.object_model import ObjectModel
+from get_a_grip.dataset_generation.utils.initializations import initialize_convex_hull
+from get_a_grip.dataset_generation.utils.energy import (
+    cal_energy,
+    ENERGY_NAMES,
+    ENERGY_NAME_TO_SHORTHAND_DICT,
+)
+from get_a_grip.dataset_generation.utils.optimizer import Annealing
+from get_a_grip.dataset_generation.utils.pose_conversion import pose_to_hand_config
+from get_a_grip.dataset_generation.utils.seed import set_seed
+from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+    object_code_and_scale_to_str,
+    parse_object_code_and_scale,
+)
+from clean_loop_timer import LoopTimer
 
 from torch.multiprocessing import set_start_method
 from typing import Tuple, List, Optional, Dict, Any
 import plotly.graph_objects as go
 import wandb
 from datetime import datetime
-from tap import Tap
+from dataclasses import dataclass
+import tyro
 import pathlib
 
 try:
@@ -45,9 +42,9 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
 np.seterr(all="raise")
 
 
-class GenerateHandConfigDictsArgumentParser(Tap):
+@dataclass
+class GenerateHandConfigDictsArgs:
     # experiment settings
-    hand_model_type: HandModelType = HandModelType.ALLEGRO_HAND
     meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2_trial")
     output_hand_config_dicts_path: pathlib.Path = pathlib.Path(
         "../data/hand_config_dicts"
@@ -118,7 +115,7 @@ class GenerateHandConfigDictsArgumentParser(Tap):
     store_grasps_mid_optimization_freq: Optional[int] = None
     store_grasps_mid_optimization_iters: Optional[List[int]] = None
     # store_grasps_mid_optimization_iters: Optional[List[int]] = [25] + [
-        # int(ff * 2500) for ff in [0.2, 0.5, 0.95]  # TODO: May add this back
+    # int(ff * 2500) for ff in [0.2, 0.5, 0.95]  # TODO: May add this back
     # ]
 
     # Continue from previous run
@@ -261,7 +258,7 @@ def save_hand_config_dicts(
 
 def generate(
     args_tuple: Tuple[
-        GenerateHandConfigDictsArgumentParser,
+        GenerateHandConfigDictsArgs,
         List[str],
         int,
         List[str],
@@ -275,7 +272,11 @@ def generate(
         # Log to wandb
         with loop_timer.add_section_timer("wandb and setup"):
             time_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            name = f"{args.wandb_name}_{time_str}" if len(args.wandb_name) > 0 else time_str
+            name = (
+                f"{args.wandb_name}_{time_str}"
+                if len(args.wandb_name) > 0
+                else time_str
+            )
             if args.use_wandb:
                 wandb.init(
                     entity=args.wandb_entity,
@@ -294,7 +295,6 @@ def generate(
 
         with loop_timer.add_section_timer("create hand model"):
             hand_model = HandModel(
-                hand_model_type=args.hand_model_type,
                 device=device,
                 n_surface_points=1000,  # Need this for table penetration
             )
@@ -317,7 +317,6 @@ def generate(
                 distance_upper=args.distance_upper,
                 theta_lower=args.theta_lower,
                 theta_upper=args.theta_upper,
-                hand_model_type=args.hand_model_type,
                 jitter_strength=args.jitter_strength,
                 n_contacts_per_finger=args.n_contacts_per_finger,
             )
@@ -426,7 +425,9 @@ def generate(
                     accept, temperature = optimizer.accept_step(energy, new_energy)
 
                     energy[accept] = new_energy[accept]
-                    unweighted_energy_matrix[accept] = new_unweighted_energy_matrix[accept]
+                    unweighted_energy_matrix[accept] = new_unweighted_energy_matrix[
+                        accept
+                    ]
                     weighted_energy_matrix[accept] = new_weighted_energy_matrix[accept]
 
             # Store grasps mid optimization
@@ -489,7 +490,9 @@ def generate(
                 if args.use_wandb:
                     wandb.log(wandb_log_dict)
 
-                pbar.set_description(f"optimizing, mean energy: {energy.mean().item():.4f}")
+                pbar.set_description(
+                    f"optimizing, mean energy: {energy.mean().item():.4f}"
+                )
 
             PRINT_LOOP_TIMER_EVERY_LOOP = False
             if PRINT_LOOP_TIMER_EVERY_LOOP:
@@ -513,7 +516,9 @@ def generate(
         print(f"Skipping {object_codes} and continuing")
 
 
-def main(args: GenerateHandConfigDictsArgumentParser) -> None:
+def main() -> None:
+    args = tyro.cli(GenerateHandConfigDictsArgs)
+
     print("=" * 80)
     print(f"args = {args}")
     print("=" * 80 + "\n")
@@ -618,5 +623,4 @@ def main(args: GenerateHandConfigDictsArgumentParser) -> None:
 
 
 if __name__ == "__main__":
-    args = GenerateHandConfigDictsArgumentParser().parse_args()
-    main(args)
+    main()

@@ -1,18 +1,9 @@
-"""
-Last modified date: 2023.07.01
-Author: Tyler Lum
-Description: visualize hand model grasp optimization
-"""
-
 import os
-import sys
 from tqdm import tqdm
-
-sys.path.append(os.path.realpath("."))
-
 import plotly.graph_objects as go
 from typing import List, Tuple, Dict, Any, Optional
-from tap import Tap
+from dataclasses import dataclass
+import tyro
 import numpy as np
 from visualize_optimization_helper import (
     create_figure_with_buttons_and_slider,
@@ -22,16 +13,16 @@ from visualize_config_dict_helper import create_config_dict_fig
 import pathlib
 
 import numpy as np
-from utils.pose_conversion import hand_config_to_pose
-from utils.hand_model_type import (
-    HandModelType,
+from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_to_pose
+from get_a_grip.dataset_generation.utils.hand_model import HandModel
+from get_a_grip.dataset_generation.utils.object_model import ObjectModel
+from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+    parse_object_code_and_scale,
 )
-from utils.hand_model import HandModel
-from utils.object_model import ObjectModel
-from utils.parse_object_code_and_scale import parse_object_code_and_scale
 
 
-class VisualizeConfigDictOptimizationArgumentParser(Tap):
+@dataclass
+class VisualizeConfigDictOptimizationArgs:
     """Expects a folder with the following structure:
     - <input_config_dicts_mid_optimization_path>
         - 0
@@ -65,14 +56,13 @@ def get_hand_model_from_config_dicts(
     config_dict: Dict[str, Any],
     device: str,
     idx_to_visualize: int,
-    hand_model_type: HandModelType = HandModelType.ALLEGRO_HAND,
 ) -> HandModel:
     hand_pose = hand_config_to_pose(
         trans=config_dict["trans"][idx_to_visualize],
         rot=config_dict["rot"][idx_to_visualize],
         joint_angles=config_dict["joint_angles"][idx_to_visualize],
     ).to(device)
-    hand_model = HandModel(hand_model_type=hand_model_type, device=device)
+    hand_model = HandModel(device=device)
     hand_model.set_parameters(hand_pose)
     return hand_model
 
@@ -177,7 +167,9 @@ def get_visualization_freq_from_folder(input_folder: str) -> int:
     return visualization_freq
 
 
-def main(args: VisualizeConfigDictOptimizationArgumentParser):
+def main() -> None:
+    args = tyro.cli(VisualizeConfigDictOptimizationArgs)
+
     print("=" * 80)
     print(f"args = {args}")
     print("=" * 80 + "\n")
@@ -216,4 +208,4 @@ def main(args: VisualizeConfigDictOptimizationArgumentParser):
 
 
 if __name__ == "__main__":
-    main(VisualizeConfigDictOptimizationArgumentParser().parse_args())
+    main()

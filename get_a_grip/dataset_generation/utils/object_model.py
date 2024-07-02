@@ -1,9 +1,3 @@
-"""
-Last modified date: 2023.02.23
-Author: Ruicheng Wang, Jialiang Zhang
-Description: Class ObjectModel
-"""
-
 import os
 import trimesh as tm
 import plotly.graph_objects as go
@@ -13,7 +7,10 @@ import pytorch3d.ops
 import numpy as np
 from typing import Optional, Tuple
 
-from kaolin.metrics.trianglemesh import CUSTOM_index_vertices_by_faces as index_vertices_by_faces, compute_sdf
+from kaolin.metrics.trianglemesh import (
+    CUSTOM_index_vertices_by_faces as index_vertices_by_faces,
+    compute_sdf,
+)
 
 
 class ObjectModel:
@@ -187,7 +184,13 @@ class ObjectModel:
         return distance, normals
 
     def get_plotly_data(
-        self, i, color="lightgreen", opacity=0.5, pose=None, with_surface_points=False, with_table=False
+        self,
+        i,
+        color="lightgreen",
+        opacity=0.5,
+        pose=None,
+        with_surface_points=False,
+        with_table=False,
     ):
         """
         Get visualization data for plotly.graph_objects
@@ -255,7 +258,7 @@ class ObjectModel:
                 )
             )
         if with_table:
-            table_mesh = self.get_hacky_table_mesh(i, scaled=True)
+            table_mesh = self.get_table_mesh(i, scaled=True)
             table_vertices = table_mesh.vertices
             if pose is not None:
                 pose = np.array(pose, dtype=np.float32)
@@ -294,13 +297,17 @@ class ObjectModel:
         bounds = []
         for i in range(n_objects):
             mesh = self.object_mesh_list[i]
-            mesh_bounds = np.copy(mesh.bounds)  # mesh.bounds is not-writable so we get a warning without copy
-            bounds.append(
-                torch.from_numpy(mesh_bounds).float().to(self.device)
-            )
+            mesh_bounds = np.copy(
+                mesh.bounds
+            )  # mesh.bounds is not-writable so we get a warning without copy
+            bounds.append(torch.from_numpy(mesh_bounds).float().to(self.device))
         bounds = torch.stack(bounds)
         assert bounds.shape == (n_objects, 2, 3)
-        bounds = bounds.unsqueeze(1).expand(-1, self.batch_size_each, -1, -1).reshape(-1, 2, 3)
+        bounds = (
+            bounds.unsqueeze(1)
+            .expand(-1, self.batch_size_each, -1, -1)
+            .reshape(-1, 2, 3)
+        )
         assert bounds.shape == (n_objects * self.batch_size_each, 2, 3)
 
         if scaled:
@@ -310,11 +317,16 @@ class ObjectModel:
 
         return bounds
 
-    def get_hacky_table(self, scaled: bool = True) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Hacky way to get "table" position and normal (i.e. min object y)
+    def get_table(
+        self, scaled: bool = True, y_offset: float = 0.01
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Get the "table" position (i.e. min object y) and normal direction (i.e. +ve y direction)
 
         Args:
             scaled (bool, optional): whether to return scaled table position. Defaults to True.
+            y_offset (float, optional): offset from min object y. Defaults to 0.01.
+                                        >0 to keep the hand slightly above the true table by moving the "virtual" table up
+                                        (hand will avoid penetration with "virtual" table)
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: table position and normal and parallel
@@ -327,8 +339,7 @@ class ObjectModel:
 
         min_object_y = object_bounds[:, 0, 1]
 
-        Y_OFFSET = 0.01  # Keep the hand slightly above the table
-        table_y = min_object_y + Y_OFFSET
+        table_y = min_object_y + y_offset
         assert table_y.shape == (full_batch_size,)
 
         table_pos = torch.zeros(
@@ -346,25 +357,27 @@ class ObjectModel:
             .reshape(1, 3)
             .expand(full_batch_size, -1)
         )
-        assert table_pos.shape == table_normal.shape == table_parallel.shape == (full_batch_size, 3)
+        assert (
+            table_pos.shape
+            == table_normal.shape
+            == table_parallel.shape
+            == (full_batch_size, 3)
+        )
 
         return table_pos, table_normal, table_parallel
 
-    def get_hacky_table_mesh(self, idx: int, scaled: bool = True) -> tm.Trimesh:
-        table_pos, table_normal, table_parallel = self.get_hacky_table(scaled=scaled)
+    def get_table_mesh(
+        self, idx: int, scaled: bool = True, width: float = 0.4, height: float = 0.4
+    ) -> tm.Trimesh:
+        W, H = width, height
+
+        table_pos, table_normal, table_parallel = self.get_table(scaled=scaled)
         table_pos, table_normal, table_parallel = (
             table_pos[idx].detach().cpu().numpy(),
             table_normal[idx].detach().cpu().numpy(),
             table_parallel[idx].detach().cpu().numpy(),
         )
         assert table_pos.shape == table_normal.shape == (3,)
-
-        bounds = self.get_bounds(scaled=True)
-        bounds = bounds[idx].detach().cpu().numpy()
-        assert bounds.shape == (2, 3)
-        SCALE_FACTOR = 2
-        W, H = bounds[1, 0] - bounds[0, 0], bounds[1, 2] - bounds[0, 2]
-        W, H = SCALE_FACTOR * W, SCALE_FACTOR * H
 
         table_parallel_2 = np.cross(table_normal, table_parallel)
         corner1 = table_pos + W / 2 * table_parallel + H / 2 * table_parallel_2
@@ -380,6 +393,7 @@ class ObjectModel:
         j = [1, 2, 2]
         k = [2, 3, 3]
 
-        table_mesh = tm.Trimesh(vertices=np.stack([x, y, z], axis=1), faces=np.stack([i, j, k], axis=1))
+        table_mesh = tm.Trimesh(
+            vertices=np.stack([x, y, z], axis=1), faces=np.stack([i, j, k], axis=1)
+        )
         return table_mesh
-

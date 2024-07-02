@@ -6,10 +6,12 @@ from typing import Tuple
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.tri import Triangulation
-from tap import Tap
+from dataclasses import dataclass
+import tyro
 
 
-class ArgParser(Tap):
+@dataclass
+class VisualizeObjsPltArgs:
     meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2")
     max_num_objects_to_visualize: int = 10
 
@@ -22,7 +24,7 @@ def load_obj_mesh(path: pathlib.Path) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def main() -> None:
-    args = ArgParser().parse_args()
+    args = tyro.cli(VisualizeObjsPltArgs)
     print("=" * 80)
     print(f"{pathlib.Path(__file__).name} args: {args}")
     print("=" * 80 + "\n")
@@ -47,7 +49,7 @@ def main() -> None:
     for i, obj_file in enumerate(obj_files):
         vertices, faces = load_obj_mesh(obj_file)
         triang = Triangulation(vertices[:, 0], vertices[:, 1], faces)
-        ax = fig.add_subplot(nrows, ncols, i+1, projection="3d")
+        ax = fig.add_subplot(nrows, ncols, i + 1, projection="3d")
         ax.plot_trisurf(
             triang, vertices[:, 2], edgecolor="k", linewidth=0.5, antialiased=True
         )
