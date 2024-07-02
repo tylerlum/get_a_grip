@@ -941,18 +941,20 @@ class IsaacValidator:
                     gym.step_graphics(self.sim)
                     gym.render_all_camera_sensors(self.sim)
                     for ii, env in enumerate(self.camera_envs):
-                        self.video_frames[ii].append(
-                            gym.get_camera_image(
-                                self.sim,
-                                env,
-                                self.camera_handles[ii],
-                                gymapi.IMAGE_COLOR,
-                            ).reshape(
-                                self.camera_properties_list[ii].height,
-                                self.camera_properties_list[ii].width,
-                                4,  # RGBA
-                            )
+                        video_frame_rgba = gym.get_camera_image(
+                            self.sim,
+                            env,
+                            self.camera_handles[ii],
+                            gymapi.IMAGE_COLOR,
+                        ).reshape(
+                            self.camera_properties_list[ii].height,
+                            self.camera_properties_list[ii].width,
+                            4,  # RGBA
                         )
+                        assert isinstance(video_frame_rgba, np.ndarray), f"{type(video_frame_rgba)}"
+                        video_frame = video_frame_rgba[:, :, :3]
+                        self.video_frames[ii].append(video_frame)
+
                 sim_step_idx += 1
                 pbar.update(1)
 
@@ -1140,10 +1142,10 @@ class IsaacValidator:
                 print(f"Done rendering camera {ii}.")
 
     def _render_video(
-        self, video_frames: List[torch.Tensor], video_path: pathlib.Path, fps: int
+        self, video_frames: List[np.ndarray], video_path: pathlib.Path, fps: int
     ):
         print(f"number of frames: {len(video_frames)}")
-        imageio.mimsave(video_path, video_frames, fps=fps)
+        imageio.v3.imwrite(uri=video_path, image=video_frames, fps=fps, codec="libx264")
 
     ########## VIDEO END ##########
 

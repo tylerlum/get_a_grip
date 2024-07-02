@@ -53,7 +53,6 @@ python get_a_grip/dataset_generation/scripts/eval_grasp_config_dict.py \
 --output_evaled_grasp_config_dicts_path data/NEW_DATASET/evaled_grasp_config_dicts \
 --object_code_and_scale_str mug_0_1000 \
 --max_grasps_per_batch 5000 \
---debug_index 0 \
 --record_indices 0 1 2 3 4 5 6 7 8 9
 ```
 
