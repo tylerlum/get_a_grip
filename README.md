@@ -26,8 +26,8 @@ get_a_grip
   |      └── // Generate dataset
   |   └── grasp_planning
   |      └── // Grasp planning training and inference
-  |   └── models
-  |      └── // Neural network models
+  |   └── model_training
+  |      └── // Neural network training
   |   └── visualization
   |      └── // Visualization tools
   └── scripts
