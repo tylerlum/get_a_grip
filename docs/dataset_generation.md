@@ -5,7 +5,8 @@ Follow these instructions if you want to generate the dataset yourself instead o
 ## 1. Grasp Generation
 
 ```
-python scripts/generate_hand_config_dicts.py \
+CUDA_VISIBLE_DEVICES=0 \
+python get_a_grip/dataset_generation/scripts/generate_hand_config_dicts.py \
 --meshdata_root_path data/large/meshes \
 --output_hand_config_dicts_path data/NEW_DATASET/hand_config_dicts \
 --use_penetration_energy \
@@ -15,7 +16,8 @@ python scripts/generate_hand_config_dicts.py \
 ```
 
 ```
-python scripts/generate_grasp_config_dicts.py \
+CUDA_VISIBLE_DEVICES=0 \
+python get_a_grip/dataset_generation/scripts/generate_grasp_config_dicts.py \
 --meshdata_root_path data/large/meshes \
 --input_hand_config_dicts_path data/NEW_DATASET/hand_config_dicts \
 --output_grasp_config_dicts_path data/NEW_DATASET/grasp_config_dicts
@@ -28,7 +30,8 @@ python scripts/generate_grasp_config_dicts.py \
 ## 2. Grasp Evaluation
 
 ```
-python scripts/eval_all_grasp_config_dicts.py \
+CUDA_VISIBLE_DEVICES=0 \
+python get_a_grip/dataset_generation/scripts/eval_all_grasp_config_dicts.py \
 --meshdata_root_path data/large/meshes \
 --input_grasp_config_dicts_path data/NEW_DATASET/grasp_config_dicts \
 --output_evaled_grasp_config_dicts_path data/NEW_DATASET/evaled_grasp_config_dicts \
@@ -50,7 +53,8 @@ TODO
 ## 4. Image Data Generation
 
 ```
-python scripts/generate_nerf_data.py \
+CUDA_VISIBLE_DEVICES=0 \
+python get_a_grip/dataset_generation/scripts/generate_nerf_data.py \
 --meshdata_root_path data/large/meshes \
 --output_nerfdata_path data/NEW_DATASET/nerfdata \
 --only_objects_in_this_path data/NEW_DATASET/hand_config_dicts
@@ -63,7 +67,7 @@ python scripts/generate_nerf_data.py \
 ## 5. NeRF Training
 
 ```
-python nerf_grasping/nerfstudio_train/train_nerfs.py \
+python get_a_grip/dataset_generation/scripts/train_nerfs.py \
 --experiment_name NEW_DATASET \
 --nerfdata_name nerfdata \
 --output_nerfcheckpoints_name nerfcheckpoints \

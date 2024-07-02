@@ -69,13 +69,13 @@ pip install drake
 # Install other dependencies
 
 # Main functionality
-pip install pypose tyro wandb pytorch_kinematics arm_pytorch_utilities mujoco urdf_parser_py pybullet torchviz transforms3d trimesh scipy networkx rtree typed_argument_parser torchinfo positional_encodings diffusers
+pip install pypose tyro wandb pytorch_kinematics arm_pytorch_utilities mujoco urdf_parser_py pybullet torchviz transforms3d trimesh scipy networkx rtree torchinfo positional_encodings diffusers
 
 # Plotting and visualization
 pip install matplotlib plotly kaleido
 
 # Debugging and development
-pip install rich ipdb jupyterlab jupytext pandas
+pip install rich ipdb jupyterlab jupytext pandas black clean_loop_timer
 
 # Install get_a_grip
 cd <path_to_get_a_grip_root>

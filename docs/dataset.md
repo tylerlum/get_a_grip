@@ -10,9 +10,9 @@ Small:
 
 - <download_url>/small/grasps.zip
 
-- <download_url>/small/images.zip
-
 - <download_url>/small/meshes.zip
+
+- <download_url>/small/nerfdata.zip
 
 - <download_url>/small/nerfs.zip
 
@@ -22,9 +22,9 @@ Large:
 
 - <download_url>/large/grasps.zip
 
-- <download_url>/large/images.zip
-
 - <download_url>/large/meshes.zip
+
+- <download_url>/large/nerfdata.zip
 
 - <download_url>/large/nerfs.zip
 
@@ -36,14 +36,14 @@ Create a directories `data/small` and `data/large`, then unzip into these folder
 data
 ├── small
 │   ├── grasps
-│   ├── images
 │   ├── meshes
+│   ├── nerfdata
 │   ├── nerfs
 │   └── pointclouds
 └── large
     ├── grasps
-    ├── images
     ├── meshes
+    ├── nerfdata
     ├── nerfs
     └── pointclouds
 ```
@@ -136,35 +136,6 @@ optimized_grasp_config_dict['loss'].shape == (batch_size,)
 
 Where loss refer to predicted failure probabilities (1 is bad, 0 is good)
 
-### images
-
-Directory structure:
-
-```
-images
-├── <object_code_and_scale_str>
-│   ├── images
-│   │   ├── 0.png
-│   │   ├── 1.png
-│   │   └── ...
-│   └── transforms.json
-├── <object_code_and_scale_str>
-│   ├── images
-│   │   ├── 0.png
-│   │   ├── 1.png
-│   │   └── ...
-│   └── transforms.json
-├── <object_code_and_scale_str>
-│   ├── images
-│   │   ├── 0.png
-│   │   ├── 1.png
-│   │   └── ...
-│   └── transforms.json
-└── ...
-```
-
-`images` contains a set of images of the object from different angles. `transforms.json` has the camera pose associated with each image.
-
 ### meshes
 
 Directory structure:
@@ -196,6 +167,35 @@ The objects are all:
 - Scaled such that the largest object bounding box extent is 2 meters (this is very large, so we use small object scales)
 
 - Centered at the center of object bounding box
+
+### nerfdata
+
+Directory structure:
+
+```
+nerfdata
+├── <object_code_and_scale_str>
+│   ├── images
+│   │   ├── 0.png
+│   │   ├── 1.png
+│   │   └── ...
+│   └── transforms.json
+├── <object_code_and_scale_str>
+│   ├── images
+│   │   ├── 0.png
+│   │   ├── 1.png
+│   │   └── ...
+│   └── transforms.json
+├── <object_code_and_scale_str>
+│   ├── images
+│   │   ├── 0.png
+│   │   ├── 1.png
+│   │   └── ...
+│   └── transforms.json
+└── ...
+```
+
+`images` contains a set of images of the object from different angles. `transforms.json` has the camera pose associated with each image.
 
 ### nerfs
 
