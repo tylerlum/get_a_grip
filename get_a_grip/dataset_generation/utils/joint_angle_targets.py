@@ -1,9 +1,9 @@
+from collections import defaultdict
+from typing import Dict, Optional, Tuple
+
+import torch
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.object_model import ObjectModel
-import torch
-from typing import Dict, Tuple, Optional
-from collections import defaultdict
-
 
 FINGERTIP_KEYWORDS = ["link_3.0", "link_7.0", "link_11.0", "link_15.0"]
 DEFAULT_DIST_MOVE_FINGER = 0.05  # NOTE: Important parameter to vary

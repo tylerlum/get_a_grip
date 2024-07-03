@@ -1,27 +1,27 @@
+import math
+import os
+import pathlib
 from dataclasses import dataclass
-import tyro
-import numpy as np
 from typing import Dict
 
+import numpy as np
+import tyro
+from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.object_model import ObjectModel
-import pathlib
-import math
-
 from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
-from visualize_config_dict_helper import create_config_dict_fig
 from plotly.subplots import make_subplots
+
+from visualize_config_dict_helper import create_config_dict_fig
 
 
 @dataclass
 class VisualizeConfigDictArgs:
-    input_config_dicts_path: pathlib.Path = pathlib.Path(
-        "../data/config_dicts"
-    )  # SHOULD be able to hand most types of config dicts
-    meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_stable")
-    object_code_and_scale_str: str = "sem-Ipod-4b6c6248d5c01b3e4eee8d1cb32988b_0_10"
+    input_config_dicts_path: pathlib.Path = get_data_folder() / "large/evaled_grasp_config_dicts"  # SHOULD be able to hand most types of config dicts
+    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    object_code_and_scale_str: str = "sem-Ipod-4b6c6248d5c01b3e4eee8d1cb32988b_0_1000"
     idx_to_visualize: int = 0
     visualize_all: bool = False
     save_to_html: bool = False

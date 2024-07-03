@@ -102,7 +102,7 @@ python get_a_grip/visualization/visualize_objs.py \
 Visualize the meshes in isaacgym like so:
 
 ```
-python get_a_grip/visualization/visualize_meshes_in_isaacgym.py \
+python get_a_grip/visualization/visualize_obs_in_isaacgym.py \
 --meshdata_root_path data/large/meshes
 ```
 

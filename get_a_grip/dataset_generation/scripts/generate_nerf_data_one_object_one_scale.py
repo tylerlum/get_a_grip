@@ -1,23 +1,30 @@
 import os
-from get_a_grip.dataset_generation.utils.isaac_validator import IsaacValidator, ValidationType
-from get_a_grip.dataset_generation.utils.seed import set_seed
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import object_code_and_scale_to_str
-from dataclasses import dataclass
-import tyro
 import pathlib
+from dataclasses import dataclass
+
+import tyro
 from clean_loop_timer import LoopTimer
+from get_a_grip import get_data_folder
+from get_a_grip.dataset_generation.utils.isaac_validator import (
+    IsaacValidator,
+    ValidationType,
+)
+from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+    object_code_and_scale_to_str,
+)
+from get_a_grip.dataset_generation.utils.seed import set_seed
 
 
 @dataclass
 class GenerateNerfDataOneObjectOneScaleArgs:
-    gpu: int = 0
-    meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2")
-    output_nerfdata_path: pathlib.Path = pathlib.Path("../data/nerfdata")
+    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    output_nerfdata_path: pathlib.Path = get_data_folder() / "NEW_DATASET/nerfdata"
     object_code: str = "sem-Camera-7bff4fd4dc53de7496dece3f86cb5dd5"
     object_scale: float = 0.1
+    num_cameras: int = 100
+    gpu: int = 0
     generate_seg: bool = False
     generate_depth: bool = False
-    num_cameras: int = 250
     debug_with_gui: bool = False
 
 

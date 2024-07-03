@@ -1,11 +1,11 @@
 import os
 from dataclasses import dataclass
-import plotly.graph_objects as go
-import wandb
-from tqdm import tqdm
 from datetime import datetime
 from typing import List
 
+import plotly.graph_objects as go
+import wandb
+from tqdm import tqdm
 
 path_to_this_file = os.path.dirname(os.path.realpath(__file__))
 

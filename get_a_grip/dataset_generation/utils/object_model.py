@@ -1,14 +1,16 @@
 import os
-import trimesh as tm
-import plotly.graph_objects as go
-import torch
-import pytorch3d.structures
-import pytorch3d.ops
-import numpy as np
 from typing import Optional, Tuple
 
+import numpy as np
+import plotly.graph_objects as go
+import pytorch3d.ops
+import pytorch3d.structures
+import torch
+import trimesh as tm
 from kaolin.metrics.trianglemesh import (
     CUSTOM_index_vertices_by_faces as index_vertices_by_faces,
+)
+from kaolin.metrics.trianglemesh import (
     compute_sdf,
 )
 

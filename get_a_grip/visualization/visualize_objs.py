@@ -1,18 +1,20 @@
-import trimesh
-import numpy as np
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import math
 import pathlib
+from dataclasses import dataclass
 from typing import Tuple
 
-from dataclasses import dataclass
+import numpy as np
+import plotly.graph_objects as go
+import trimesh
 import tyro
+from plotly.subplots import make_subplots
+
+from get_a_grip import get_data_folder
 
 
 @dataclass
 class VisualizeObjsArgs:
-    meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2")
+    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
     max_num_objects_to_visualize: int = 10
 
 

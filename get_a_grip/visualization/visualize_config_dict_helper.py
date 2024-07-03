@@ -1,16 +1,16 @@
-import torch
-import plotly.graph_objects as go
-from typing import Dict, Any, Optional
-import numpy as np
+from typing import Any, Dict, Optional
 
+import numpy as np
+import plotly.graph_objects as go
+import torch
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
-from get_a_grip.dataset_generation.utils.object_model import ObjectModel
-from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_to_pose
 from get_a_grip.dataset_generation.utils.joint_angle_targets import (
-    compute_fingertip_targets,
     compute_fingertip_mean_contact_positions,
+    compute_fingertip_targets,
     compute_optimized_joint_angle_targets_given_fingertip_targets,
 )
+from get_a_grip.dataset_generation.utils.object_model import ObjectModel
+from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_to_pose
 
 
 def get_hand_config_dict_plotly_data_list(

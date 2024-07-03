@@ -1,36 +1,36 @@
-import os
-import multiprocessing
-import numpy as np
-import torch
-from tqdm import tqdm
 import math
+import multiprocessing
+import os
+import pathlib
 import random
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
-from get_a_grip.dataset_generation.utils.hand_model import HandModel
-from get_a_grip.dataset_generation.utils.object_model import ObjectModel
-from get_a_grip.dataset_generation.utils.initializations import initialize_convex_hull
+import numpy as np
+import plotly.graph_objects as go
+import torch
+import tyro
+import wandb
+from clean_loop_timer import LoopTimer
+from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.energy import (
-    cal_energy,
-    ENERGY_NAMES,
     ENERGY_NAME_TO_SHORTHAND_DICT,
+    ENERGY_NAMES,
+    cal_energy,
 )
+from get_a_grip.dataset_generation.utils.hand_model import HandModel
+from get_a_grip.dataset_generation.utils.initializations import initialize_convex_hull
+from get_a_grip.dataset_generation.utils.object_model import ObjectModel
 from get_a_grip.dataset_generation.utils.optimizer import Annealing
-from get_a_grip.dataset_generation.utils.pose_conversion import pose_to_hand_config
-from get_a_grip.dataset_generation.utils.seed import set_seed
 from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     object_code_and_scale_to_str,
     parse_object_code_and_scale,
 )
-from clean_loop_timer import LoopTimer
-
+from get_a_grip.dataset_generation.utils.pose_conversion import pose_to_hand_config
+from get_a_grip.dataset_generation.utils.seed import set_seed
 from torch.multiprocessing import set_start_method
-from typing import Tuple, List, Optional, Dict, Any
-import plotly.graph_objects as go
-import wandb
-from datetime import datetime
-from dataclasses import dataclass
-import tyro
-import pathlib
+from tqdm import tqdm
 
 try:
     set_start_method("spawn")
@@ -45,10 +45,8 @@ np.seterr(all="raise")
 @dataclass
 class GenerateHandConfigDictsArgs:
     # experiment settings
-    meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2_trial")
-    output_hand_config_dicts_path: pathlib.Path = pathlib.Path(
-        "../data/hand_config_dicts"
-    )
+    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    output_hand_config_dicts_path: pathlib.Path = get_data_folder() / "NEW_DATASET/hand_config_dicts"
     rand_object_scale: bool = False
     object_scale: Optional[float] = 0.075
     min_object_scale: float = 0.05
@@ -263,7 +261,7 @@ def generate(
         int,
         List[str],
         List[float],
-    ]
+    ],
 ) -> None:
     args, object_codes, id, gpu_list, object_scales = args_tuple
     try:
@@ -380,9 +378,7 @@ def generate(
             # So optimizer will stop accepting new energies
             if step == step_first_compute_penetration_energy:
                 if args.use_penetration_energy:
-                    assert (
-                        use_penetration_energy
-                    ), f"On step {step}, use_penetration_energy is {use_penetration_energy} but should be True"
+                    assert use_penetration_energy, f"On step {step}, use_penetration_energy is {use_penetration_energy} but should be True"
                 (
                     updated_energy,
                     updated_unweighted_energy_matrix,
@@ -420,7 +416,6 @@ def generate(
                 new_energy.sum().backward(retain_graph=True)
 
             with loop_timer.add_section_timer("update energy"):
-
                 with torch.no_grad():
                     accept, temperature = optimizer.accept_step(energy, new_energy)
 

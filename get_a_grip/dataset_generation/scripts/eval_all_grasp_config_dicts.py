@@ -1,37 +1,39 @@
 from __future__ import annotations
-import subprocess
-import random
-from tqdm import tqdm
-from get_a_grip.dataset_generation.utils.isaac_validator import ValidationType
-import multiprocessing
 
+import multiprocessing
+import pathlib
+import random
+import subprocess
+from dataclasses import dataclass, field
 from functools import partial
+from typing import List, Optional
 
 import tyro
-from dataclasses import dataclass, field
-from typing import Optional, List
-import pathlib
+from get_a_grip import get_data_folder
+from get_a_grip.dataset_generation.utils.isaac_validator import ValidationType
+from tqdm import tqdm
 
 
 @dataclass
 class EvalAllGraspConfigDictsArgs:
+    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    input_grasp_config_dicts_path: pathlib.Path = (
+        get_data_folder() / "NEW_DATASET/grasp_config_dicts"
+    )
+    output_evaled_grasp_config_dicts_path: pathlib.Path = (
+        get_data_folder() / "NEW_DATASET/evaled_grasp_config_dicts"
+    )
     validation_type: ValidationType = ValidationType.GRAVITY_AND_TABLE
+    num_random_pose_noise_samples_per_grasp: Optional[int] = None
     gpu: int = 0
     max_grasps_per_batch: int = 5000
+    move_fingers_back_at_init: bool = False
+
     debug_index: Optional[int] = None
-    input_grasp_config_dicts_path: pathlib.Path = pathlib.Path(
-        "../data/grasp_config_dicts"
-    )
     use_gui: bool = False
     use_cpu: bool = (
         False  # NOTE: Tyler has had big discrepancy between using GPU vs CPU, hypothesize that CPU is safer
     )
-    meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2")
-    output_evaled_grasp_config_dicts_path: pathlib.Path = pathlib.Path(
-        "../data/evaled_grasp_config_dicts"
-    )
-    num_random_pose_noise_samples_per_grasp: Optional[int] = None
-    move_fingers_back_at_init: bool = False
     randomize_order_seed: Optional[int] = None
     mid_optimization_steps: List[int] = field(default_factory=list)
     use_multiprocess: bool = True
@@ -45,7 +47,6 @@ def get_object_code_and_scale_strs_to_process(
     input_object_code_and_scale_strs = [
         path.stem for path in list(input_grasp_config_dicts_path.glob("*.npy"))
     ]
-
     print(
         f"Found {len(input_object_code_and_scale_strs)} object codes in input_grasp_config_dicts_path ({input_grasp_config_dicts_path})"
     )

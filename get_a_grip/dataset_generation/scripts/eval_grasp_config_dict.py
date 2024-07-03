@@ -1,47 +1,49 @@
+import math
 import os
+import pathlib
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+import numpy as np
+import torch
+import tyro
+from get_a_grip import get_data_folder
+from get_a_grip.dataset_generation.utils.allegro_hand_info import (
+    ALLEGRO_HAND_JOINT_NAMES,
+)
+from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.isaac_validator import (
     IsaacValidator,
     ValidationType,
 )
-from dataclasses import dataclass, field
-import tyro
-import torch
-import numpy as np
-from tqdm import tqdm
-from get_a_grip.dataset_generation.utils.hand_model import HandModel
-from get_a_grip.dataset_generation.utils.allegro_hand_info import (
-    ALLEGRO_HAND_JOINT_NAMES,
-)
-from get_a_grip.dataset_generation.utils.pose_conversion import (
-    hand_config_to_pose,
-)
-from get_a_grip.dataset_generation.utils.torch_quat_utils import matrix_to_quat_wxyz
-from typing import List, Optional, Dict, Any
-import math
-from get_a_grip.dataset_generation.utils.seed import set_seed
 from get_a_grip.dataset_generation.utils.joint_angle_targets import (
-    compute_optimized_joint_angle_targets_given_grasp_orientations,
     compute_init_joint_angles_given_grasp_orientations,
+    compute_optimized_joint_angle_targets_given_grasp_orientations,
 )
 from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
-from get_a_grip.dataset_generation.utils.energy import _cal_hand_object_penetration
-from get_a_grip.dataset_generation.utils.object_model import ObjectModel
-import pathlib
+from get_a_grip.dataset_generation.utils.pose_conversion import (
+    hand_config_to_pose,
+)
+from get_a_grip.dataset_generation.utils.seed import set_seed
+from get_a_grip.dataset_generation.utils.torch_quat_utils import matrix_to_quat_wxyz
+from tqdm import tqdm
 
 
 @dataclass
 class EvalGraspConfigDictArgs:
+    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    input_grasp_config_dicts_path: pathlib.Path = (
+        get_data_folder() / "NEW_DATASET/grasp_config_dicts"
+    )
+    output_evaled_grasp_config_dicts_path: pathlib.Path = (
+        get_data_folder() / "NEW_DATASET/evaled_grasp_config_dicts"
+    )
+    object_code_and_scale_str: str = (
+        "core-bottle-2722bec1947151b86e22e2d2f64c8cef_0_1000"
+    )
     validation_type: ValidationType = ValidationType.GRAVITY_AND_TABLE
-    meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2")
-    input_grasp_config_dicts_path: pathlib.Path = pathlib.Path(
-        "../data/grasp_config_dicts"
-    )
-    object_code_and_scale_str: str = "core-bottle-2722bec1947151b86e22e2d2f64c8cef_0_10"
-    output_evaled_grasp_config_dicts_path: pathlib.Path = pathlib.Path(
-        "../data/evaled_grasp_config_dicts"
-    )
     num_random_pose_noise_samples_per_grasp: Optional[int] = None
     gpu: int = 0
     max_grasps_per_batch: int = 5000
@@ -54,9 +56,8 @@ class EvalGraspConfigDictArgs:
     )
     use_gui: bool = False
     use_cpu: bool = (
-        False  # NOTE: Tyler has had big discrepancy between using GPU vs CPU, hypothesize that CPU is safer
+        False  # GPU is faster. NOTE: there can be discrepancies between using GPU vs CPU, likely different slightly physics
     )
-    penetration_threshold: Optional[float] = 5e-3  # From original DGN
     record_indices: List[int] = field(default_factory=list)
 
 
@@ -70,6 +71,7 @@ def compute_joint_angle_targets(
     # hand model
     hand_model = HandModel(device=hand_pose.device)
     hand_model.set_parameters(hand_pose)
+    assert hand_model.hand_pose is not None
 
     # Optimization
     (
@@ -97,6 +99,7 @@ def compute_init_joint_angles(
     # hand model
     hand_model = HandModel(device=hand_pose.device)
     hand_model.set_parameters(hand_pose)
+    assert hand_model.hand_pose is not None
 
     # Optimization
     (
@@ -122,7 +125,8 @@ def main() -> None:
 
     os.environ.pop("CUDA_VISIBLE_DEVICES")
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
-    add_random_pose_noise = args.num_random_pose_noise_samples_per_grasp is not None
+    N_NOISY = args.num_random_pose_noise_samples_per_grasp  # alias
+    add_random_pose_noise = N_NOISY is not None
 
     object_code, object_scale = parse_object_code_and_scale(
         args.object_code_and_scale_str
@@ -229,12 +233,10 @@ def main() -> None:
     passed_penetration_object_test_array = []
     passed_penetration_table_test_array = []
     object_states_before_grasp_array = []
-    E_pen_array = []
     max_grasps_per_batch = (
         args.max_grasps_per_batch
-        if args.num_random_pose_noise_samples_per_grasp is None
-        else args.max_grasps_per_batch
-        // (args.num_random_pose_noise_samples_per_grasp + 1)
+        if N_NOISY is None
+        else args.max_grasps_per_batch // (N_NOISY + 1)
     )
     pbar = tqdm(
         range(math.ceil(batch_size / max_grasps_per_batch)),
@@ -258,8 +260,8 @@ def main() -> None:
                 record=index in args.record_indices,
             )
 
-            if args.num_random_pose_noise_samples_per_grasp is not None:
-                for _ in range(args.num_random_pose_noise_samples_per_grasp):
+            if N_NOISY is not None:
+                for _ in range(N_NOISY):
                     sim.add_env(
                         hand_quaternion_wxyz=quat_wxyz[index],
                         hand_translation=trans[index],
@@ -289,20 +291,6 @@ def main() -> None:
 
         hand_model.set_parameters(hand_pose[start_index:end_index])
 
-        object_model = ObjectModel(
-            meshdata_root_path=str(args.meshdata_root_path),
-            batch_size_each=end_index - start_index,
-            num_samples=2000,
-            device=device,
-        )
-        object_model.initialize(object_code, object_scale)
-
-        # TODO: Do we need to use thres_pen param here? Does threshold change? Do we even need passed_penetration_threshold now?
-        batch_E_pen_array = _cal_hand_object_penetration(
-            hand_model=hand_model, object_model=object_model, reduction="max"
-        )
-        E_pen_array.extend(batch_E_pen_array.flatten().tolist())
-
     # Aggregate results
     passed_simulation_array = np.array(passed_simulation_array)
     passed_penetration_object_test_array = np.array(
@@ -312,24 +300,21 @@ def main() -> None:
     object_states_before_grasp_array = np.concatenate(
         object_states_before_grasp_array, axis=0
     )
-    E_pen_array = np.array(E_pen_array)
 
-    if args.num_random_pose_noise_samples_per_grasp is not None:
+    if N_NOISY is not None:
         passed_simulation_array = passed_simulation_array.reshape(
-            batch_size, args.num_random_pose_noise_samples_per_grasp + 1
+            batch_size, N_NOISY + 1
         )
-        passed_simulation_without_noise = passed_simulation_array[:, 0]
+        _passed_simulation_without_noise = passed_simulation_array[:, 0]
         passed_simulation_with_noise = passed_simulation_array[:, 1:]
         # Use mean of all noise samples
         mean_passed_simulation_with_noise = passed_simulation_with_noise.mean(axis=1)
         passed_simulation_array = mean_passed_simulation_with_noise
 
         passed_penetration_object_test_array = (
-            passed_penetration_object_test_array.reshape(
-                batch_size, args.num_random_pose_noise_samples_per_grasp + 1
-            )
+            passed_penetration_object_test_array.reshape(batch_size, N_NOISY + 1)
         )
-        passed_penetration_object_test_without_noise = (
+        _passed_penetration_object_test_without_noise = (
             passed_penetration_object_test_array[:, 0]
         )
         passed_penetration_object_test_with_noise = (
@@ -344,11 +329,9 @@ def main() -> None:
         )
 
         passed_penetration_table_test_array = (
-            passed_penetration_table_test_array.reshape(
-                batch_size, args.num_random_pose_noise_samples_per_grasp + 1
-            )
+            passed_penetration_table_test_array.reshape(batch_size, N_NOISY + 1)
         )
-        passed_penetration_table_test_without_noise = (
+        _passed_penetration_table_test_without_noise = (
             passed_penetration_table_test_array[:, 0]
         )
         passed_penetration_table_test_with_noise = passed_penetration_table_test_array[
@@ -365,36 +348,19 @@ def main() -> None:
     assert passed_simulation_array.shape == (batch_size,)
     assert passed_penetration_object_test_array.shape == (batch_size,)
     assert passed_penetration_table_test_array.shape == (batch_size,)
-    assert E_pen_array.shape == (batch_size,)
 
     object_states_before_grasp_array = object_states_before_grasp_array.reshape(
         batch_size,
-        (
-            args.num_random_pose_noise_samples_per_grasp + 1
-            if args.num_random_pose_noise_samples_per_grasp
-            else 1
-        ),
+        (N_NOISY + 1 if N_NOISY is not None else 1),
         13,
     )
-
-    if args.penetration_threshold is None:
-        print("WARNING: penetration check skipped")
-        OLD_passed_penetration_threshold_array = np.ones(batch_size, dtype=np.bool8)
-    else:
-        OLD_passed_penetration_threshold_array = (
-            E_pen_array < args.penetration_threshold
-        )
 
     passed_new_penetration_test_array = (
         passed_penetration_object_test_array * passed_penetration_table_test_array
     )
 
-    passed_eval = (
-        passed_simulation_array
-        # * OLD_passed_penetration_threshold_array
-        * passed_new_penetration_test_array
-    )
-    # TODO: Remove these prints
+    passed_eval = passed_simulation_array * passed_new_penetration_test_array
+
     DEBUG = True
     if DEBUG:
         print(
@@ -421,40 +387,25 @@ def main() -> None:
         print(
             f"passed_new_penetration_test_array_idxs = {np.where(passed_new_penetration_test_array > 0.5)[0]}"
         )
-        print(
-            f"OLD_passed_penetration_threshold_array = {OLD_passed_penetration_threshold_array} ({OLD_passed_penetration_threshold_array.mean() * 100:.2f}%)"
-        )
-        print(
-            f"OLD_passed_penetration_threshold_array_idxs = {np.where(OLD_passed_penetration_threshold_array > 0.5)[0]}"
-        )
-        print(f"E_pen_array = {E_pen_array}")
         print(f"passed_eval = {passed_eval}")
         print(f"passed_eval_idxs = {np.where(passed_eval > 0.5)[0]}")
 
     sim_frac = np.mean(passed_simulation_array)
     new_pen_frac = np.mean(passed_new_penetration_test_array)
-    pen_frac = np.mean(OLD_passed_penetration_threshold_array)
     eval_frac = np.mean(passed_eval)
     print("=" * 80)
     print(
-        # f"passed_penetration_threshold: {OLD_passed_penetration_threshold_array.sum().item()}/{batch_size} ({100*pen_frac:.2f}%),"
         f"passed_simulation: {passed_simulation_array.sum().item()}/{batch_size} ({100 * sim_frac:.2f}%),"
         f"passed_new_penetration_test: {passed_new_penetration_test_array.sum().item()}/{batch_size} ({100 * new_pen_frac:.2f}%),"
         f"passed_eval = passed_simulation * passed_new_penetration_test: {passed_eval.sum().item()}/{batch_size} ({100 * eval_frac:.2f}%)"
     )
     print("=" * 80)
 
-    # TODO: OLD_passed_penetration_threshold_array, passed_new_penetration_test_array: decide if we want to:
-    #  1. Store it separately
-    #  2. Replace it in the "passed_penetration_threshold" key
-    #  3. And it with OLD_passed_penetration_threshold_array
     evaled_grasp_config_dict = {
         **grasp_config_dict,
-        "OLD_passed_penetration_threshold": OLD_passed_penetration_threshold_array,
         "passed_new_penetration_test": passed_new_penetration_test_array,
         "passed_simulation": passed_simulation_array,
         "passed_eval": passed_eval,
-        "penetration": E_pen_array,
         "object_states_before_grasp": object_states_before_grasp_array,
     }
 
@@ -468,7 +419,8 @@ def main() -> None:
 
     sim.destroy()
 
-    # NOTE: Tried making this run in a loop over objects, but had issues with simulator
+    # NOTE: Tried making this run in a loop over all objects, but had issues with simulator GPU memory leaks
+    #       Instead, this script should be run for each object
 
 
 if __name__ == "__main__":

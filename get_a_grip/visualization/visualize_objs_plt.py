@@ -1,18 +1,20 @@
-import trimesh
-import numpy as np
 import math
 import pathlib
-from typing import Tuple
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib.tri import Triangulation
 from dataclasses import dataclass
+from typing import Tuple
+
+import matplotlib.pyplot as plt
+import numpy as np
+import trimesh
 import tyro
+from matplotlib.tri import Triangulation
+
+from get_a_grip import get_data_folder
 
 
 @dataclass
 class VisualizeObjsPltArgs:
-    meshdata_root_path: pathlib.Path = pathlib.Path("../data/rotated_meshdata_v2")
+    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
     max_num_objects_to_visualize: int = 10
 
 
