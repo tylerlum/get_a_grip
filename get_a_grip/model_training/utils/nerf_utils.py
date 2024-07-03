@@ -1,25 +1,29 @@
 """
-Utils for rendering depth / uncertainty images from the NeRF.
+Utils for working with NeRFs, including:
+* rendering depth / uncertainty images from the NeRF
+* getting densities in a grid
+* computing the centroid of the field
 """
 
-from nerf_grasping.config.camera_config import CameraConfig
-from nerf_grasping.other_utils import get_points_in_grid
-from nerfstudio.cameras.cameras import Cameras, CameraType
-from nerfstudio.cameras.rays import RayBundle
-from nerfstudio.models.base_model import Model
-from nerfstudio.fields.base_field import Field
-from nerfstudio.data.scene_box import SceneBox
-from nerfstudio.field_components.activations import trunc_exp
+from __future__ import annotations
+
 from collections import defaultdict
+from typing import Literal, Tuple
+
 import numpy as np
 import pypose as pp
 import torch
-from typing import Literal, Dict, Tuple
-from nerf_grasping.dataset.DexGraspNet_NeRF_Grasps_utils import (
-    get_ray_samples_in_region,
-)
+from nerfstudio.cameras.cameras import Cameras, CameraType
+from nerfstudio.cameras.rays import RayBundle, RaySamples
+from nerfstudio.data.scene_box import SceneBox
+from nerfstudio.field_components.activations import trunc_exp
+from nerfstudio.fields.base_field import Field
+from nerfstudio.models.base_model import Model
 
-GRASP_TO_OPENCV = pp.euler2SO3([np.pi, 0, 0]).unsqueeze(0)
+from get_a_grip.model_training.config.camera_config import CameraConfig
+from get_a_grip.model_training.utils.point_utils import get_points_in_grid
+
+GRASP_TO_OPENCV = pp.euler2SO3(torch.tensor([np.pi, 0, 0])).unsqueeze(0)
 
 
 def assert_equals(a, b):
@@ -63,7 +67,7 @@ def render(
     depth_mode: Literal["median", "expected"] = "expected",
     near_plane: float = 1e-3,
     far_plane: float = 1e-1,
-):
+) -> Tuple[torch.Tensor, torch.Tensor]:
     original_shape = cameras.shape
     cameras = cameras.reshape(-1)
     assert len(cameras.shape) == 1
@@ -92,13 +96,13 @@ def render(
     return depth, uncertainty
 
 
-def get_ray_samples(
+def get_ray_samples_from_cameras(
     cameras: Cameras,
     nerf_model: Model,
     near_plane: float = 1e-3,
     far_plane: float = 1e-1,
-):
-    assert len(cameras.shape) == 1
+) -> RaySamples:
+    assert len(cameras.shape) == 1, f"Expected cameras to be 1D, got {cameras.shape}"
 
     ray_bundle = cameras.generate_rays(
         torch.arange(

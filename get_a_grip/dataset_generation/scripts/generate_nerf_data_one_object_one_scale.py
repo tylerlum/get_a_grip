@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import tyro
 from clean_loop_timer import LoopTimer
+
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.isaac_validator import (
     IsaacValidator,

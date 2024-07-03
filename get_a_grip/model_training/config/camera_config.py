@@ -1,8 +1,9 @@
-from dataclasses import dataclass, field
-from torch import Tensor
-from typing import Optional, Literal, Tuple, List, Union
-from nerf_grasping.config.fingertip_config import UnionFingertipConfig
+from dataclasses import dataclass
+from typing import Optional
+
 import numpy as np
+
+from get_a_grip.model_training.config.fingertip_config import UnionFingertipConfig
 
 
 @dataclass
@@ -49,7 +50,7 @@ class CameraConfig:
 
         assert np.isclose(
             self.H / self.W, h_frustum_m / w_frustum_m
-        ), f"Aspect ratios don't match!"
+        ), "Aspect ratios don't match!"
 
         z_frustum_m = fingertip_config.grasp_depth_mm / 1000
 

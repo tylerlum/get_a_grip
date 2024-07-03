@@ -1,8 +1,17 @@
-from nerf_grasping.frogger_utils import frogger_to_grasp_config_dict, FroggerArgs
-from tqdm import tqdm
-import tyro
 import pathlib
 from dataclasses import dataclass
+
+import tyro
+from tqdm import tqdm
+
+from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+    parse_object_code_and_scale,
+)
+from get_a_grip.grasp_planning.utils.frogger_utils import (
+    FroggerArgs,
+    frogger_to_grasp_config_dict,
+)
+
 
 @dataclass
 class Args:
@@ -20,15 +29,21 @@ class Args:
 
 def main() -> None:
     args = tyro.cli(Args)
-    assert args.only_objects_in_this_path.exists(), f"{args.only_objects_in_this_path} does not exist"
+    assert (
+        args.only_objects_in_this_path.exists()
+    ), f"{args.only_objects_in_this_path} does not exist"
 
-    object_code_and_scale_strs = sorted([p.name for p in args.only_objects_in_this_path.iterdir()])
-    assert len(object_code_and_scale_strs) > 0, f"{args.only_objects_in_this_path} is empty"
+    object_code_and_scale_strs = sorted(
+        [p.name for p in args.only_objects_in_this_path.iterdir()]
+    )
+    assert (
+        len(object_code_and_scale_strs) > 0
+    ), f"{args.only_objects_in_this_path} is empty"
 
     for object_code_and_scale_str in tqdm(object_code_and_scale_strs, desc="Frogger"):
-        idx = object_code_and_scale_str.index("_0_")
-        object_code = object_code_and_scale_str[:idx]
-        object_scale = float(object_code_and_scale_str[idx + 1 :].replace("_", "."))
+        object_code, object_scale = parse_object_code_and_scale(
+            object_code_and_scale_str
+        )
 
         obj_filepath = args.meshdata_folder / object_code / "coacd" / "decomposed.obj"
         assert obj_filepath.exists(), f"{obj_filepath} does not exist"

@@ -1,65 +1,65 @@
 from __future__ import annotations
-import plotly.graph_objects as go
-import numpy as np
+
 import pathlib
-import pytorch_kinematics as pk
-from pytorch_kinematics.chain import Chain
+from contextlib import nullcontext
+from typing import Any, Dict, Iterable, Optional, Tuple, Union
+
+import numpy as np
+import plotly.graph_objects as go
 import pypose as pp
+import pytorch_kinematics as pk
 import torch
-
-import nerf_grasping
-from nerf_grasping import grasp_utils
-
-from typing import List, Tuple, Dict, Any, Iterable, Union, Optional
 from nerfstudio.fields.base_field import Field
-from nerfstudio.models.base_model import Model
-from nerf_grasping.classifier import (
-    Classifier,
-    DepthImageClassifier,
-    Simple_CNN_LSTM_Classifier,
+from pytorch_kinematics.chain import Chain
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+
+from get_a_grip.dataset_generation.utils.allegro_hand_info import (
+    ALLEGRO_HAND_JOINT_NAMES,
+    ALLEGRO_HAND_ROOT_HAND_FILE,
 )
-from nerf_grasping.learned_metric.DexGraspNet_batch_data import (
-    BatchDataInput,
-    DepthImageBatchDataInput,
+from get_a_grip.dataset_generation.utils.hand_model import HandModel
+from get_a_grip.dataset_generation.utils.joint_angle_targets import (
+    compute_init_joint_angles_given_grasp_orientations,
+    compute_optimized_joint_angle_targets_given_grasp_orientations,
 )
-from nerf_grasping.dataset.DexGraspNet_NeRF_Grasps_utils import (
-    transform_point,
+from get_a_grip.dataset_generation.utils.pose_conversion import (
+    hand_config_to_pose,
 )
-from nerf_grasping.nerf_utils import (
-    get_cameras,
-    render,
-    get_densities_in_grid,
-    get_density,
+from get_a_grip.grasp_planning.utils.visualize_utils import (
+    plot_nerf_densities,
+    plot_mesh,
 )
-from nerf_grasping.config.grasp_metric_config import GraspMetricConfig
-from nerf_grasping.config.fingertip_config import UnionFingertipConfig
-from nerf_grasping.config.camera_config import CameraConfig
-from nerf_grasping.config.classifier_config import ClassifierConfig
-from nerf_grasping.config.nerfdata_config import DepthImageNerfDataConfig
-from nerf_grasping.dataset.nerf_densities_global_config import (
+from get_a_grip.grasp_planning.config.grasp_metric_config import GraspMetricConfig
+from get_a_grip.model_training.config.classifier_config import ClassifierConfig
+from get_a_grip.model_training.config.fingertip_config import UnionFingertipConfig
+from get_a_grip.model_training.config.nerf_densities_global_config import (
     NERF_DENSITIES_GLOBAL_NUM_X,
     NERF_DENSITIES_GLOBAL_NUM_Y,
     NERF_DENSITIES_GLOBAL_NUM_Z,
     lb_Oy,
     ub_Oy,
 )
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
-from contextlib import nullcontext
-
-from nerf_grasping.dexgraspnet_utils.hand_model import HandModel
-from nerf_grasping.dexgraspnet_utils.hand_model_type import (
-    HandModelType,
+from get_a_grip.model_training.models.classifier import (
+    Classifier,
 )
-from nerf_grasping.dexgraspnet_utils.pose_conversion import (
-    hand_config_to_pose,
+from get_a_grip.model_training.utils.nerf_grasp_evaluator_batch_data import (
+    BatchDataInput,
 )
-
-ALLEGRO_URDF_PATH = list(
-    pathlib.Path(nerf_grasping.get_package_root()).rglob(
-        "*allegro_hand_description_right.urdf"
-    )
-)[0]
+from get_a_grip.model_training.utils.nerf_load_utils import (
+    load_nerf_field,
+)
+from get_a_grip.model_training.utils.nerf_ray_utils import (
+    get_ray_origins_finger_frame,
+    get_ray_samples,
+)
+from get_a_grip.model_training.utils.nerf_utils import (
+    get_densities_in_grid,
+    get_density,
+)
+from get_a_grip.model_training.utils.point_utils import (
+    transform_point,
+)
 
 Z_AXIS = torch.tensor([0, 0, 1], dtype=torch.float32)
 
@@ -71,7 +71,8 @@ FINGERTIP_LINK_NAMES = [
 ]
 
 
-def load_allegro(allegro_path: pathlib.Path = ALLEGRO_URDF_PATH) -> Chain:
+def load_allegro() -> Chain:
+    allegro_path = ALLEGRO_HAND_ROOT_HAND_FILE
     return pk.build_chain_from_urdf(open(allegro_path).read())
 
 
@@ -164,12 +165,9 @@ class AllegroHandConfig(torch.nn.Module):
 
         # Clamp
         joint_lower_limits, joint_upper_limits = get_joint_limits()
-        self.joint_lower_limits, self.joint_upper_limits = torch.from_numpy(
-            joint_lower_limits
-        ).float().to(self.wrist_pose.device), torch.from_numpy(
-            joint_upper_limits
-        ).float().to(
-            self.wrist_pose.device
+        self.joint_lower_limits, self.joint_upper_limits = (
+            torch.from_numpy(joint_lower_limits).float().to(self.wrist_pose.device),
+            torch.from_numpy(joint_upper_limits).float().to(self.wrist_pose.device),
         )
 
         assert self.joint_lower_limits.shape == (16,)
@@ -257,15 +255,15 @@ class AllegroHandConfig(torch.nn.Module):
             self.joint_angles.data.cpu().numpy(), separator=", "
         )
         repr_parts = [
-            f"AllegroHandConfig(",
+            "AllegroHandConfig(",
             f"  batch_size={self.batch_size},",
-            f"  wrist_pose=(",
+            "  wrist_pose=(",
             f"{wrist_pose_repr}",
             "  ),",
-            f"  joint_angles=(",
+            "  joint_angles=(",
             f"{joint_angles_repr}",
             "  ),",
-            f")",
+            ")",
         ]
         return "\n".join(repr_parts)
 
@@ -576,14 +574,14 @@ class AllegroGraspConfig(torch.nn.Module):
             self.grasp_orientations.matrix().data.cpu().numpy(), separator=", "
         )
         repr_parts = [
-            f"AllegroGraspConfig(",
+            "AllegroGraspConfig(",
             f"  batch_size={self.batch_size},",
             f"  hand_config={hand_config_repr},",
-            f"  grasp_orientations=(",
+            "  grasp_orientations=(",
             f"{grasp_orientations_repr}",
             "),",
             f"  num_fingers={self.num_fingers}",
-            f")",
+            ")",
         ]
         return "\n".join(repr_parts)
 
@@ -599,9 +597,7 @@ def hand_config_to_hand_model(
     translation = hand_config.wrist_pose.translation().detach().cpu().numpy()
     rotation = hand_config.wrist_pose.rotation().matrix().detach().cpu().numpy()
     joint_angles = hand_config.joint_angles.detach().cpu().numpy()
-    hand_model_type = HandModelType.ALLEGRO_HAND
     hand_model = HandModel(
-        hand_model_type=hand_model_type,
         device=device,
         n_surface_points=n_surface_points,
     )
@@ -618,26 +614,13 @@ def compute_joint_angle_targets(
     device: torch.device,
     dist_move_finger: Optional[float] = None,
 ) -> np.ndarray:
-    # Put messy imports of dexgraspnet copied files here
-    from nerf_grasping.dexgraspnet_utils.hand_model import HandModel
-    from nerf_grasping.dexgraspnet_utils.hand_model_type import (
-        HandModelType,
-        handmodeltype_to_joint_names,
-    )
-    from nerf_grasping.dexgraspnet_utils.pose_conversion import (
-        hand_config_to_pose,
-    )
-    from nerf_grasping.dexgraspnet_utils.joint_angle_targets import (
-        compute_optimized_joint_angle_targets_given_grasp_orientations,
-    )
-
     hand_pose = hand_config_to_pose(trans, rot, joint_angles).to(device)
-    hand_model_type = HandModelType.ALLEGRO_HAND
     grasp_orientations = grasp_orientations.to(device)
 
     # hand model
-    hand_model = HandModel(hand_model_type=hand_model_type, device=device)
+    hand_model = HandModel(device=device)
     hand_model.set_parameters(hand_pose)
+    assert hand_model.hand_pose is not None
 
     # Optimization
     (
@@ -650,7 +633,7 @@ def compute_joint_angle_targets(
         dist_move_finger=dist_move_finger,
     )
 
-    num_joints = len(handmodeltype_to_joint_names[hand_model_type])
+    num_joints = len(ALLEGRO_HAND_JOINT_NAMES)
     assert optimized_joint_angle_targets.shape == (hand_model.batch_size, num_joints)
 
     return optimized_joint_angle_targets.detach().cpu().numpy()
@@ -664,26 +647,13 @@ def compute_joint_angle_pre(
     device: torch.device,
     dist_move_finger_backwards: Optional[float] = None,
 ) -> np.ndarray:
-    # Put messy imports of dexgraspnet copied files here
-    from nerf_grasping.dexgraspnet_utils.hand_model import HandModel
-    from nerf_grasping.dexgraspnet_utils.hand_model_type import (
-        HandModelType,
-        handmodeltype_to_joint_names,
-    )
-    from nerf_grasping.dexgraspnet_utils.pose_conversion import (
-        hand_config_to_pose,
-    )
-    from nerf_grasping.dexgraspnet_utils.joint_angle_targets import (
-        compute_init_joint_angles_given_grasp_orientations,
-    )
-
     hand_pose = hand_config_to_pose(trans, rot, joint_angles).to(device)
-    hand_model_type = HandModelType.ALLEGRO_HAND
     grasp_orientations = grasp_orientations.to(device)
 
     # hand model
-    hand_model = HandModel(hand_model_type=hand_model_type, device=device)
+    hand_model = HandModel(device=device)
     hand_model.set_parameters(hand_pose)
+    assert hand_model.hand_pose is not None
 
     # Optimization
     (
@@ -696,7 +666,7 @@ def compute_joint_angle_pre(
         dist_move_finger_backwards=dist_move_finger_backwards,
     )
 
-    num_joints = len(handmodeltype_to_joint_names[hand_model_type])
+    num_joints = len(ALLEGRO_HAND_JOINT_NAMES)
     assert pre_joint_angle_targets.shape == (hand_model.batch_size, num_joints)
 
     return pre_joint_angle_targets.detach().cpu().numpy()
@@ -721,52 +691,8 @@ class GraspMetric(torch.nn.Module):
         self.classifier_model = classifier_model
         self.fingertip_config = fingertip_config
         self.X_N_Oy = X_N_Oy
-        self.ray_origins_finger_frame = grasp_utils.get_ray_origins_finger_frame(
-            fingertip_config
-        )
+        self.ray_origins_finger_frame = get_ray_origins_finger_frame(fingertip_config)
         self.return_type = return_type
-
-    def DEBUG_plot(
-        self,
-        fig,
-        densities: torch.Tensor,
-        query_points: torch.Tensor,
-        name: str,
-        opacity: float = 1.0,
-    ):
-        B = densities.shape[0]
-        assert densities.shape == (B,), f"densities.shape: {densities.shape}"
-        assert query_points.shape == (B, 3), f"query_points.shape: {query_points.shape}"
-        fig.add_trace(
-            go.Scatter3d(
-                x=query_points[:, 0].detach().cpu().numpy(),
-                y=query_points[:, 1].detach().cpu().numpy(),
-                z=query_points[:, 2].detach().cpu().numpy(),
-                mode="markers",
-                marker=dict(
-                    size=3,
-                    opacity=opacity,
-                    color=densities.detach().cpu().numpy(),
-                    colorscale="Viridis",
-                    colorbar=dict(title="Density"),
-                ),
-                name=name,
-            )
-        )
-
-    def DEBUG_plot_mesh(self, fig, mesh):
-        fig.add_trace(
-            go.Mesh3d(
-                x=mesh.vertices[:, 0],
-                y=mesh.vertices[:, 1],
-                z=mesh.vertices[:, 2],
-                i=mesh.faces[:, 0],
-                j=mesh.faces[:, 1],
-                k=mesh.faces[:, 2],
-                name="object",
-                opacity=0.5,
-            )
-        )
 
     def forward(
         self,
@@ -813,8 +739,9 @@ class GraspMetric(torch.nn.Module):
         # DEBUG PLOT
         PLOT = False
         if PLOT:
-            import trimesh
             from pathlib import Path
+
+            import trimesh
 
             if Path("/tmp/mesh_viz_object.obj").exists():
                 mesh = trimesh.load("/tmp/mesh_viz_object.obj")
@@ -833,7 +760,7 @@ class GraspMetric(torch.nn.Module):
                 fig = go.Figure()
                 N_FINGERS = 4
                 for i in range(N_FINGERS):
-                    self.DEBUG_plot(
+                    plot_nerf_densities(
                         fig=fig,
                         densities=densities[batch_idx, i].reshape(-1),
                         query_points=all_query_points[batch_idx, i].reshape(-1, 3),
@@ -847,7 +774,7 @@ class GraspMetric(torch.nn.Module):
                     query_points_global_N_flattened = query_points_global_N[
                         batch_idx
                     ].reshape(-1, 3)
-                    self.DEBUG_plot(
+                    plot_nerf_densities(
                         fig=fig,
                         densities=nerf_densities_global_flattened[
                             nerf_densities_global_flattened > 15
@@ -859,7 +786,7 @@ class GraspMetric(torch.nn.Module):
                     )
 
                 if mesh is not None:
-                    self.DEBUG_plot_mesh(fig=fig, mesh=mesh)
+                    plot_mesh(fig=fig, mesh=mesh)
 
                 wrist_trans_array = (
                     grasp_config.wrist_pose.translation().detach().cpu().numpy()
@@ -880,17 +807,8 @@ class GraspMetric(torch.nn.Module):
                 for i in range(B):
                     X_N_H_array[i] = self.X_N_Oy @ X_Oy_H_array[i]
 
-                from nerf_grasping.dexgraspnet_utils.hand_model import (
-                    HandModel,
-                    HandModelType,
-                )
-                from nerf_grasping.dexgraspnet_utils.pose_conversion import (
-                    hand_config_to_pose,
-                )
-
                 device = "cuda"
-                hand_model_type = HandModelType.ALLEGRO_HAND
-                hand_model = HandModel(hand_model_type=hand_model_type, device=device)
+                hand_model = HandModel(device=device)
 
                 # Compute pregrasp and target hand poses
                 trans_array = X_N_H_array[:, :3, 3]
@@ -922,7 +840,6 @@ class GraspMetric(torch.nn.Module):
             nerf_densities_global=(
                 nerf_densities_global if nerf_densities_global is not None else None
             ),
-            object_y_wrt_table=None,  # ? NEED TO PASS THIS IN?
         ).to(grasp_config.hand_config.wrist_pose.device)
 
         # Pass grasp transforms, densities into classifier.
@@ -951,7 +868,7 @@ class GraspMetric(torch.nn.Module):
         # self.ray_origins_finger_frame = p_Fi
         # grasp_frame_transforms = T_{Oy <- Fi}
         # X_N_Oy = T_{N <- Oy}
-        # TODO: Batch this to avoid OOM (refer to Create_DexGraspNet_NeRF_Grasps_Dataset.py)
+        # TODO: Batch this to avoid OOM (refer to create_nerf_grasp_dataset.py)
 
         # Prepare transforms
         T_Oy_Fi = grasp_config.grasp_frame_transforms
@@ -980,7 +897,7 @@ class GraspMetric(torch.nn.Module):
         T_N_Fi = T_N_Oy @ T_Oy_Fi
 
         # Generate RaySamples.
-        ray_samples = grasp_utils.get_ray_samples(
+        ray_samples = get_ray_samples(
             self.ray_origins_finger_frame,
             T_N_Fi,
             self.fingertip_config,
@@ -1011,7 +928,7 @@ class GraspMetric(torch.nn.Module):
     ) -> GraspMetric:
         assert grasp_metric_config.X_N_Oy is not None
         return cls.from_configs(
-            nerf_config=grasp_metric_config.nerf_checkpoint_path,
+            nerf_config=grasp_metric_config.nerf_config,
             classifier_config=grasp_metric_config.classifier_config,
             X_N_Oy=grasp_metric_config.X_N_Oy,
             classifier_checkpoint=grasp_metric_config.classifier_checkpoint,
@@ -1027,10 +944,6 @@ class GraspMetric(torch.nn.Module):
         classifier_checkpoint: int = -1,
         console: Optional[Console] = None,
     ) -> GraspMetric:
-        assert not isinstance(
-            classifier_config.nerfdata_config, DepthImageNerfDataConfig
-        ), f"classifier_config.nerfdata_config must not be a DepthImageNerfDataConfig, but is {classifier_config.nerfdata_config}"
-
         # Load nerf
         with (
             Progress(
@@ -1048,7 +961,7 @@ class GraspMetric(torch.nn.Module):
                 else None
             )
 
-            nerf_field = grasp_utils.load_nerf_field(nerf_config)
+            nerf_field = load_nerf_field(nerf_config)
 
             if progress is not None and task is not None:
                 progress.update(task, advance=1)
@@ -1099,9 +1012,7 @@ def load_classifier(
         ).to(device)
 
         # Load classifier weights
-        assert (
-            classifier_config.checkpoint_workspace.output_dir.exists()
-        ), f"checkpoint_workspace.output_dir does not exist at {classifier_config.checkpoint_workspace.output_dir}"
+        assert classifier_config.checkpoint_workspace.output_dir.exists(), f"checkpoint_workspace.output_dir does not exist at {classifier_config.checkpoint_workspace.output_dir}"
         print(
             f"Loading checkpoint ({classifier_config.checkpoint_workspace.output_dir})..."
         )
@@ -1112,8 +1023,8 @@ def load_classifier(
         assert (
             len(output_checkpoint_paths) > 0
         ), f"No checkpoints found in {classifier_config.checkpoint_workspace.output_checkpoint_paths}"
-        assert classifier_checkpoint < len(
-            output_checkpoint_paths
+        assert (
+            classifier_checkpoint < len(output_checkpoint_paths)
         ), f"Requested checkpoint {classifier_checkpoint} does not exist in {classifier_config.checkpoint_workspace.output_checkpoint_paths}"
         checkpoint_path = output_checkpoint_paths[classifier_checkpoint]
 
@@ -1124,224 +1035,6 @@ def load_classifier(
         if progress is not None and task is not None:
             progress.update(task, advance=1)
 
-    if not isinstance(classifier, Simple_CNN_LSTM_Classifier):
-        classifier.eval()  # weird LSTM thing where cudnn hasn't implemented the backwards pass in eval (??)
-
-    return classifier
-
-
-class DepthImageGraspMetric(torch.nn.Module):
-    """
-    Wrapper for NeRF + grasp classifier to evaluate
-    a particular AllegroGraspConfig.
-    """
-
-    def __init__(
-        self,
-        nerf_model: Model,
-        classifier_model: DepthImageClassifier,
-        fingertip_config: UnionFingertipConfig,
-        camera_config: CameraConfig,
-        X_N_Oy: np.ndarray,
-        return_type: str = "failure_probability",
-    ) -> None:
-        super().__init__()
-        self.nerf_model = nerf_model
-        self.classifier_model = classifier_model
-        self.fingertip_config = fingertip_config
-        self.camera_config = camera_config
-        self.X_N_Oy = X_N_Oy
-        self.return_type = return_type
-
-    def forward(
-        self,
-        grasp_config: AllegroGraspConfig,
-    ) -> torch.Tensor:
-        # TODO: Use X_N_Oy to transform grasp_frame_transforms to nerf frame.
-        # TODO: Batch this to avoid OOM (refer to Create_DexGraspNet_NeRF_Grasps_Dataset.py)
-        if not np.allclose(self.X_N_Oy, np.eye(4)):
-            raise NotImplementedError(
-                "Transforming grasp_frame_transforms to nerf frame is not implemented yet"
-            )
-
-        cameras = get_cameras(
-            grasp_config.grasp_frame_transforms, self.camera_config
-        ).to(self.nerf_model.device)
-        batch_size = cameras.shape[0]
-        assert cameras.shape == (batch_size, grasp_config.num_fingers)
-
-        depth, uncertainty = render(cameras, self.nerf_model, "median", far_plane=0.15)
-        assert (
-            depth.shape
-            == uncertainty.shape
-            == (
-                self.camera_config.H,
-                self.camera_config.W,
-                batch_size,
-                grasp_config.num_fingers,
-            )
-        )
-
-        depth = depth.permute(2, 3, 0, 1)
-        uncertainty = uncertainty.permute(2, 3, 0, 1)
-
-        depth_uncertainty_images = torch.stack(
-            [depth, uncertainty],
-            dim=-3,
-        )
-        assert depth_uncertainty_images.shape == (
-            batch_size,
-            grasp_config.num_fingers,
-            2,
-            self.camera_config.H,
-            self.camera_config.W,
-        )
-
-        batch_data_input = DepthImageBatchDataInput(
-            depth_uncertainty_images=depth_uncertainty_images,
-            grasp_transforms=grasp_config.grasp_frame_transforms,
-            fingertip_config=self.fingertip_config,
-            grasp_configs=grasp_config.as_tensor(),
-        ).to(self.nerf_model.device)
-
-        # Pass grasp transforms, densities into classifier.
-        if self.return_type == "failure_probability":
-            return self.classifier_model.get_failure_probability(batch_data_input)
-        elif self.return_type == "failure_logits":
-            return self.classifier_model(batch_data_input)[:, -1]
-        else:
-            raise ValueError(f"return_type {self.return_type} not recognized")
-
-    def get_failure_probability(
-        self,
-        grasp_config: AllegroGraspConfig,
-    ) -> torch.Tensor:
-        return self(grasp_config)
-
-    @classmethod
-    def from_config(
-        cls,
-        grasp_metric_config: GraspMetricConfig,
-        console: Optional[Console] = None,
-    ) -> DepthImageGraspMetric:
-        assert grasp_metric_config.X_N_Oy is not None
-        return cls.from_configs(
-            nerf_config=grasp_metric_config.nerf_checkpoint_path,
-            classifier_config=grasp_metric_config.classifier_config,
-            X_N_Oy=grasp_metric_config.X_N_Oy,
-            classifier_checkpoint=grasp_metric_config.classifier_checkpoint,
-            console=console,
-        )
-
-    @classmethod
-    def from_configs(
-        cls,
-        nerf_config: pathlib.Path,
-        classifier_config: ClassifierConfig,
-        X_N_Oy: np.ndarray,
-        classifier_checkpoint: int = -1,
-        console: Optional[Console] = None,
-    ) -> DepthImageGraspMetric:
-        assert isinstance(
-            classifier_config.nerfdata_config, DepthImageNerfDataConfig
-        ), f"classifier_config.nerfdata_config must be a DepthImageNerfDataConfig, but is {classifier_config.nerfdata_config}"
-
-        # Load nerf
-        with (
-            Progress(
-                SpinnerColumn(),
-                TextColumn("[bold blue]{task.description} "),
-                TimeElapsedColumn(),
-                console=console,
-            )
-            if console is not None
-            else nullcontext()
-        ) as progress:
-            task = (
-                progress.add_task("Loading NeRF", total=1)
-                if progress is not None
-                else None
-            )
-
-            nerf_model = grasp_utils.load_nerf_model(nerf_config)
-
-            if progress is not None and task is not None:
-                progress.update(task, advance=1)
-
-        # Load classifier
-        classifier: DepthImageClassifier = load_depth_image_classifier(
-            classifier_config=classifier_config,
-            classifier_checkpoint=classifier_checkpoint,
-            console=console,
-        )
-
-        return cls(
-            nerf_model,
-            classifier,
-            classifier_config.nerfdata_config.fingertip_config,
-            classifier_config.nerfdata_config.fingertip_camera_config,
-            X_N_Oy,
-        )
-
-
-def load_depth_image_classifier(
-    classifier_config: ClassifierConfig,
-    classifier_checkpoint: int = -1,
-    console: Optional[Console] = None,
-) -> DepthImageClassifier:
-    # Load classifier
-    with (
-        Progress(
-            SpinnerColumn(),
-            TextColumn("[bold blue]{task.description} "),
-            console=console,
-        )
-        if console is not None
-        else nullcontext()
-    ) as progress:
-        task = (
-            progress.add_task("Loading classifier", total=1)
-            if progress is not None
-            else None
-        )
-
-        # (should device thing be here? probably since saved on gpu)
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        classifier: DepthImageClassifier = (
-            classifier_config.model_config.get_classifier_from_camera_config(
-                camera_config=classifier_config.nerfdata_config.fingertip_camera_config,
-                n_tasks=classifier_config.task_type.n_tasks,
-            ).to(device)
-        )
-
-        # Load classifier weights
-        assert (
-            classifier_config.checkpoint_workspace.output_dir.exists()
-        ), f"checkpoint_workspace.output_dir does not exist at {classifier_config.checkpoint_workspace.output_dir}"
-        print(
-            f"Loading checkpoint ({classifier_config.checkpoint_workspace.output_dir})..."
-        )
-
-        output_checkpoint_paths = (
-            classifier_config.checkpoint_workspace.output_checkpoint_paths
-        )
-        assert (
-            len(output_checkpoint_paths) > 0
-        ), f"No checkpoints found in {classifier_config.checkpoint_workspace.output_checkpoint_paths}"
-        assert classifier_checkpoint < len(
-            output_checkpoint_paths
-        ), f"Requested checkpoint {classifier_checkpoint} does not exist in {classifier_config.checkpoint_workspace.output_checkpoint_paths}"
-        checkpoint_path = output_checkpoint_paths[classifier_checkpoint]
-
-        checkpoint = torch.load(checkpoint_path)
-        classifier.load_state_dict(checkpoint["classifier"])
-        classifier.load_state_dict(torch.load(checkpoint_path)["classifier"])
-
-        if progress is not None and task is not None:
-            progress.update(task, advance=1)
-
-    if not isinstance(classifier, Simple_CNN_LSTM_Classifier):
-        classifier.eval()  # weird LSTM thing where cudnn hasn't implemented the backwards pass in eval (??)
     return classifier
 
 
@@ -1350,6 +1043,7 @@ def predict_in_collision_with_object(
     hand_surface_points_Oy: torch.Tensor,
     max_density_threshold: float = 8.5,
 ) -> torch.Tensor:
+    # TODO: Move elsewhere
     surface_points = hand_surface_points_Oy
     assert surface_points.shape[-1] == 3
     num_grasps, num_points_per_grasp, _ = surface_points.shape
@@ -1376,6 +1070,7 @@ def predict_in_collision_with_table(
     hand_surface_points_Oy: torch.Tensor,
     buffer: float = 0.02,
 ) -> np.ndarray:
+    # TODO: Move elsewhere
     assert hand_surface_points_Oy.shape[-1] == 3
     num_grasps, num_points_per_grasp, _ = hand_surface_points_Oy.shape
 
@@ -1392,14 +1087,13 @@ def get_hand_surface_points_Oy(
     grasp_config: AllegroGraspConfig,
     n_surface_points: int = 1000,
 ) -> torch.Tensor:
+    # TODO: Move elsewhere
     device = grasp_config.hand_config.wrist_pose.device
 
     translation = grasp_config.wrist_pose.translation().detach().cpu().numpy()
     rotation = grasp_config.wrist_pose.rotation().matrix().detach().cpu().numpy()
     joint_angles = grasp_config.joint_angles.detach().cpu().numpy()
-    hand_model_type = HandModelType.ALLEGRO_HAND
     hand_model = HandModel(
-        hand_model_type=hand_model_type,
         device=device,
         n_surface_points=n_surface_points,
     )
@@ -1411,19 +1105,12 @@ def get_hand_surface_points_Oy(
 
 
 def get_joint_limits() -> Tuple[np.ndarray, np.ndarray]:
+    # TODO: Move elsewhere
     """
     Get the joint limits for the hand model.
     """
-    from nerf_grasping.dexgraspnet_utils.hand_model import HandModel
-    from nerf_grasping.dexgraspnet_utils.hand_model_type import (
-        HandModelType,
-    )
-
     device = "cuda"
-    hand_model_type = HandModelType.ALLEGRO_HAND
-    hand_model = HandModel(
-        hand_model_type=hand_model_type, device=device, n_surface_points=1000
-    )
+    hand_model = HandModel(device=device, n_surface_points=1000)
     joint_lower_limits, joint_upper_limits = (
         hand_model.joints_lower,
         hand_model.joints_upper,
@@ -1437,6 +1124,7 @@ def get_joint_limits() -> Tuple[np.ndarray, np.ndarray]:
 
 
 def is_in_limits(joint_angles: np.ndarray) -> np.ndarray:
+    # TODO: Move elsewhere
     N = joint_angles.shape[0]
     assert joint_angles.shape == (N, 16)
 
@@ -1456,6 +1144,7 @@ def is_in_limits(joint_angles: np.ndarray) -> np.ndarray:
 
 
 def clamp_in_limits(joint_angles: np.ndarray) -> np.ndarray:
+    # TODO: Move elsewhere
     N = joint_angles.shape[0]
     assert joint_angles.shape == (N, 16)
 
@@ -1572,7 +1261,7 @@ def get_sorted_grasps_from_dict(
     )
     B = grasp_configs.batch_size
 
-    # Look for loss or passed_eval
+    # Look for loss or y_PGS
     if "loss" not in optimized_grasp_config_dict:
         if error_if_no_loss:
             raise ValueError(
@@ -1582,17 +1271,17 @@ def get_sorted_grasps_from_dict(
         print(
             f"loss not found in grasp config dict keys: {optimized_grasp_config_dict.keys()}"
         )
-        print("Looking for passed_eval...")
+        print("Looking for y_PGS...")
         print("=" * 80 + "\n")
-        if "passed_eval" in optimized_grasp_config_dict:
+        if "y_PGS" in optimized_grasp_config_dict:
             print("~" * 80)
-            print("passed_eval found! Using 1 - passed_eval as loss.")
+            print("y_PGS found! Using 1 - y_PGS as loss.")
             print("~" * 80 + "\n")
-            failed_eval = 1 - optimized_grasp_config_dict["passed_eval"]
+            failed_eval = 1 - optimized_grasp_config_dict["y_PGS"]
             losses = failed_eval
         else:
             print("~" * 80)
-            print("passed_eval not found! Using dummy losses.")
+            print("y_PGS not found! Using dummy losses.")
             print("~" * 80 + "\n")
             dummy_losses = np.arange(B)
             losses = dummy_losses

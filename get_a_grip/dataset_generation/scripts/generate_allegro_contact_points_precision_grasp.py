@@ -2,6 +2,7 @@ import json
 
 import numpy as np
 import plotly.graph_objects as go
+
 from get_a_grip import get_assets_folder
 
 # Number of points

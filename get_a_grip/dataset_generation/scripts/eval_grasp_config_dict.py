@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import torch
 import tyro
+from tqdm import tqdm
+
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.allegro_hand_info import (
     ALLEGRO_HAND_JOINT_NAMES,
@@ -28,7 +30,6 @@ from get_a_grip.dataset_generation.utils.pose_conversion import (
 )
 from get_a_grip.dataset_generation.utils.seed import set_seed
 from get_a_grip.dataset_generation.utils.torch_quat_utils import matrix_to_quat_wxyz
-from tqdm import tqdm
 
 
 @dataclass
@@ -51,13 +52,9 @@ class EvalGraspConfigDictArgs:
 
     # if debug_index is received, then the debug mode is on
     debug_index: Optional[int] = None
-    start_with_step_mode: bool = (
-        False  # with use_gui, starts sim paused in step mode, press S to step 1 sim step, press space to toggle pause
-    )
+    start_with_step_mode: bool = False  # with use_gui, starts sim paused in step mode, press S to step 1 sim step, press space to toggle pause
     use_gui: bool = False
-    use_cpu: bool = (
-        False  # GPU is faster. NOTE: there can be discrepancies between using GPU vs CPU, likely different slightly physics
-    )
+    use_cpu: bool = False  # GPU is faster. NOTE: there can be discrepancies between using GPU vs CPU, likely different slightly physics
     record_indices: List[int] = field(default_factory=list)
 
 
@@ -190,21 +187,15 @@ def main() -> None:
             record=index in args.record_indices,
         )
         (
-            passed_simulation,
-            passed_penetration_object_test,
-            passed_penetration_table_test,
+            y_pick,
+            y_coll_object,
+            y_coll_table,
             object_states_before_grasp,
         ) = sim.run_sim()
         sim.reset_simulator()
-        print(
-            f"passed_simulation = {passed_simulation} ({np.mean(passed_simulation) * 100:.2f}%)"
-        )
-        print(
-            f"passed_penetration_object_test = {passed_penetration_object_test} ({np.mean(passed_penetration_object_test) * 100:.2f}%)"
-        )
-        print(
-            f"passed_penetration_table_test = {passed_penetration_table_test} ({np.mean(passed_penetration_table_test) * 100:.2f}%)"
-        )
+        print(f"y_pick = {y_pick} ({np.mean(y_pick) * 100:.2f}%)")
+        print(f"y_coll_object = {y_coll_object} ({np.mean(y_coll_object) * 100:.2f}%)")
+        print(f"y_coll_table = {y_coll_table} ({np.mean(y_coll_table) * 100:.2f}%)")
         print(f"object_states_before_grasp = {object_states_before_grasp}")
         print("Ending...")
         return
@@ -229,9 +220,9 @@ def main() -> None:
     assert init_joint_angles.shape == (batch_size, 16)
 
     # Run for loop over minibatches of grasps.
-    passed_simulation_array = []
-    passed_penetration_object_test_array = []
-    passed_penetration_table_test_array = []
+    y_pick_array = []
+    y_coll_object_array = []
+    y_coll_table_array = []
     object_states_before_grasp_array = []
     max_grasps_per_batch = (
         args.max_grasps_per_batch
@@ -273,81 +264,57 @@ def main() -> None:
                     )
 
         (
-            passed_simulation,
-            passed_penetration_object_test,
-            passed_penetration_table_test,
+            y_pick,
+            y_coll_object,
+            y_coll_table,
             object_states_before_grasp,
         ) = sim.run_sim()
-        passed_simulation_array.extend(passed_simulation)
-        passed_penetration_object_test_array.extend(passed_penetration_object_test)
-        passed_penetration_table_test_array.extend(passed_penetration_table_test)
+        y_pick_array.extend(y_pick)
+        y_coll_object_array.extend(y_coll_object)
+        y_coll_table_array.extend(y_coll_table)
         object_states_before_grasp_array.append(
             object_states_before_grasp.reshape(-1, 13)
         )
         sim.reset_simulator()
         pbar.set_description(
-            f"evaling batches of grasps: mean_success = {np.mean(passed_simulation_array)}"
+            f"evaling batches of grasps: mean_success = {np.mean(y_pick_array)}"
         )
 
         hand_model.set_parameters(hand_pose[start_index:end_index])
 
     # Aggregate results
-    passed_simulation_array = np.array(passed_simulation_array)
-    passed_penetration_object_test_array = np.array(
-        passed_penetration_object_test_array
-    )
-    passed_penetration_table_test_array = np.array(passed_penetration_table_test_array)
+    y_pick_array = np.array(y_pick_array)
+    y_coll_object_array = np.array(y_coll_object_array)
+    y_coll_table_array = np.array(y_coll_table_array)
     object_states_before_grasp_array = np.concatenate(
         object_states_before_grasp_array, axis=0
     )
 
     if N_NOISY is not None:
-        passed_simulation_array = passed_simulation_array.reshape(
-            batch_size, N_NOISY + 1
-        )
-        _passed_simulation_without_noise = passed_simulation_array[:, 0]
-        passed_simulation_with_noise = passed_simulation_array[:, 1:]
+        y_pick_array = y_pick_array.reshape(batch_size, N_NOISY + 1)
+        _y_pick_without_noise = y_pick_array[:, 0]
+        y_pick_with_noise = y_pick_array[:, 1:]
         # Use mean of all noise samples
-        mean_passed_simulation_with_noise = passed_simulation_with_noise.mean(axis=1)
-        passed_simulation_array = mean_passed_simulation_with_noise
+        mean_y_pick_with_noise = y_pick_with_noise.mean(axis=1)
+        y_pick_array = mean_y_pick_with_noise
 
-        passed_penetration_object_test_array = (
-            passed_penetration_object_test_array.reshape(batch_size, N_NOISY + 1)
-        )
-        _passed_penetration_object_test_without_noise = (
-            passed_penetration_object_test_array[:, 0]
-        )
-        passed_penetration_object_test_with_noise = (
-            passed_penetration_object_test_array[:, 1:]
-        )
+        y_coll_object_array = y_coll_object_array.reshape(batch_size, N_NOISY + 1)
+        _y_coll_object_without_noise = y_coll_object_array[:, 0]
+        y_coll_object_with_noise = y_coll_object_array[:, 1:]
         # Use mean of all noise samples
-        mean_passed_penetration_object_test_with_noise = (
-            passed_penetration_object_test_with_noise.mean(axis=1)
-        )
-        passed_penetration_object_test_array = (
-            mean_passed_penetration_object_test_with_noise
-        )
+        mean_y_coll_object_with_noise = y_coll_object_with_noise.mean(axis=1)
+        y_coll_object_array = mean_y_coll_object_with_noise
 
-        passed_penetration_table_test_array = (
-            passed_penetration_table_test_array.reshape(batch_size, N_NOISY + 1)
-        )
-        _passed_penetration_table_test_without_noise = (
-            passed_penetration_table_test_array[:, 0]
-        )
-        passed_penetration_table_test_with_noise = passed_penetration_table_test_array[
-            :, 1:
-        ]
+        y_coll_table_array = y_coll_table_array.reshape(batch_size, N_NOISY + 1)
+        _y_coll_table_without_noise = y_coll_table_array[:, 0]
+        y_coll_table_with_noise = y_coll_table_array[:, 1:]
         # Use mean of all noise samples
-        mean_passed_penetration_table_test_with_noise = (
-            passed_penetration_table_test_with_noise.mean(axis=1)
-        )
-        passed_penetration_table_test_array = (
-            mean_passed_penetration_table_test_with_noise
-        )
+        mean_y_coll_table_with_noise = y_coll_table_with_noise.mean(axis=1)
+        y_coll_table_array = mean_y_coll_table_with_noise
 
-    assert passed_simulation_array.shape == (batch_size,)
-    assert passed_penetration_object_test_array.shape == (batch_size,)
-    assert passed_penetration_table_test_array.shape == (batch_size,)
+    assert y_pick_array.shape == (batch_size,)
+    assert y_coll_object_array.shape == (batch_size,)
+    assert y_coll_table_array.shape == (batch_size,)
 
     object_states_before_grasp_array = object_states_before_grasp_array.reshape(
         batch_size,
@@ -355,57 +322,43 @@ def main() -> None:
         13,
     )
 
-    passed_new_penetration_test_array = (
-        passed_penetration_object_test_array * passed_penetration_table_test_array
-    )
+    y_coll_array = y_coll_object_array * y_coll_table_array
 
-    passed_eval = passed_simulation_array * passed_new_penetration_test_array
+    y_PGS = y_pick_array * y_coll_array
 
     DEBUG = True
     if DEBUG:
+        print(f"y_pick_array = {y_pick_array} ({y_pick_array.mean() * 100:.2f}%)")
+        print(f"y_pick_array_idxs = {np.where(y_pick_array > 0.5)[0]}")
         print(
-            f"passed_simulation_array = {passed_simulation_array} ({passed_simulation_array.mean() * 100:.2f}%)"
+            f"y_coll_object_array = {y_coll_object_array} ({y_coll_object_array.mean() * 100:.2f}%)"
         )
+        print(f"y_coll_object_array_idxs = {np.where(y_coll_object_array > 0.5)[0]}")
         print(
-            f"passed_simulation_array_idxs = {np.where(passed_simulation_array > 0.5)[0]}"
+            f"y_coll_table_array = {y_coll_table_array} ({y_coll_table_array.mean() * 100:.2f}%)"
         )
-        print(
-            f"passed_penetration_object_test_array = {passed_penetration_object_test_array} ({passed_penetration_object_test_array.mean() * 100:.2f}%)"
-        )
-        print(
-            f"passed_penetration_object_test_array_idxs = {np.where(passed_penetration_object_test_array > 0.5)[0]}"
-        )
-        print(
-            f"passed_penetration_table_test_array = {passed_penetration_table_test_array} ({passed_penetration_table_test_array.mean() * 100:.2f}%)"
-        )
-        print(
-            f"passed_penetration_table_test_array_idxs = {np.where(passed_penetration_table_test_array > 0.5)[0]}"
-        )
-        print(
-            f"passed_new_penetration_test_array = {passed_new_penetration_test_array} ({passed_new_penetration_test_array.mean() * 100:.2f}%)"
-        )
-        print(
-            f"passed_new_penetration_test_array_idxs = {np.where(passed_new_penetration_test_array > 0.5)[0]}"
-        )
-        print(f"passed_eval = {passed_eval}")
-        print(f"passed_eval_idxs = {np.where(passed_eval > 0.5)[0]}")
+        print(f"y_coll_table_array_idxs = {np.where(y_coll_table_array > 0.5)[0]}")
+        print(f"y_coll_array = {y_coll_array} ({y_coll_array.mean() * 100:.2f}%)")
+        print(f"y_coll_array_idxs = {np.where(y_coll_array > 0.5)[0]}")
+        print(f"y_PGS = {y_PGS}")
+        print(f"y_PGS_idxs = {np.where(y_PGS > 0.5)[0]}")
 
-    sim_frac = np.mean(passed_simulation_array)
-    new_pen_frac = np.mean(passed_new_penetration_test_array)
-    eval_frac = np.mean(passed_eval)
+    sim_frac = np.mean(y_pick_array)
+    new_pen_frac = np.mean(y_coll_array)
+    eval_frac = np.mean(y_PGS)
     print("=" * 80)
     print(
-        f"passed_simulation: {passed_simulation_array.sum().item()}/{batch_size} ({100 * sim_frac:.2f}%),"
-        f"passed_new_penetration_test: {passed_new_penetration_test_array.sum().item()}/{batch_size} ({100 * new_pen_frac:.2f}%),"
-        f"passed_eval = passed_simulation * passed_new_penetration_test: {passed_eval.sum().item()}/{batch_size} ({100 * eval_frac:.2f}%)"
+        f"y_pick: {y_pick_array.sum().item()}/{batch_size} ({100 * sim_frac:.2f}%),"
+        f"y_coll: {y_coll_array.sum().item()}/{batch_size} ({100 * new_pen_frac:.2f}%),"
+        f"y_PGS = y_pick * y_coll: {y_PGS.sum().item()}/{batch_size} ({100 * eval_frac:.2f}%)"
     )
     print("=" * 80)
 
     evaled_grasp_config_dict = {
         **grasp_config_dict,
-        "passed_new_penetration_test": passed_new_penetration_test_array,
-        "passed_simulation": passed_simulation_array,
-        "passed_eval": passed_eval,
+        "y_coll": y_coll_array,
+        "y_pick": y_pick_array,
+        "y_PGS": y_PGS,
         "object_states_before_grasp": object_states_before_grasp_array,
     }
 

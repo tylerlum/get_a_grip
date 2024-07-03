@@ -1,304 +1,61 @@
 from __future__ import annotations
-import trimesh
-from typing import List, Tuple
-from nerf_grasping.ablation_utils import (
-    nerf_to_bps,
-    visualize_point_cloud_and_bps_and_grasp,
-)
-from nerf_grasping.dexdiffuser.diffusion import Diffusion
-from nerf_grasping.dexdiffuser.diffusion_config import Config, TrainingConfig
-from tqdm import tqdm
-from nerf_grasping.dexdiffuser.dex_evaluator import DexEvaluator
-import nerf_grasping
+
 import math
+import pathlib
+import time
+from dataclasses import dataclass
+from typing import Literal, Optional
+
+import numpy as np
 import pypose as pp
-from collections import defaultdict
-from nerf_grasping.optimizer import (
-    sample_random_rotate_transforms_only_around_y,
+import torch
+import trimesh
+import tyro
+from nerfstudio.pipelines.base_pipeline import Pipeline
+
+from get_a_grip.dataset_generation.utils.joint_angle_targets import (
+    compute_fingertip_dirs,
 )
-from nerf_grasping.optimizer_utils import (
+from get_a_grip.grasp_planning.config.grasp_metric_config import GraspMetricConfig
+from get_a_grip.grasp_planning.config.optimization_config import OptimizationConfig
+from get_a_grip.grasp_planning.config.optimizer_config import (
+    CEMOptimizerConfig,
+    RandomSamplingConfig,
+    SGDOptimizerConfig,
+)
+from get_a_grip.grasp_planning.scripts import optimizer as gg_optimizer
+from get_a_grip.grasp_planning.utils import (
+    ablation_utils,
+    train_nerf_return_trainer,
+)
+from get_a_grip.grasp_planning.nerf_conversions.nerf_to_bps import (
+    nerf_to_bps,
+)
+from get_a_grip.grasp_planning.utils.visualize_utils import (
+    plot_point_cloud_and_bps_and_mesh_and_grasp,
+)
+from get_a_grip.grasp_planning.utils.optimizer_utils import (
     AllegroGraspConfig,
     AllegroHandConfig,
     GraspMetric,
-    DepthImageGraspMetric,
-    predict_in_collision_with_object,
-    predict_in_collision_with_table,
-    get_hand_surface_points_Oy,
-    get_joint_limits,
     hand_config_to_hand_model,
-)
-from dataclasses import asdict
-from nerf_grasping.config.optimization_config import OptimizationConfig
-import pathlib
-import torch
-from nerf_grasping.classifier import Classifier, Simple_CNN_LSTM_Classifier
-from nerf_grasping.config.classifier_config import ClassifierConfig
-from nerf_grasping.config.nerfdata_config import DepthImageNerfDataConfig
-from nerf_grasping.config.optimizer_config import (
-    SGDOptimizerConfig,
-    CEMOptimizerConfig,
-    RandomSamplingConfig,
-)
-from typing import Tuple, Union, Dict
-import nerf_grasping
-from functools import partial
-import numpy as np
-import tyro
-import wandb
-
-from rich.console import Console
-from rich.table import Table
-
-from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
-from contextlib import nullcontext
-import plotly.graph_objects as go
-import numpy as np
-import pathlib
-import pytorch_kinematics as pk
-from pytorch_kinematics.chain import Chain
-import pypose as pp
-import torch
-
-import nerf_grasping
-from nerf_grasping import grasp_utils
-
-from typing import List, Tuple, Dict, Any, Iterable, Union, Optional
-from nerfstudio.fields.base_field import Field
-from nerfstudio.models.base_model import Model
-from nerf_grasping.classifier import (
-    Classifier,
-    DepthImageClassifier,
-    Simple_CNN_LSTM_Classifier,
-)
-from nerf_grasping.learned_metric.DexGraspNet_batch_data import (
-    BatchDataInput,
-    DepthImageBatchDataInput,
-)
-from nerf_grasping.dataset.DexGraspNet_NeRF_Grasps_utils import (
-    transform_point,
-    transform_points,
-)
-from nerf_grasping.nerf_utils import (
-    get_cameras,
-    render,
-    get_densities_in_grid,
-    get_density,
-)
-from nerf_grasping.config.grasp_metric_config import GraspMetricConfig
-from nerf_grasping.config.fingertip_config import UnionFingertipConfig
-from nerf_grasping.config.camera_config import CameraConfig
-from nerf_grasping.config.classifier_config import ClassifierConfig
-from nerf_grasping.config.nerfdata_config import DepthImageNerfDataConfig
-from nerf_grasping.dataset.nerf_densities_global_config import (
-    NERF_DENSITIES_GLOBAL_NUM_X,
-    NERF_DENSITIES_GLOBAL_NUM_Y,
-    NERF_DENSITIES_GLOBAL_NUM_Z,
-    lb_Oy,
-    ub_Oy,
-)
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
-from contextlib import nullcontext
-from nerfstudio.pipelines.base_pipeline import Pipeline
-from nerf_grasping.dexgraspnet_utils.joint_angle_targets import (
-    compute_fingertip_dirs,
-)
-
-import open3d as o3d
-
-import time
-import transforms3d
-from typing import Optional, Tuple, List, Literal
-from nerfstudio.models.base_model import Model
-from nerf_grasping.grasp_utils import load_nerf_pipeline
-from nerf_grasping import optimizer as gg_optimizer
-from nerf_grasping.optimizer_utils import (
-    get_sorted_grasps_from_dict,
-    GraspMetric,
-    DepthImageGraspMetric,
     load_classifier,
-    load_depth_image_classifier,
-    is_in_limits,
-    clamp_in_limits,
 )
-from nerf_grasping.config.nerfdata_config import DepthImageNerfDataConfig
-from nerf_grasping.config.optimization_config import OptimizationConfig
-from nerf_grasping.config.optimizer_config import (
-    SGDOptimizerConfig,
-    CEMOptimizerConfig,
-    RandomSamplingConfig,
+from get_a_grip.model_training.config.classifier_config import ClassifierConfig
+from get_a_grip.model_training.config.diffusion_config import (
+    DiffusionConfig,
+    TrainingConfig,
 )
-from nerf_grasping.config.grasp_metric_config import GraspMetricConfig
-from nerf_grasping.nerfstudio_train import train_nerfs_return_trainer
-from nerf_grasping.baselines.nerf_to_mesh import nerf_to_mesh
-from nerf_grasping.nerf_utils import (
+from get_a_grip.model_training.utils.diffusion import Diffusion
+from get_a_grip.model_training.utils.nerf_load_utils import load_nerf_pipeline
+from get_a_grip.model_training.utils.nerf_utils import (
     compute_centroid_from_nerf,
 )
-from nerf_grasping.config.classifier_config import ClassifierConfig
-import trimesh
-import pathlib
-import tyro
-import numpy as np
-from dataclasses import dataclass
-import plotly.graph_objects as go
-from datetime import datetime
 
-from nerf_grasping.curobo_fr3_algr_zed2i.trajopt_batch import (
-    prepare_trajopt_batch,
-    solve_prepared_trajopt_batch,
-    get_trajectories_from_result,
-    compute_over_limit_factors,
+from get_a_grip.grasp_planning.utils.grasp_utils import (
+    rot6d_to_matrix,
+    compute_grasp_orientations,
 )
-from nerf_grasping.curobo_fr3_algr_zed2i.trajopt_fr3_algr_zed2i import (
-    # solve_trajopt,
-    DEFAULT_Q_FR3,
-    DEFAULT_Q_ALGR,
-)
-from nerf_grasping.curobo_fr3_algr_zed2i.fr3_algr_zed2i_world import (
-    get_world_cfg,
-)
-from curobo.types.robot import RobotConfig
-from curobo.wrap.reacher.ik_solver import IKSolver
-from curobo.wrap.reacher.motion_gen import (
-    MotionGen,
-    MotionGenConfig,
-)
-
-import sys
-
-
-def normalize_with_warning(v: np.ndarray, atol: float = 1e-6) -> np.ndarray:
-    B = v.shape[0]
-    assert v.shape == (B, 3), f"Expected shape ({B}, 3), got {v.shape}"
-    norm = np.linalg.norm(v, axis=1, keepdims=True)
-    if np.any(norm < atol):
-        print("^" * 80)
-        print(
-            f"Warning: Found {np.sum(norm < atol)} vectors with norm less than {atol}"
-        )
-        print("^" * 80)
-    return v / (norm + atol)
-
-
-def rot6d_to_matrix(rot6d: np.ndarray, check: bool = True) -> np.ndarray:
-    B = rot6d.shape[0]
-    assert rot6d.shape == (B, 6), f"Expected shape ({B}, 6), got {rot6d.shape}"
-
-    # Step 1: Reshape to (B, 3, 2)
-    rot3x2 = rot6d.reshape(B, 3, 2)
-
-    # Step 2: Normalize the first column
-    col1 = rot3x2[:, :, 0]
-    col1_normalized = normalize_with_warning(col1)
-
-    # Step 3: Orthogonalize the second column with respect to the first column
-    col2 = rot3x2[:, :, 1]
-    dot_product = np.sum(col1_normalized * col2, axis=1, keepdims=True)
-    col2_orthogonal = col2 - dot_product * col1_normalized
-
-    # Step 4: Normalize the second column
-    col2_normalized = normalize_with_warning(col2_orthogonal)
-
-    # Step 5: Compute the cross product to obtain the third column
-    col3 = np.cross(col1_normalized, col2_normalized)
-
-    # Combine the columns to form the rotation matrix
-    rotation_matrices = np.stack((col1_normalized, col2_normalized, col3), axis=-1)
-
-    # Step 6: Check orthogonality and determinant
-    if check:
-        for i in range(B):
-            mat = rotation_matrices[i]
-            assert np.allclose(
-                np.dot(mat.T, mat), np.eye(3), atol=1e-3
-            ), f"Matrix {i} is not orthogonal, got {np.dot(mat.T, mat)}"
-            assert np.allclose(
-                np.linalg.det(mat), 1.0, atol=1e-3
-            ), f"Matrix {i} does not have determinant 1, got {np.linalg.det(mat)}"
-
-    assert rotation_matrices.shape == (
-        B,
-        3,
-        3,
-    ), f"Expected shape ({B}, 3, 3), got {rotation_matrices.shape}"
-    return rotation_matrices
-
-
-def compute_grasp_orientations(
-    grasp_dirs: torch.Tensor,
-    wrist_pose: pp.LieTensor,
-    joint_angles: torch.Tensor,
-) -> pp.LieTensor:
-    B = grasp_dirs.shape[0]
-    N_FINGERS = 4
-    assert grasp_dirs.shape == (
-        B,
-        N_FINGERS,
-        3,
-    ), f"Expected shape ({B}, {N_FINGERS}, 3), got {grasp_dirs.shape}"
-    assert wrist_pose.lshape == (B,), f"Expected shape ({B},), got {wrist_pose.lshape}"
-
-    # Normalize
-    z_dirs = grasp_dirs
-    z_dirs = z_dirs / z_dirs.norm(dim=-1, keepdim=True)
-
-    # Get hand model
-    hand_config = AllegroHandConfig.from_values(
-        wrist_pose=wrist_pose,
-        joint_angles=joint_angles,
-    )
-    hand_model = hand_config_to_hand_model(
-        hand_config=hand_config,
-    )
-
-    # Math to get x_dirs, y_dirs
-    (center_to_right_dirs, center_to_tip_dirs) = compute_fingertip_dirs(
-        joint_angles=joint_angles,
-        hand_model=hand_model,
-    )
-    option_1_ok = (
-        torch.cross(center_to_tip_dirs, z_dirs).norm(dim=-1, keepdim=True) > 1e-4
-    )
-
-    y_dirs = torch.where(
-        option_1_ok,
-        center_to_tip_dirs
-        - (center_to_tip_dirs * z_dirs).sum(dim=-1, keepdim=True) * z_dirs,
-        center_to_right_dirs
-        - (center_to_right_dirs * z_dirs).sum(dim=-1, keepdim=True) * z_dirs,
-    )
-
-    assert (y_dirs.norm(dim=-1).min() > 0).all()
-    y_dirs = y_dirs / y_dirs.norm(dim=-1, keepdim=True)
-
-    x_dirs = torch.cross(y_dirs, z_dirs)
-    assert (x_dirs.norm(dim=-1).min() > 0).all()
-    x_dirs = x_dirs / x_dirs.norm(dim=-1, keepdim=True)
-    grasp_orientations = torch.stack([x_dirs, y_dirs, z_dirs], dim=-1)
-    # Make sure y and z are orthogonal
-    assert (torch.einsum("...l,...l->...", y_dirs, z_dirs).abs().max() < 1e-3).all(), (
-        f"y_dirs = {y_dirs}",
-        f"z_dirs = {z_dirs}",
-        f"torch.einsum('...l,...l->...', y_dirs, z_dirs).abs().max() = {torch.einsum('...l,...l->...', y_dirs, z_dirs).abs().max()}",
-    )
-    assert grasp_orientations.shape == (
-        B,
-        N_FINGERS,
-        3,
-        3,
-    ), f"Expected shape ({B}, {N_FINGERS}, 3, 3), got {grasp_orientations.shape}"
-    grasp_orientations = pp.from_matrix(
-        grasp_orientations,
-        pp.SO3_type,
-        atol=1e-3,  # Looser tolerances, esp if larger batch dim
-        rtol=1e-3,  # Looser tolerances, esp if larger batch dim
-    )
-    assert grasp_orientations.lshape == (
-        B,
-        N_FINGERS,
-    ), f"Expected shape ({B}, {N_FINGERS}), got {grasp_orientations.lshape}"
-
-    return grasp_orientations
 
 
 def get_optimized_grasps(
@@ -308,16 +65,14 @@ def get_optimized_grasps(
     ub_N: np.ndarray,
     X_N_By: np.ndarray,
     X_Oy_By: np.ndarray,
-    ckpt_path: str | pathlib.Path,
+    ckpt_path: pathlib.Path,
     return_exactly_requested_num_grasps: bool = True,
     sample_grasps_multiplier: int = 10,
     PLOT: bool = False,
 ) -> dict:
-    ckpt_path = pathlib.Path(ckpt_path)
-
     NUM_GRASPS = cfg.optimizer.num_grasps
 
-    config = Config(
+    config = DiffusionConfig(
         training=TrainingConfig(
             log_path=ckpt_path.parent,
         )
@@ -358,13 +113,13 @@ def get_optimized_grasps(
         X_By_Oy = np.linalg.inv(X_Oy_By)
         X_By_N = np.linalg.inv(X_N_By)
 
-        mesh_N = trimesh.load("/tmp/mesh_viz_object.obj")
+        _mesh_N = trimesh.load("/tmp/mesh_viz_object.obj")
         mesh_By = trimesh.load("/tmp/mesh_viz_object.obj")
         mesh_By.apply_transform(X_By_N)
 
         IDX = 0
         while True:
-            visualize_point_cloud_and_bps_and_grasp(
+            plot_point_cloud_and_bps_and_mesh_and_grasp(
                 grasp=x[IDX],
                 X_W_Oy=X_By_Oy,
                 basis_points=basis_points_By,
@@ -373,7 +128,7 @@ def get_optimized_grasps(
                 point_cloud_points=point_cloud_points_By,
                 GRASP_IDX="?",
                 object_code="?",
-                passed_eval="?",
+                y_PGS="?",
             )
             user_input = input("Next action?")
             if user_input == "q":
@@ -482,7 +237,7 @@ class CommandlineArgs:
         "/juno/u/tylerlum/github_repos/nerf_grasping/2024-06-03_ALBERT_DexDiffuser_models/ckpt_final.pth"
     )
     nerfdata_path: Optional[pathlib.Path] = None
-    nerfcheckpoint_path: Optional[pathlib.Path] = None
+    nerf_config: Optional[pathlib.Path] = None
     num_grasps: int = 32
     max_num_iterations: int = 400
     overwrite: bool = False
@@ -502,7 +257,7 @@ class CommandlineArgs:
     )
 
     def __post_init__(self) -> None:
-        if self.nerfdata_path is not None and self.nerfcheckpoint_path is None:
+        if self.nerfdata_path is not None and self.nerf_config is None:
             assert self.nerfdata_path.exists(), f"{self.nerfdata_path} does not exist"
             assert (
                 self.nerfdata_path / "transforms.json"
@@ -510,16 +265,14 @@ class CommandlineArgs:
             assert (
                 self.nerfdata_path / "images"
             ).exists(), f"{self.nerfdata_path / 'images'} does not exist"
-        elif self.nerfdata_path is None and self.nerfcheckpoint_path is not None:
+        elif self.nerfdata_path is None and self.nerf_config is not None:
+            assert self.nerf_config.exists(), f"{self.nerf_config} does not exist"
             assert (
-                self.nerfcheckpoint_path.exists()
-            ), f"{self.nerfcheckpoint_path} does not exist"
-            assert (
-                self.nerfcheckpoint_path.suffix == ".yml"
-            ), f"{self.nerfcheckpoint_path} does not have a .yml suffix"
+                self.nerf_config.suffix == ".yml"
+            ), f"{self.nerf_config} does not have a .yml suffix"
         else:
             raise ValueError(
-                "Exactly one of nerfdata_path or nerfcheckpoint_path must be specified"
+                "Exactly one of nerfdata_path or nerf_config must be specified"
             )
 
 
@@ -531,11 +284,11 @@ def run_dexdiffuser_sim_eval(args: CommandlineArgs) -> None:
     # Get object name
     if args.nerfdata_path is not None:
         object_name = args.nerfdata_path.name
-    elif args.nerfcheckpoint_path is not None:
-        object_name = args.nerfcheckpoint_path.parents[2].name
+    elif args.nerf_config is not None:
+        object_name = args.nerf_config.parents[2].name
     else:
         raise ValueError(
-            "Exactly one of nerfdata_path or nerfcheckpoint_path must be specified"
+            "Exactly one of nerfdata_path or nerf_config must be specified"
         )
     print(f"object_name = {object_name}")
 
@@ -553,8 +306,8 @@ def run_dexdiffuser_sim_eval(args: CommandlineArgs) -> None:
     if args.nerfdata_path is not None:
         start_time = time.time()
         nerf_checkpoints_folder = args.output_folder / "nerfcheckpoints"
-        nerf_trainer = train_nerfs_return_trainer.train_nerf(
-            args=train_nerfs_return_trainer.Args(
+        nerf_trainer = train_nerf_return_trainer.train_nerf(
+            args=train_nerf_return_trainer.Args(
                 nerfdata_folder=args.nerfdata_path,
                 nerfcheckpoints_folder=nerf_checkpoints_folder,
                 max_num_iterations=args.max_num_iterations,
@@ -567,20 +320,20 @@ def run_dexdiffuser_sim_eval(args: CommandlineArgs) -> None:
         print("@" * 80)
         print(f"Time to train_nerf: {end_time - start_time:.2f}s")
         print("@" * 80 + "\n")
-    elif args.nerfcheckpoint_path is not None:
+    elif args.nerf_config is not None:
         start_time = time.time()
         nerf_pipeline = load_nerf_pipeline(
-            args.nerfcheckpoint_path, test_mode="test"
+            args.nerf_config, test_mode="test"
         )  # Need this for point cloud
         nerf_model = nerf_pipeline.model
-        nerf_config = args.nerfcheckpoint_path
+        nerf_config = args.nerf_config
         end_time = time.time()
         print("@" * 80)
         print(f"Time to load_nerf_pipeline: {end_time - start_time:.2f}s")
         print("@" * 80 + "\n")
     else:
         raise ValueError(
-            "Exactly one of nerfdata_path or nerfcheckpoint_path must be specified"
+            "Exactly one of nerfdata_path or nerf_config must be specified"
         )
     args.nerf_config = nerf_config
 
@@ -617,7 +370,7 @@ def run_dexdiffuser_sim_eval(args: CommandlineArgs) -> None:
             use_rich=False,  # Not used because causes issues with logging
             init_grasp_config_dict_path=UNUSED_INIT_GRASP_CONFIG_DICT_PATH,
             grasp_metric=GraspMetricConfig(
-                nerf_checkpoint_path=nerf_config,
+                nerf_config=nerf_config,
                 classifier_config_path=UNUSED_CLASSIFIER_CONFIG_PATH,
                 X_N_Oy=UNUSED_X_N_Oy,
             ),  # This is not used
@@ -656,28 +409,13 @@ def run_dexdiffuser_sim_eval(args: CommandlineArgs) -> None:
                 ClassifierConfig, args.classifier_config_path.open()
             )
 
-            USE_DEPTH_IMAGES = isinstance(
-                classifier_config.nerfdata_config, DepthImageNerfDataConfig
+            classifier_model = load_classifier(classifier_config=classifier_config)
+            grasp_metric = GraspMetric(
+                nerf_field=nerf_pipeline.model.field,
+                classifier_model=classifier_model,
+                fingertip_config=classifier_config.nerfdata_config.fingertip_config,
+                X_N_Oy=X_N_Oy,
             )
-            if USE_DEPTH_IMAGES:
-                classifier_model = load_depth_image_classifier(
-                    classifier=classifier_config
-                )
-                grasp_metric = DepthImageGraspMetric(
-                    nerf_model=nerf_model,
-                    classifier_model=classifier_model,
-                    fingertip_config=classifier_config.nerfdata_config.fingertip_config,
-                    camera_config=classifier_config.nerfdata_config.fingertip_camera_config,
-                    X_N_Oy=X_N_Oy,
-                )
-            else:
-                classifier_model = load_classifier(classifier_config=classifier_config)
-                grasp_metric = GraspMetric(
-                    nerf_field=nerf_pipeline.model.field,
-                    classifier_model=classifier_model,
-                    fingertip_config=classifier_config.nerfdata_config.fingertip_config,
-                    X_N_Oy=X_N_Oy,
-                )
 
             print("\n" + "=" * 80)
             print("Step 6: Optimize grasps")
@@ -713,7 +451,7 @@ def run_dexdiffuser_sim_eval(args: CommandlineArgs) -> None:
                     use_rich=False,  # Not used because causes issues with logging
                     init_grasp_config_dict_path=NEW_init_grasp_config_dict_path,
                     grasp_metric=GraspMetricConfig(
-                        nerf_checkpoint_path=nerf_config,
+                        nerf_config=nerf_config,
                         classifier_config_path=args.classifier_config_path,
                         X_N_Oy=X_N_Oy,
                     ),  # This is not used because we are passing in a grasp_metric
@@ -741,14 +479,13 @@ def run_dexdiffuser_sim_eval(args: CommandlineArgs) -> None:
 
             # B frame is at base of object z up frame
             # By frame is at base of object y up frame
-            from nerf_grasping import ablation_utils
 
             optimized_grasp_config_dict = ablation_utils.get_optimized_grasps(
                 cfg=OptimizationConfig(
                     use_rich=False,  # Not used because causes issues with logging
                     init_grasp_config_dict_path=NEW_init_grasp_config_dict_path,
                     grasp_metric=GraspMetricConfig(
-                        nerf_checkpoint_path=nerf_config,
+                        nerf_config=nerf_config,
                         classifier_config_path=args.classifier_config_path,
                         X_N_Oy=X_N_Oy,
                     ),  # This is not used

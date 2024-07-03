@@ -1,19 +1,12 @@
 import torch
 import torch.nn as nn
-
-from nerf_grasping.dexdiffuser.fc_resblock import FCResBlock
-
 from torch.nn.modules.activation import MultiheadAttention
 
-
-from nerf_grasping.models.tyler_new_models import (
-    conv_encoder,
-    PoolType,
+from get_a_grip.model_training.models.components.fc_resblock import FCResBlock
+from get_a_grip.model_training.models.components.layers import (
     ConvOutputTo1D,
-    mlp,
-    ConvEncoder2D,
-    ConvEncoder1D,
-    ResnetType2d,
+    PoolType,
+    conv_encoder,
 )
 
 

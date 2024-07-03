@@ -1,24 +1,23 @@
+import pathlib
+import sys
+import time
+from dataclasses import dataclass, field
+from typing import Callable, List, Optional, Tuple
+
 import numpy as np
-from typing import Tuple, List, Optional, Callable
-import trimesh
-from pydrake.math import RigidTransform, RotationMatrix
-from tqdm import tqdm
+import plotly.graph_objects as go
 import pytorch_kinematics as pk
 import torch
-
+import trimesh
+import tyro
 from frogger import ROOT
-from frogger.objects import MeshObjectConfig, MeshObject
+from frogger.objects import MeshObject, MeshObjectConfig
+from frogger.robots.robot_core import RobotModel
 from frogger.robots.robots import AlgrModelConfig, FR3AlgrZed2iModelConfig
 from frogger.sampling import HeuristicAlgrICSampler, HeuristicFR3AlgrICSampler
 from frogger.solvers import FroggerConfig
-from frogger.robots.robot_core import RobotModel
-import plotly.graph_objects as go
-import pathlib
-from dataclasses import dataclass, field
-import tyro
-
-import time
-import sys
+from pydrake.math import RigidTransform, RotationMatrix
+from tqdm import tqdm
 
 
 @dataclass

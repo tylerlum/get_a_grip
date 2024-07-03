@@ -1,11 +1,12 @@
 import torch
 import torch.nn as nn
-from nerf_grasping.dexdiffuser.fc_resblock import FCResBlock
+
+from get_a_grip.model_training.models.components.fc_resblock import FCResBlock
 
 
 class DexEvaluator(nn.Module):
     """The DexDiffuser evaluator module.
-    
+
     Adapted for use in our repo.
 
     See: https://github.com/qianbot/FFHNet/blob/4aa38dd6bd59bcf4b794ca872f409844579afa9f/FFHNet/models/networks.py#L243
@@ -35,10 +36,10 @@ class DexEvaluator(nn.Module):
         if cov_mcmc is None:
             self.cov_mcmc = torch.diag(
                 torch.tensor(
-                    [0.005 ** 2] * 3  # translations
-                    + [0.025 ** 2] * 6  # x and y axes
-                    + [0.025 ** 2] * 16  # joint angles
-                    + [0.025 ** 2] * 12,  # grasp directions
+                    [0.005**2] * 3  # translations
+                    + [0.025**2] * 6  # x and y axes
+                    + [0.025**2] * 16  # joint angles
+                    + [0.025**2] * 12,  # grasp directions
                     device=self.device,
                 )
             )
@@ -47,7 +48,7 @@ class DexEvaluator(nn.Module):
 
     def forward(self, f_O: torch.Tensor, g_O: torch.Tensor) -> torch.Tensor:
         """Forward pass.
-        
+
         Args:
             f_O: The basis point set. Shape: (B, dim_BPS)
             g_O: The grasp features. Shape: (B, dim_grasp)
@@ -70,6 +71,7 @@ class DexEvaluator(nn.Module):
         X = self.out_success(X)
         p_success = self.sigmoid(X)
         return p_success
+
 
 class OldFCResBlock(nn.Module):
     """FFHNet: https://ieeexplore.ieee.org/document/9811666:
@@ -123,6 +125,7 @@ class OldFCResBlock(nn.Module):
         ), f"Expected shape ({B}, {self.out_features}), got {x.shape}"
         return x
 
+
 class _DexEvaluator(nn.Module):
     """DexDiffuser: https://arxiv.org/pdf/2402.02989
     The architecture of DexEvaluator is adopted from [20] (FFHNet)
@@ -173,7 +176,9 @@ class _DexEvaluator(nn.Module):
         assert x.shape == (B, 3), f"Expected shape ({B}, 3), got {x.shape}"
         return x
 
-    def _sample_proposal(self, g: torch.Tensor, cov: torch.Tensor, stage: str = "all") -> torch.Tensor:
+    def _sample_proposal(
+        self, g: torch.Tensor, cov: torch.Tensor, stage: str = "all"
+    ) -> torch.Tensor:
         """Helper function to sample from the proposal distribution for MCMC.
 
         Going to use a Gaussian proposal distribution, but some of the grasp parameters
@@ -190,11 +195,18 @@ class _DexEvaluator(nn.Module):
             cov: The covariance matrix. This is the noise BEFORE adjustments are done to
                 take into account support/topology. Shape: (B, dim_grasp, dim_grasp)
         """
-        assert stage in ["all", "wrist_pose", "joint_angles", "dirs"], f"Invalid stage: {stage}"
-        assert len(g.shape) >= 2, f"The grasp must have a batch dimension!"
+        assert stage in [
+            "all",
+            "wrist_pose",
+            "joint_angles",
+            "dirs",
+        ], f"Invalid stage: {stage}"
+        assert len(g.shape) >= 2, "The grasp must have a batch dimension!"
 
         L = torch.linalg.cholesky(cov)  # (dim_grasp, dim_grasp)
-        _g_prime = g + (L @ torch.randn_like(g)[..., None]).squeeze(-1)  # Shape: (B, dim_grasp)
+        _g_prime = g + (L @ torch.randn_like(g)[..., None]).squeeze(
+            -1
+        )  # Shape: (B, dim_grasp)
 
         # fix the rotations such that the x and y vecs are orthogonal and unit norm
         if stage in ["all", "wrist_pose"]:
@@ -268,7 +280,13 @@ class _DexEvaluator(nn.Module):
         g_prime = torch.cat([new_pose, q, dirs], dim=-1)
         return g_prime
 
-    def refine(self, f_O: torch.Tensor, g_O: torch.Tensor, num_steps: int = 100, stage: str = "all") -> torch.Tensor:
+    def refine(
+        self,
+        f_O: torch.Tensor,
+        g_O: torch.Tensor,
+        num_steps: int = 100,
+        stage: str = "all",
+    ) -> torch.Tensor:
         """Refine the grasp prediction using MCMC.
 
         Args:
@@ -281,17 +299,25 @@ class _DexEvaluator(nn.Module):
         Returns:
             g: The refined grasp prediction. Shape: (B, dim_grasp)
         """
-        assert stage in ["all", "wrist_pose", "joint_angles", "dirs"], f"Invalid stage: {stage}"
+        assert stage in [
+            "all",
+            "wrist_pose",
+            "joint_angles",
+            "dirs",
+        ], f"Invalid stage: {stage}"
         self.eval()  # removes non-deterministic effects from the evaluator
 
         g = g_O
         for _ in range(num_steps):
             g_prime = self._sample_proposal(g, cov=self.cov_mcmc, stage=stage)
-            alpha = self(f_O, g_prime)[..., -1] / self(f_O, g)[..., -1]  # last label is the PGS
+            alpha = (
+                self(f_O, g_prime)[..., -1] / self(f_O, g)[..., -1]
+            )  # last label is the PGS
             u = torch.rand_like(alpha, device=self.device)
             mask = u <= alpha
             g = torch.where(mask[..., None], g_prime, g)
         return g
+
 
 def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

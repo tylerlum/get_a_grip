@@ -1,9 +1,8 @@
-from nerf_grasping.dexdiffuser.dex_evaluator import DexEvaluator
 import pypose as pp
-from nerf_grasping.optimizer_utils import (
-    get_joint_limits,
-)
 import torch
+
+from get_a_grip.grasp_planning.utils.optimizer_utils import get_joint_limits
+from get_a_grip.model_training.models.dex_evaluator import DexEvaluator
 
 
 class RandomSamplingOptimizer:
@@ -20,12 +19,9 @@ class RandomSamplingOptimizer:
         self.grasp_orientation_noise = 0.05
 
         joint_lower_limits, joint_upper_limits = get_joint_limits()
-        self.joint_lower_limits, self.joint_upper_limits = torch.from_numpy(
-            joint_lower_limits
-        ).float().to(self.grasps.device), torch.from_numpy(
-            joint_upper_limits
-        ).float().to(
-            self.grasps.device
+        self.joint_lower_limits, self.joint_upper_limits = (
+            torch.from_numpy(joint_lower_limits).float().to(self.grasps.device),
+            torch.from_numpy(joint_upper_limits).float().to(self.grasps.device),
         )
 
     def step(self) -> torch.Tensor:

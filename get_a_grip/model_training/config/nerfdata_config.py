@@ -1,34 +1,28 @@
-from dataclasses import dataclass, field
-from nerf_grasping.config.fingertip_config import (
-    UnionFingertipConfig,
-    EvenlySpacedFingertipConfig,
-)
-from nerf_grasping.config.camera_config import CameraConfig
 import pathlib
-from typing import Optional, Union
-from datetime import datetime
+from dataclasses import dataclass
+from typing import Optional
+
 import tyro
-import nerf_grasping
-from nerf_grasping.config.base import CONFIG_DATETIME_STR
-from enum import Enum, auto
 
+from get_a_grip import get_data_folder
+from get_a_grip.model_training.config.fingertip_config import (
+    EvenlySpacedFingertipConfig,
+    UnionFingertipConfig,
+)
 
-EXPERIMENT_NAME = "2023-11-17_rubikscube_0"
+EXPERIMENT_NAME = "DEFAULT_EXPERIMENT_NAME"
 
 
 @dataclass
 class BaseNerfDataConfig:
     """Top-level config for NeRF data generation."""
 
-    dexgraspnet_data_root: pathlib.Path = (
-        pathlib.Path(nerf_grasping.get_repo_root()) / "data"
-    )
-    dexgraspnet_meshdata_root: pathlib.Path = dexgraspnet_data_root / "meshdata"
+    meshdata_root: pathlib.Path = get_data_folder() / "large/meshes"
     evaled_grasp_config_dicts_path: pathlib.Path = (
-        dexgraspnet_data_root / EXPERIMENT_NAME / "evaled_grasp_config_dicts"
+        get_data_folder() / EXPERIMENT_NAME / "evaled_grasp_config_dicts"
     )
     nerf_checkpoints_path: pathlib.Path = (
-        dexgraspnet_data_root / EXPERIMENT_NAME / "nerfcheckpoints"
+        get_data_folder() / EXPERIMENT_NAME / "nerfcheckpoints"
     )
     output_filepath: Optional[pathlib.Path] = None
     plot_only_one: bool = False
@@ -37,9 +31,9 @@ class BaseNerfDataConfig:
     save_dataset: bool = True
     print_timing: bool = True
     limit_num_configs: Optional[int] = None  # None for no limit
-    max_num_data_points_per_file: Optional[
-        int
-    ] = None  # None for count actual num data points, set to avoid OOM
+    max_num_data_points_per_file: Optional[int] = (
+        None  # None for count actual num data points, set to avoid OOM
+    )
     ray_samples_chunk_size: int = 50  # ~8GB on GPU
     cameras_samples_chunk_size: int = 2000  # ~14GB on GPU
     plot_all_high_density_points: bool = True
@@ -59,28 +53,9 @@ class GridNerfDataConfig(BaseNerfDataConfig):
     plot_alpha_images_each_finger: bool = True
 
 
-@dataclass
-class DepthImageNerfDataConfig(BaseNerfDataConfig):
-    fingertip_camera_config: CameraConfig = field(default_factory=CameraConfig)
-
-    def __post_init__(self):
-        self.fingertip_camera_config.set_intrisics_from_fingertip_config(
-            self.fingertip_config
-        )
-
-
 UnionNerfDataConfig = tyro.extras.subcommand_type_from_defaults(
     {
         "grid": GridNerfDataConfig(),
-        "depth-image": DepthImageNerfDataConfig(
-            fingertip_config=EvenlySpacedFingertipConfig(
-                finger_width_mm=50,
-                finger_height_mm=50,
-                grasp_depth_mm=20,
-                distance_between_pts_mm=0.5,
-            ),
-            fingertip_camera_config=CameraConfig(H=60, W=60),
-        ),
     }
 )
 

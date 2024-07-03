@@ -119,12 +119,10 @@ Note that `grasp_orientations` refer to rotation matrices that specify the direc
 Has the same as the grasp_config_dict, but also has:
 
 ```
-evaled_grasp_config_dict['passed_eval'].shape == (batch_size,)
-evaled_grasp_config_dict['passed_simulation'].shape == (batch_size,)
-evaled_grasp_config_dict['passed_new_penetration_test'].shape == (batch_size,)
+evaled_grasp_config_dict['y_PGS'].shape == (batch_size,)
+evaled_grasp_config_dict['y_pick'].shape == (batch_size,)
+evaled_grasp_config_dict['y_coll'].shape == (batch_size,)
 ```
-
-where passed_eval is associated with y_PGS, passed_simulation is associated with y_pick, and passed_new_penetration_test is associated with y_coll.
 
 #### Optimized Grasp Config Dict
 

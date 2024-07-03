@@ -7,6 +7,8 @@ from typing import Dict, List
 import numpy as np
 import torch
 import tyro
+from tqdm import tqdm
+
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.joint_angle_targets import (
@@ -21,14 +23,17 @@ from get_a_grip.dataset_generation.utils.pose_conversion import (
     hand_config_to_pose,
 )
 from get_a_grip.dataset_generation.utils.seed import set_seed
-from tqdm import tqdm
 
 
 @dataclass
 class GenerateGraspConfigDictsArgs:
     meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
-    input_hand_config_dicts_path: pathlib.Path = get_data_folder() / "NEW_DATASET/hand_config_dicts"
-    output_grasp_config_dicts_path: pathlib.Path = get_data_folder() / "NEW_DATASET/grasp_config_dicts"
+    input_hand_config_dicts_path: pathlib.Path = (
+        get_data_folder() / "NEW_DATASET/hand_config_dicts"
+    )
+    output_grasp_config_dicts_path: pathlib.Path = (
+        get_data_folder() / "NEW_DATASET/grasp_config_dicts"
+    )
     gpu: int = 0
     mid_optimization_steps: List[int] = field(default_factory=list)
     seed: int = 42

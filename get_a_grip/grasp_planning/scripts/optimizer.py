@@ -1,40 +1,36 @@
 from __future__ import annotations
+
 import math
-import pypose as pp
-from collections import defaultdict
-from nerf_grasping.optimizer_utils import (
-    AllegroGraspConfig,
-    GraspMetric,
-    DepthImageGraspMetric,
-    predict_in_collision_with_object,
-    predict_in_collision_with_table,
-    get_hand_surface_points_Oy,
-    get_joint_limits,
-)
-from dataclasses import asdict
-from nerf_grasping.config.optimization_config import OptimizationConfig
 import pathlib
-import torch
-from nerf_grasping.classifier import Classifier, Simple_CNN_LSTM_Classifier
-from nerf_grasping.config.classifier_config import ClassifierConfig
-from nerf_grasping.config.nerfdata_config import DepthImageNerfDataConfig
-from nerf_grasping.config.optimizer_config import (
-    SGDOptimizerConfig,
-    CEMOptimizerConfig,
-    RandomSamplingConfig,
-)
-from typing import Tuple, Union, Dict
-import nerf_grasping
+from collections import defaultdict
+from contextlib import nullcontext
+from dataclasses import asdict
 from functools import partial
+from typing import Dict, Optional, Tuple, Union
+
 import numpy as np
+import pypose as pp
+import torch
 import tyro
 import wandb
-
 from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
-from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
-from contextlib import nullcontext
+from get_a_grip.grasp_planning.config.optimization_config import OptimizationConfig
+from get_a_grip.grasp_planning.config.optimizer_config import (
+    CEMOptimizerConfig,
+    RandomSamplingConfig,
+    SGDOptimizerConfig,
+)
+from get_a_grip.grasp_planning.utils.optimizer_utils import (
+    AllegroGraspConfig,
+    GraspMetric,
+    get_hand_surface_points_Oy,
+    get_joint_limits,
+    predict_in_collision_with_object,
+    predict_in_collision_with_table,
+)
 
 
 def is_notebook() -> bool:
@@ -67,7 +63,7 @@ class Optimizer:
     def __init__(
         self,
         init_grasp_config: AllegroGraspConfig,
-        grasp_metric: Union[GraspMetric, DepthImageGraspMetric],
+        grasp_metric: GraspMetric,
     ):
         # Put on the correct device. (TODO: DO WE NEED THIS?)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -92,7 +88,7 @@ class SGDOptimizer(Optimizer):
     def __init__(
         self,
         init_grasp_config: AllegroGraspConfig,
-        grasp_metric: Union[GraspMetric, DepthImageGraspMetric],
+        grasp_metric: GraspMetric,
         optimizer_config: SGDOptimizerConfig,
     ):
         """
@@ -100,7 +96,7 @@ class SGDOptimizer(Optimizer):
 
         Args:
             init_grasp_config: Initial grasp configuration.
-            grasp_metric: Union[GraspMetric, DepthImageGraspMetric] object defining the metric to optimize.
+            grasp_metric: GraspMetric object defining the metric to optimize.
             optimizer_config: SGDOptimizerConfig object defining the optimizer configuration.
         """
         super().__init__(init_grasp_config, grasp_metric)
@@ -159,12 +155,13 @@ class SGDOptimizer(Optimizer):
             )
 
         joint_lower_limits, joint_upper_limits = get_joint_limits()
-        self.joint_lower_limits, self.joint_upper_limits = torch.from_numpy(
-            joint_lower_limits
-        ).float().to(self.grasp_config.wrist_pose.device), torch.from_numpy(
-            joint_upper_limits
-        ).float().to(
-            self.grasp_config.wrist_pose.device
+        self.joint_lower_limits, self.joint_upper_limits = (
+            torch.from_numpy(joint_lower_limits)
+            .float()
+            .to(self.grasp_config.wrist_pose.device),
+            torch.from_numpy(joint_upper_limits)
+            .float()
+            .to(self.grasp_config.wrist_pose.device),
         )
 
         assert self.joint_lower_limits.shape == (16,)
@@ -208,7 +205,7 @@ class RandomSamplingOptimizer(Optimizer):
     def __init__(
         self,
         init_grasp_config: AllegroGraspConfig,
-        grasp_metric: Union[GraspMetric, DepthImageGraspMetric],
+        grasp_metric: GraspMetric,
         optimizer_config: RandomSamplingConfig,
     ):
         """
@@ -216,19 +213,20 @@ class RandomSamplingOptimizer(Optimizer):
 
         Args:
             init_grasp_config: Initial grasp configuration.
-            grasp_metric: Union[GraspMetric, DepthImageGraspMetric] object defining the metric to optimize.
+            grasp_metric: GraspMetric object defining the metric to optimize.
             optimizer_config: RandomSamplingConfig object defining the optimizer configuration.
         """
         super().__init__(init_grasp_config, grasp_metric)
         self.optimizer_config = optimizer_config
 
         joint_lower_limits, joint_upper_limits = get_joint_limits()
-        self.joint_lower_limits, self.joint_upper_limits = torch.from_numpy(
-            joint_lower_limits
-        ).float().to(self.grasp_config.wrist_pose.device), torch.from_numpy(
-            joint_upper_limits
-        ).float().to(
-            self.grasp_config.wrist_pose.device
+        self.joint_lower_limits, self.joint_upper_limits = (
+            torch.from_numpy(joint_lower_limits)
+            .float()
+            .to(self.grasp_config.wrist_pose.device),
+            torch.from_numpy(joint_upper_limits)
+            .float()
+            .to(self.grasp_config.wrist_pose.device),
         )
 
         assert self.joint_lower_limits.shape == (16,)
@@ -331,7 +329,7 @@ class CEMOptimizer(Optimizer):
     def __init__(
         self,
         grasp_config: AllegroGraspConfig,
-        grasp_metric: Union[GraspMetric, DepthImageGraspMetric],
+        grasp_metric: GraspMetric,
         optimizer_config: CEMOptimizerConfig,
     ):
         """
@@ -339,7 +337,7 @@ class CEMOptimizer(Optimizer):
 
         Args:
             init_grasp_config: Initial grasp configuration.
-            grasp_metric: Union[GraspMetric, DepthImageGraspMetric] object defining the metric to optimize.
+            grasp_metric: GraspMetric object defining the metric to optimize.
             optimizer_config: SGDOptimizerConfig object defining the optimizer configuration.
         """
         super().__init__(grasp_config, grasp_metric)
@@ -536,7 +534,7 @@ def run_optimizer_loop(
 
 def get_optimized_grasps(
     cfg: OptimizationConfig,
-    grasp_metric: Union[GraspMetric, DepthImageGraspMetric] = None,
+    grasp_metric: Optional[GraspMetric] = None,
 ) -> Dict[str, np.ndarray]:
     # print("=" * 80)
     # print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
@@ -611,19 +609,10 @@ def get_optimized_grasps(
         print(
             f"Loading classifier config from {cfg.grasp_metric.classifier_config_path}"
         )
-        USE_DEPTH_IMAGES = isinstance(
-            cfg.grasp_metric.classifier_config.nerfdata_config, DepthImageNerfDataConfig
+        grasp_metric = GraspMetric.from_config(
+            cfg.grasp_metric,
+            console=console,
         )
-        if USE_DEPTH_IMAGES:
-            grasp_metric = DepthImageGraspMetric.from_config(
-                cfg.grasp_metric,
-                console=console,
-            )
-        else:
-            grasp_metric = GraspMetric.from_config(
-                cfg.grasp_metric,
-                console=console,
-            )
     else:
         print("Using provided grasp metric.")
     grasp_metric = grasp_metric.to(device=device)
@@ -673,7 +662,9 @@ def get_optimized_grasps(
             x_dirs = wrist_pose_matrix[:, :, 0]
             z_dirs = wrist_pose_matrix[:, :, 2]
 
-            fingers_forward_cos_theta = math.cos(math.radians(cfg.fingers_forward_theta_deg))
+            fingers_forward_cos_theta = math.cos(
+                math.radians(cfg.fingers_forward_theta_deg)
+            )
             palm_upwards_cos_theta = math.cos(math.radians(cfg.palm_upwards_theta_deg))
             fingers_forward = z_dirs[:, 0] >= fingers_forward_cos_theta
             palm_upwards = x_dirs[:, 1] >= palm_upwards_cos_theta
@@ -757,43 +748,7 @@ def get_optimized_grasps(
             f"ordered_idxs_best_first = {ordered_idxs_best_first[:cfg.optimizer.num_grasps]}"
         )
 
-        # DEBUG
-        # print("=" * 80)
-        # print(f"ordered_idxs_best_first = {ordered_idxs_best_first[:10]}")
-        # print("=" * 80)
-        # breakpoint()
-        # # breakpoint()  # TODO: Debug here
-        # # ordered_idxs_best_first = [550, 759, 524, 151, 150, 533, 1179, 662, 591, 638]
-        # ordered_idxs_best_first = [981, 937, 985, 874, 135, 65, 987, 1262, 1065, 472]
-        # print(f'Forced ordered_idxs_best_first = {ordered_idxs_best_first[:10]}')
-
         new_grasp_configs = new_grasp_configs[ordered_idxs_best_first]
-
-    # HACK: Check how many pass IK
-    # from nerf_grasping.fr3_algr_ik.ik import solve_ik
-    # import trimesh
-    # X_W_N = trimesh.transformations.translation_matrix([0.7, 0, 0])
-    # X_N_O = trimesh.transformations.translation_matrix([0, 0, 0.1])
-    # # Z-up
-    # X_O_Oy = trimesh.transformations.rotation_matrix(
-    #     np.pi / 2, [1, 0, 0]
-    # )
-    # X_Oy_H_array = new_grasp_configs.wrist_pose.matrix().detach().cpu().numpy()
-    # joint_angles_array = new_grasp_configs.joint_angles.detach().cpu().numpy()
-    # print(f"X_Oy_H_array.shape = {X_Oy_H_array.shape}")
-    # print(f"joint_angles_array.shape = {joint_angles_array.shape}")
-    # results = []
-    # for i in tqdm(range(X_Oy_H_array.shape[0])):
-    #     X_Oy_H = X_Oy_H_array[i]
-    #     joint_angles = joint_angles_array[i]
-    #     X_W_H = X_W_N @ X_N_O @ X_O_Oy @ X_Oy_H
-    #     try:
-    #         q_star = solve_ik(X_W_H, joint_angles)
-    #         results.append([i, True])
-    #     except RuntimeError:
-    #         results.append([i, False])
-    # print(f"Number of grasps that pass IK: {sum([r[1] for r in results])} / {len(results)}")
-    # breakpoint()
 
     init_grasp_configs = new_grasp_configs[: cfg.optimizer.num_grasps]
 
@@ -846,22 +801,6 @@ def get_optimized_grasps(
         console=console,
     )
 
-    # DEBUG
-    # breakpoint()
-    # grasp_metric.return_type = "all_logits"
-    # all_logits = grasp_metric(final_grasp_configs)
-    # print(f"all_logits.shape = {all_logits.shape}")
-    # assert all_logits.shape == (final_grasp_configs.batch_size, 3, 2)
-    # # Softmax
-    # probs = torch.nn.functional.softmax(all_logits, dim=-1)[..., 1]
-    # assert probs.shape == (final_grasp_configs.batch_size, 3)
-    # passed_sim_probs = probs[:, 0]
-    # passed_pen_probs = probs[:, 1]
-    # passed_eval_probs = probs[:, 2]
-    # print(f"passed_sim_probs = {passed_sim_probs}")
-    # print(f"passed_pen_probs = {passed_pen_probs}")
-    # print(f"passed_eval_probs = {passed_eval_probs}")
-
     assert (
         final_losses.shape[0] == final_grasp_configs.batch_size
     ), f"{final_losses.shape[0]} != {final_grasp_configs.batch_size}"
@@ -905,6 +844,7 @@ def main() -> None:
 
 
 def sample_random_rotate_transforms_only_around_y(N: int) -> pp.LieTensor:
+    # TODO: Move to utils
     PP_MATRIX_ATOL, PP_MATRIX_RTOL = 1e-4, 1e-4
     # Sample big rotations in tangent space of SO(3).
     # Choose 4 * \pi as a heuristic to get pretty evenly spaced rotations.

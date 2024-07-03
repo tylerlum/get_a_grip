@@ -14,8 +14,8 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 from wandb.util import generate_id
 
-from nerf_grasping.dexdiffuser.dex_evaluator import DexEvaluator
-from nerf_grasping.dexdiffuser.diffusion import get_bps_datasets, get_bps_datasets_small_train_set
+from get_a_grip.model_training.models.dex_evaluator import DexEvaluator
+from get_a_grip.model_training.utils.bps_grasp_dataset import BpsGraspEvalDataset
 
 
 @dataclass
@@ -36,7 +36,7 @@ class DexEvaluatorTrainingConfig:
     wandb_log: bool = True
 
     # whether to train gg-nerf or the dexdiffuser baseline
-    train_ablation: bool = False
+    train_ablation: bool = False  # Figure this out
 
     # whether to use multigpu training
     multigpu: bool = True
@@ -63,20 +63,16 @@ def setup(cfg: DexEvaluatorTrainingConfig, rank: int = 0):
         dist.init_process_group("nccl", rank=rank, world_size=cfg.num_gpus)
 
     # get datasets
-    USE_SMALL_TRAIN_SET = True
-    if USE_SMALL_TRAIN_SET:
-        print("Using small train set!")
-        train_dataset, val_dataset, _ = get_bps_datasets_small_train_set(
-            use_evaluator_dataset=True,
-            get_all_labels=cfg.train_ablation,  # if we're training the ablation, get all the labels
-            frac_throw_away=0.5,
-        )
-    else:
-        print("Using full train set!")
-        train_dataset, val_dataset, _ = get_bps_datasets(
-            use_evaluator_dataset=True,
-            get_all_labels=cfg.train_ablation,  # if we're training the ablation, get all the labels
-        )
+    train_dataset = BpsGraspEvalDataset(
+        input_hdf5_filepath=Path("TODO"),
+        get_all_labels=cfg.train_ablation,
+        frac_throw_away=0.0,  # TODO Parameterize
+    )
+    val_dataset = BpsGraspEvalDataset(
+        input_hdf5_filepath=Path("TODO"),
+        get_all_labels=cfg.train_ablation,
+        frac_throw_away=0.0,  # TODO Parameterize
+    )
 
     # make dataloaders
     if cfg.multigpu:
@@ -132,11 +128,22 @@ def setup(cfg: DexEvaluatorTrainingConfig, rank: int = 0):
     if cfg.wandb_log and rank == 0:
         wandb.init(project=cfg.wandb_project, config=cfg, id=wandb_id, resume="allow")
 
-    return train_loader, val_loader, model, optimizer, scheduler, train_sampler, wandb_id
+    return (
+        train_loader,
+        val_loader,
+        model,
+        optimizer,
+        scheduler,
+        train_sampler,
+        wandb_id,
+    )
+
 
 def train(cfg: DexEvaluatorTrainingConfig, rank: int = 0) -> None:
     """Training function."""
-    train_loader, val_loader, model, optimizer, scheduler, train_sampler, wandb_id = setup(cfg, rank=rank)
+    train_loader, val_loader, model, optimizer, scheduler, train_sampler, wandb_id = (
+        setup(cfg, rank=rank)
+    )
     if cfg.multigpu:
         device = torch.device("cuda", rank)
     else:
@@ -218,7 +225,9 @@ def train(cfg: DexEvaluatorTrainingConfig, rank: int = 0) -> None:
             if cfg.wandb_log and rank == 0:
                 wandb.log({"train_loss": train_loss, "val_loss": val_loss})
 
-            if (epoch % cfg.snapshot_freq == 0 or epoch == cfg.num_epochs - 1) and rank == 0:
+            if (
+                epoch % cfg.snapshot_freq == 0 or epoch == cfg.num_epochs - 1
+            ) and rank == 0:
                 print(f"Saving model at epoch {epoch}!")
                 torch.save(
                     getattr(model, "module", model).state_dict(),
@@ -226,12 +235,14 @@ def train(cfg: DexEvaluatorTrainingConfig, rank: int = 0) -> None:
                 )
 
                 if epoch == cfg.num_epochs - 1:
-                    print(f"Saving final model at path {cfg.log_path / f'ckpt-{wandb_id}-step-final.pth'}!")
+                    print(
+                        f"Saving final model at path {cfg.log_path / f'ckpt-{wandb_id}-step-final.pth'}!"
+                    )
                     torch.save(
                         getattr(model, "module", model).state_dict(),
                         cfg.log_path / f"ckpt-{wandb_id}-step-final.pth",
                     )
-    
+
     if cfg.multigpu:
         dist.destroy_process_group()
 
@@ -248,7 +259,9 @@ if __name__ == "__main__":
         device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
         random_seed=42,
         snapshot_freq=5,
-        log_path=Path(f"logs/dexdiffuser_evaluator/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"),
+        log_path=Path(
+            f"logs/dexdiffuser_evaluator/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        ),
         wandb_project="dexdiffuser-evaluator",
         wandb_log=True,
         multigpu=True,

@@ -1,85 +1,72 @@
-import time
-from typing import Optional, Tuple, List, Literal, Callable
-from nerfstudio.models.base_model import Model
-from nerfstudio.pipelines.base_pipeline import Pipeline
-from nerf_grasping.run_pipeline import (
-    run_curobo,
-    MultipleOutputs,
-    PipelineConfig,
-    CommandlineArgs,
-    transform_point,
-    add_transform_matrix_traces,
-    save_to_file,
-    load_from_file,
-    visualize,
-)
-from nerf_grasping.grasp_utils import load_nerf_pipeline
-from nerf_grasping.optimizer import get_optimized_grasps
-from nerf_grasping.optimizer_utils import (
-    get_sorted_grasps_from_dict,
-    GraspMetric,
-    DepthImageGraspMetric,
-    load_classifier,
-    load_depth_image_classifier,
-    is_in_limits,
-    clamp_in_limits,
-)
-from nerf_grasping.config.nerfdata_config import DepthImageNerfDataConfig
-from nerf_grasping.config.optimization_config import OptimizationConfig
-from nerf_grasping.config.optimizer_config import (
-    SGDOptimizerConfig,
-    CEMOptimizerConfig,
-    RandomSamplingConfig,
-)
-from nerf_grasping.config.grasp_metric_config import GraspMetricConfig
-from nerf_grasping.nerfstudio_train import train_nerfs_return_trainer
-from nerf_grasping.baselines.nerf_to_mesh import nerf_to_mesh
-from nerf_grasping.nerf_utils import (
-    compute_centroid_from_nerf,
-)
-from nerf_grasping.config.classifier_config import ClassifierConfig
-import trimesh
 import pathlib
-import tyro
-import numpy as np
-from dataclasses import dataclass
-import plotly.graph_objects as go
-from datetime import datetime
+import sys
+import time
+from typing import List, Optional, Tuple
 
-from nerf_grasping.curobo_fr3_algr_zed2i.trajopt_batch import (
-    prepare_trajopt_batch,
-    solve_prepared_trajopt_batch,
-    get_trajectories_from_result,
-    compute_over_limit_factors,
-)
-from nerf_grasping.curobo_fr3_algr_zed2i.trajopt_fr3_algr_zed2i import (
-    # solve_trajopt,
-    DEFAULT_Q_FR3,
-    DEFAULT_Q_ALGR,
-)
-from nerf_grasping.curobo_fr3_algr_zed2i.fr3_algr_zed2i_world import (
-    get_world_cfg,
-)
+import numpy as np
+import plotly.graph_objects as go
+import trimesh
+import tyro
 from curobo.types.robot import RobotConfig
 from curobo.wrap.reacher.ik_solver import IKSolver
 from curobo.wrap.reacher.motion_gen import (
     MotionGen,
     MotionGenConfig,
 )
+from nerfstudio.pipelines.base_pipeline import Pipeline
 
-from frogger.robots.robot_core import RobotModel
-
-import sys
+from get_a_grip.grasp_planning.config.grasp_metric_config import GraspMetricConfig
+from get_a_grip.grasp_planning.config.optimization_config import OptimizationConfig
+from get_a_grip.grasp_planning.config.optimizer_config import (
+    CEMOptimizerConfig,
+    RandomSamplingConfig,
+    SGDOptimizerConfig,
+)
+from get_a_grip.grasp_planning.nerf_conversions.nerf_to_mesh import nerf_to_mesh
+from get_a_grip.grasp_planning.scripts.optimizer import get_optimized_grasps
+from get_a_grip.grasp_planning.scripts.run_pipeline import (
+    CommandlineArgs,
+    MultipleOutputs,
+    PipelineConfig,
+    add_transform_matrix_traces,
+    load_from_file,
+    run_curobo,
+    save_to_file,
+    transform_point,
+    visualize,
+)
+from get_a_grip.grasp_planning.utils import (
+    ablation_utils,
+    dexdiffuser_utils,
+    train_nerf_return_trainer,
+)
+from get_a_grip.grasp_planning.utils.optimizer_utils import (
+    GraspMetric,
+    clamp_in_limits,
+    get_sorted_grasps_from_dict,
+    is_in_limits,
+    load_classifier,
+)
+from get_a_grip.model_training.config.classifier_config import ClassifierConfig
+from get_a_grip.model_training.utils.nerf_load_utils import load_nerf_pipeline
+from get_a_grip.model_training.utils.nerf_utils import compute_centroid_from_nerf
+from get_a_grip.motion_planning.trajopt import (
+    DEFAULT_Q_ALGR,
+    DEFAULT_Q_FR3,
+)
+from get_a_grip.motion_planning.trajopt_batch import (
+    prepare_trajopt_batch,
+)
 
 
 def compute_dexdiffuser_grasps(
     nerf_pipeline: Pipeline,
     cfg: PipelineConfig,
-    ckpt_path: str | pathlib.Path,
+    ckpt_path: pathlib.Path,
     optimize: bool,
     sample_grasps_multiplier: int,
     use_bps_evaluator: bool,
-    bps_evaluator_ckpt_path: str | pathlib.Path,
+    bps_evaluator_ckpt_path: pathlib.Path,
 ) -> Tuple[
     np.ndarray,
     np.ndarray,
@@ -88,8 +75,6 @@ def compute_dexdiffuser_grasps(
     np.ndarray,
     np.ndarray,
 ]:
-    nerf_model = nerf_pipeline.model
-
     print("=" * 80)
     print("Step 1: Figuring out frames")
     print("=" * 80 + "\n")
@@ -107,12 +92,12 @@ def compute_dexdiffuser_grasps(
     print("\n" + "=" * 80)
     print("Step 2: Get NERF")
     print("=" * 80 + "\n")
-    nerf_field = nerf_model.field
+    nerf_field = nerf_pipeline.model.field
     nerf_config = (
         cfg.nerf_config
         if cfg.nerf_config is not None
         else pathlib.Path("DUMMY_NERF_CONFIG/config.yml")
-    )  # Dummy value to put in, not used because nerf_model is passed in
+    )  # Dummy value to put in, not used because nerf_pipeline is passed in
 
     print("\n" + "=" * 80)
     print("Step 3: Convert NeRF to mesh")
@@ -262,15 +247,13 @@ def compute_dexdiffuser_grasps(
     X_N_By = X_N_B @ X_B_By
     X_Oy_By = X_Oy_N @ X_N_By
 
-    from nerf_grasping import dexdiffuser_utils
-
     return_exactly_requested_num_grasps = True if not optimize else False
     optimized_grasp_config_dict = dexdiffuser_utils.get_optimized_grasps(
         cfg=OptimizationConfig(
             use_rich=False,  # Not used because causes issues with logging
             init_grasp_config_dict_path=cfg.init_grasp_config_dict_path,  # This is not used
             grasp_metric=GraspMetricConfig(
-                nerf_checkpoint_path=nerf_config,
+                nerf_config=nerf_config,
                 classifier_config_path=cfg.classifier_config_path,
                 X_N_Oy=X_N_Oy,
             ),  # This is not used
@@ -315,28 +298,13 @@ def compute_dexdiffuser_grasps(
                 ClassifierConfig, cfg.classifier_config_path.open()
             )
 
-            USE_DEPTH_IMAGES = isinstance(
-                classifier_config.nerfdata_config, DepthImageNerfDataConfig
+            classifier_model = load_classifier(classifier_config=classifier_config)
+            grasp_metric = GraspMetric(
+                nerf_field=nerf_field,
+                classifier_model=classifier_model,
+                fingertip_config=classifier_config.nerfdata_config.fingertip_config,
+                X_N_Oy=X_N_Oy,
             )
-            if USE_DEPTH_IMAGES:
-                classifier_model = load_depth_image_classifier(
-                    classifier=classifier_config
-                )
-                grasp_metric = DepthImageGraspMetric(
-                    nerf_model=nerf_model,
-                    classifier_model=classifier_model,
-                    fingertip_config=classifier_config.nerfdata_config.fingertip_config,
-                    camera_config=classifier_config.nerfdata_config.fingertip_camera_config,
-                    X_N_Oy=X_N_Oy,
-                )
-            else:
-                classifier_model = load_classifier(classifier_config=classifier_config)
-                grasp_metric = GraspMetric(
-                    nerf_field=nerf_field,
-                    classifier_model=classifier_model,
-                    fingertip_config=classifier_config.nerfdata_config.fingertip_config,
-                    X_N_Oy=X_N_Oy,
-                )
 
             print("\n" + "=" * 80)
             print("Step 6: Optimize grasps")
@@ -373,7 +341,7 @@ def compute_dexdiffuser_grasps(
                     # init_grasp_config_dict_path=cfg.init_grasp_config_dict_path,
                     init_grasp_config_dict_path=NEW_init_grasp_config_dict_path,
                     grasp_metric=GraspMetricConfig(
-                        nerf_checkpoint_path=nerf_config,
+                        nerf_config=nerf_config,
                         classifier_config_path=cfg.classifier_config_path,
                         X_N_Oy=X_N_Oy,
                     ),  # This is not used because we are passing in a grasp_metric
@@ -403,14 +371,12 @@ def compute_dexdiffuser_grasps(
             X_B_By = X_O_Oy.copy()
             X_N_By = X_N_B @ X_B_By
 
-            from nerf_grasping import ablation_utils
-
             optimized_grasp_config_dict = ablation_utils.get_optimized_grasps(
                 cfg=OptimizationConfig(
                     use_rich=False,  # Not used because causes issues with logging
                     init_grasp_config_dict_path=NEW_init_grasp_config_dict_path,
                     grasp_metric=GraspMetricConfig(
-                        nerf_checkpoint_path=nerf_config,
+                        nerf_config=nerf_config,
                         classifier_config_path=cfg.classifier_config_path,
                         X_N_Oy=X_N_Oy,
                     ),  # This is not used
@@ -506,11 +472,11 @@ def run_dexdiffuser_pipeline(
     cfg: PipelineConfig,
     q_fr3: np.ndarray,
     q_algr: np.ndarray,
-    ckpt_path: str | pathlib.Path,
+    ckpt_path: pathlib.Path,
     optimize: bool,
     sample_grasps_multiplier: int,
     use_bps_evaluator: bool,
-    bps_evaluator_ckpt_path: str | pathlib.Path,
+    bps_evaluator_ckpt_path: pathlib.Path,
     robot_cfg: Optional[RobotConfig] = None,
     ik_solver: Optional[IKSolver] = None,
     ik_solver2: Optional[IKSolver] = None,
@@ -522,12 +488,10 @@ def run_dexdiffuser_pipeline(
     lift_motion_gen: Optional[MotionGen] = None,
     lift_motion_gen_config: Optional[MotionGenConfig] = None,
 ) -> Tuple[List[np.ndarray], List[np.ndarray], List[float], List[int], tuple, dict]:
-    nerf_model = nerf_pipeline.model
-
     print(f"Creating a new experiment folder at {cfg.output_folder}")
     cfg.output_folder.mkdir(parents=True, exist_ok=True)
     sys.stdout = MultipleOutputs(
-        stdout=False, stderr=True, filename=str(cfg.output_folder / "nerf_grasping.log")
+        stdout=False, stderr=True, filename=str(cfg.output_folder / "get_a_grip.log")
     )
 
     start_time = time.time()
@@ -617,8 +581,8 @@ def main() -> None:
     if args.nerfdata_path is not None:
         start_time = time.time()
         nerf_checkpoints_folder = args.output_folder / "nerfcheckpoints"
-        nerf_trainer = train_nerfs_return_trainer.train_nerf(
-            args=train_nerfs_return_trainer.Args(
+        nerf_trainer = train_nerf_return_trainer.train_nerf(
+            args=train_nerf_return_trainer.Args(
                 nerfdata_folder=args.nerfdata_path,
                 nerfcheckpoints_folder=nerf_checkpoints_folder,
                 max_num_iterations=args.max_num_iterations,
@@ -630,19 +594,19 @@ def main() -> None:
         print("@" * 80)
         print(f"Time to train_nerf: {end_time - start_time:.2f}s")
         print("@" * 80 + "\n")
-    elif args.nerfcheckpoint_path is not None:
+    elif args.nerf_config is not None:
         start_time = time.time()
         nerf_pipeline = load_nerf_pipeline(
-            args.nerfcheckpoint_path, test_mode="test"
+            args.nerf_config, test_mode="test"
         )  # Must be test mode for point cloud gen
-        nerf_config = args.nerfcheckpoint_path
+        nerf_config = args.nerf_config
         end_time = time.time()
         print("@" * 80)
         print(f"Time to load_nerf_pipeline: {end_time - start_time:.2f}s")
         print("@" * 80 + "\n")
     else:
         raise ValueError(
-            "Exactly one of nerfdata_path or nerfcheckpoint_path must be specified"
+            "Exactly one of nerfdata_path or nerf_config must be specified"
         )
     args.nerf_config = nerf_config
 
@@ -694,12 +658,11 @@ def main() -> None:
         cfg=args,
         q_fr3=DEFAULT_Q_FR3,
         q_algr=DEFAULT_Q_ALGR,
-        ckpt_path="/juno/u/tylerlum/github_repos/nerf_grasping/2024-06-03_ALBERT_DexDiffuser_models/ckpt_final.pth",
+        ckpt_path=pathlib.Path("/juno/u/tylerlum/github_repos/nerf_grasping/2024-06-03_ALBERT_DexDiffuser_models/ckpt_final.pth"),
         optimize=True,
         sample_grasps_multiplier=100,
         use_bps_evaluator=True,
-        bps_evaluator_ckpt_path="/juno/u/tylerlum/github_repos/nerf_grasping/2024-06-03_ALBERT_DexEvaluator_models/ckpt_yp920sn0_final.pth",
-        # bps_evaluator_ckpt_path="/juno/u/tylerlum/github_repos/nerf_grasping/2024-06-06_ALBERT_DexEvaluator_models_5_percent/ckpt-oh6pdm0p-step-final.pth",
+        bps_evaluator_ckpt_path=pathlib.Path("/juno/u/tylerlum/github_repos/nerf_grasping/2024-06-03_ALBERT_DexEvaluator_models/ckpt_yp920sn0_final.pth"),
         robot_cfg=robot_cfg,
         ik_solver=ik_solver,
         ik_solver2=ik_solver2,

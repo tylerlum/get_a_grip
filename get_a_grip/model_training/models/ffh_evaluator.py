@@ -1,5 +1,6 @@
 import torch
-from nerf_grasping.dexdiffuser.dex_evaluator import DexEvaluator
+
+from get_a_grip.model_training.models.dex_evaluator import DexEvaluator
 
 
 class FFHEvaluator(DexEvaluator):

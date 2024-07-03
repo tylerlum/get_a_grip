@@ -63,11 +63,7 @@ cd ..  # back to thirdparty
 # Install bps
 pip3 install git+https://github.com/sergeyprokudin/bps
 
-# Install drake (TODO: Do we keep this?)
-pip install drake
-
 # Install other dependencies
-
 # Main functionality
 pip install pypose tyro wandb pytorch_kinematics arm_pytorch_utilities mujoco urdf_parser_py pybullet torchviz transforms3d trimesh scipy networkx rtree torchinfo positional_encodings diffusers
 
@@ -75,7 +71,7 @@ pip install pypose tyro wandb pytorch_kinematics arm_pytorch_utilities mujoco ur
 pip install matplotlib plotly kaleido
 
 # Debugging and development
-pip install rich ipdb jupyterlab jupytext pandas black clean_loop_timer isaacgym_stubs
+pip install rich ipdb jupyterlab jupytext pandas black clean_loop_timer isaacgym_stubs localscope
 
 # Install get_a_grip
 cd <path_to_get_a_grip_root>

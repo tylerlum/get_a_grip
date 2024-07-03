@@ -19,81 +19,74 @@
 
 # %%
 from __future__ import annotations
+
+import os
 import pathlib
-import trimesh
+import random
+import sys
 import time
 from collections import defaultdict
-from localscope import localscope
-import nerf_grasping
 from dataclasses import asdict
-from torchinfo import summary
-from torchviz import make_dot
-import matplotlib.pyplot as plt
-from nerf_grasping.learned_metric.DexGraspNet_batch_data import (
-    BatchData,
-    BatchDataInput,
-    DepthImageBatchDataInput,
-    BatchDataOutput,
-)
-from nerf_grasping.dataset.DexGraspNet_NeRF_Grasps_utils_v2 import (
-    get_object_code,
-    get_object_scale,
-    plot_mesh_and_query_points,
-    plot_mesh_and_transforms,
-)
-from nerf_grasping.classifier import Classifier, DepthImageClassifier
-from nerf_grasping.dataset.timers import LoopTimer
-from nerf_grasping.config.classifier_config import (
-    UnionClassifierConfig,
-    ClassifierConfig,
-    ClassifierTrainingConfig,
-    TaskType,
-)
-from nerf_grasping.config.fingertip_config import BaseFingertipConfig
-from nerf_grasping.config.nerfdata_config import (
-    DepthImageNerfDataConfig,
-)
-from nerf_grasping.learned_metric.train_dataset import (
-    NeRFGrid_To_GraspSuccess_HDF5_Dataset,
-    DepthImage_To_GraspSuccess_HDF5_Dataset,
-)
-import os
-import pypose as pp
+from enum import Enum, auto
+from functools import partial
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import h5py
-from typing import Optional, Tuple, List, Dict, Any, Union
+import matplotlib.pyplot as plt
+import numpy as np
+import plotly.graph_objects as go
+import pypose as pp
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import trimesh
+import tyro
+import wandb
+from clean_loop_timer import LoopTimer
+from localscope import localscope
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
     precision_score,
     recall_score,
-    balanced_accuracy_score,
 )
-
-
-import numpy as np
-import torch
-import torch.nn.functional as F
+from sklearn.utils.class_weight import compute_class_weight
 from torch.utils.data import (
     DataLoader,
     Subset,
     random_split,
 )
-from sklearn.utils.class_weight import compute_class_weight
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import wandb
-from functools import partial
-import sys
-import random
+from torchinfo import summary
+from torchviz import make_dot
 from wandb.util import generate_id
 
-from enum import Enum, auto
-from nerf_grasping.models.tyler_new_models import get_scheduler
-
-import tyro
+from get_a_grip import get_data_folder, get_repo_folder
+from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+    parse_object_code_and_scale,
+)
+from get_a_grip.model_training.config.classifier_config import (
+    ClassifierConfig,
+    ClassifierTrainingConfig,
+    TaskType,
+    UnionClassifierConfig,
+)
+from get_a_grip.model_training.config.fingertip_config import BaseFingertipConfig
+from get_a_grip.model_training.models.classifier import Classifier
+from get_a_grip.model_training.utils.nerf_grasp_evaluator_batch_data import (
+    BatchData,
+    BatchDataInput,
+    BatchDataOutput,
+)
+from get_a_grip.model_training.utils.nerf_grasp_evaluator_dataset import (
+    NeRFGrid_To_GraspSuccess_HDF5_Dataset,
+)
+from get_a_grip.model_training.utils.plot_utils import (
+    plot_mesh_and_query_points,
+)
+from get_a_grip.model_training.utils.scheduler import get_scheduler
 
 # %%
-os.chdir(nerf_grasping.get_repo_root())
+os.chdir(get_repo_folder())
 
 
 # %%
@@ -146,77 +139,10 @@ tqdm = partial(std_tqdm, dynamic_ncols=True)
 
 # %%
 if is_notebook():
-    # arguments = [
-    #     "cnn-2d-1d",
-    #     "--task-type", "PASSED_SIMULATION_AND_PENETRATION_THRESHOLD",
-    #     "--nerfdata-config.output-filepath", "data/2023-11-23_rubikscuberepeat_labelnoise_2/grid_dataset/dataset.h5",
-    #     "--dataloader.batch-size", "128",
-    #     "--wandb.name", "debug_cluster_grid_noisy_large_investigate",
-    #     "--checkpoint-workspace.input_leaf_dir_name", "2023-11-30_15-49-25",
-    # ]
-
-    # arguments = [
-    #     "depth-cnn-2d",
-    #     "--task-type",
-    #     "PASSED_SIMULATION_AND_PENETRATION_THRESHOLD",
-    #     "--nerfdata-config.output-filepath",
-    #     "data/2023-11-23_rubikscuberepeat_labelnoise_2/depth_image_dataset/dataset.h5",
-    #     "--wandb.name",
-    #     "probe_debug_depth_noisy_large",
-    #     "--checkpoint-workspace.input_leaf_dir_name",
-    #     "2023-11-30_15-49-25",
-    # ]
-
-    # arguments = [
-    #     "grasp-cond-simple-cnn-1d-2d",
-    #     "--task-type",
-    #     "PASSED_SIMULATION",
-    #     "--nerfdata-config.output-filepath",
-    #     "data/2023-01-03_mug_one_object_smaller0-075_noise_lightshake_mid_opt/grid_dataset/dataset.h5",
-    #     "--dataloader.batch-size",
-    #     "32",
-    #     "--wandb.name",
-    #     "probe_mug_grid_graspcond",
-    #     "--checkpoint-workspace.input_leaf_dir_name",
-    #     "mug_grid_graspcond_BACKUP",
-    # ]
-
-    # arguments = [
-    #     "grasp-cond-simple-cnn-2d-1d",
-    #     "--task-type",
-    #     "PASSED_SIMULATION",
-    #     "--nerfdata-config.output-filepath",
-    #     "data/2023-01-03_mugs_smaller0-075_noise_lightshake_mid_opt/grid_dataset/dataset.h5",
-    #     "--dataloader.batch-size",
-    #     "32",
-    #     "--wandb.name",
-    #     "probe_mugs_grid_grasp-cond-simple-cnn-2d-1d",
-    #     "--checkpoint-workspace.input_leaf_dir_name",
-    #     "mugs_grid_grasp-cond-simple-cnn-2d-1d_BACKUP",
-    # ]
-
-    # arguments = [
-    #     "grasp-cond-simple-cnn-2d-1d",
-    #     "--task-type",
-    #     "PASSED_SIMULATION",
-    #     "--train-dataset-filepath",
-    #     "data/2023-01-03_mugs_smaller0-075_noise_lightshake_mid_opt/grid_dataset/dataset.h5",
-    #     "--val-dataset-filepath",
-    #     "data/2023-01-03_mugs_smaller0-075_noise_lightshake_mid_opt/grid_dataset/val_dataset.h5",
-    #     "--test-dataset-filepath",
-    #     "data/2023-01-03_mugs_smaller0-075_noise_lightshake_mid_opt/grid_dataset/test_dataset.h5",
-    #     "--dataloader.batch-size",
-    #     "32",
-    #     "--wandb.name",
-    #     "probe_mugs_grid_grasp-cond-simple-cnn-2d-1d",
-    #     "--checkpoint-workspace.input_leaf_dir_name",
-    #     "mugs_grid_grasp-cond-simple-cnn-2d-1d_BACKUP",
-    # ]
-
     arguments = [
         "grasp-cond-simple-cnn-2d-1d",
         "--task-type",
-        "PASSED_SIMULATION",
+        "Y_PICK",
         "--train-dataset-filepath",
         "data/2024-02-07_softball_0-051_5random/grid_dataset/train_dataset.h5",
         "--dataloader.batch-size",
@@ -233,16 +159,6 @@ else:
 # %%
 cfg: ClassifierConfig = tyro.cli(UnionClassifierConfig, args=arguments)
 assert cfg.nerfdata_config.fingertip_config is not None
-
-USE_DEPTH_IMAGES = isinstance(cfg.nerfdata_config, DepthImageNerfDataConfig)
-if USE_DEPTH_IMAGES:
-    DEPTH_IMAGE_N_CHANNELS = 2
-    DEPTH_IMAGE_HEIGHT = cfg.nerfdata_config.fingertip_camera_config.H
-    DEPTH_IMAGE_WIDTH = cfg.nerfdata_config.fingertip_camera_config.W
-else:
-    DEPTH_IMAGE_N_CHANNELS = None
-    DEPTH_IMAGE_HEIGHT = None
-    DEPTH_IMAGE_WIDTH = None
 
 # A relatively dirty hack: create script globals from the config vars.
 NUM_FINGERS = cfg.nerfdata_config.fingertip_config.n_fingers
@@ -287,9 +203,7 @@ cfg.checkpoint_workspace.root_dir.mkdir(parents=True, exist_ok=True)
 
 # If input_dir != output_dir, then we create a new output_dir and wandb_run_id
 if cfg.checkpoint_workspace.input_dir != cfg.checkpoint_workspace.output_dir:
-    assert (
-        not cfg.checkpoint_workspace.output_dir.exists()
-    ), f"checkpoint_workspace.output_dir already exists at {cfg.checkpoint_workspace.output_dir}"
+    assert not cfg.checkpoint_workspace.output_dir.exists(), f"checkpoint_workspace.output_dir already exists at {cfg.checkpoint_workspace.output_dir}"
     print(
         f"input {cfg.checkpoint_workspace.input_dir} != output {cfg.checkpoint_workspace.output_dir}. Creating new wandb_run_id"
     )
@@ -345,24 +259,6 @@ run = wandb.init(
 
 # %%
 @localscope.mfc
-def create_depth_imgs_dataset(
-    input_hdf5_filepath: str, cfg: ClassifierConfig
-) -> DepthImage_To_GraspSuccess_HDF5_Dataset:
-    assert isinstance(cfg.nerfdata_config, DepthImageNerfDataConfig)
-    assert cfg.nerfdata_config.fingertip_config is not None
-    return DepthImage_To_GraspSuccess_HDF5_Dataset(
-        input_hdf5_filepath=input_hdf5_filepath,
-        fingertip_config=cfg.nerfdata_config.fingertip_config,
-        fingertip_camera_config=cfg.nerfdata_config.fingertip_camera_config,
-        max_num_data_points=cfg.data.max_num_data_points,
-        load_depth_images_in_ram=cfg.dataloader.load_nerf_grid_inputs_in_ram,
-        load_grasp_labels_in_ram=cfg.dataloader.load_grasp_labels_in_ram,
-        load_grasp_transforms_in_ram=cfg.dataloader.load_grasp_transforms_in_ram,
-        load_nerf_configs_in_ram=cfg.dataloader.load_nerf_configs_in_ram,
-    )
-
-
-@localscope.mfc
 def create_grid_dataset(
     input_hdf5_filepath: str, cfg: ClassifierConfig
 ) -> NeRFGrid_To_GraspSuccess_HDF5_Dataset:
@@ -384,14 +280,9 @@ if cfg.create_val_test_from_train:
     print(
         f"Creating val and test datasets from train dataset: {input_dataset_full_path}"
     )
-    if USE_DEPTH_IMAGES:
-        full_dataset = create_depth_imgs_dataset(
-            input_hdf5_filepath=input_dataset_full_path, cfg=cfg
-        )
-    else:
-        full_dataset = create_grid_dataset(
-            input_hdf5_filepath=input_dataset_full_path, cfg=cfg
-        )
+    full_dataset = create_grid_dataset(
+        input_hdf5_filepath=input_dataset_full_path, cfg=cfg
+    )
 
     train_dataset, val_dataset, test_dataset = random_split(
         full_dataset,
@@ -411,26 +302,15 @@ else:
     print(
         f"Using actual val and test datasets: input_dataset_full_path = {input_dataset_full_path}, cfg.actual_val_dataset_filepath = {cfg.actual_val_dataset_filepath}, cfg.actual_test_dataset_filepath = {cfg.actual_test_dataset_filepath}"
     )
-    if USE_DEPTH_IMAGES:
-        train_dataset = create_depth_imgs_dataset(
-            input_hdf5_filepath=input_dataset_full_path, cfg=cfg
-        )
-        val_dataset = create_depth_imgs_dataset(
-            input_hdf5_filepath=str(cfg.actual_val_dataset_filepath), cfg=cfg
-        )
-        test_dataset = create_depth_imgs_dataset(
-            input_hdf5_filepath=str(cfg.actual_test_dataset_filepath), cfg=cfg
-        )
-    else:
-        train_dataset = create_grid_dataset(
-            input_hdf5_filepath=input_dataset_full_path, cfg=cfg
-        )
-        val_dataset = create_grid_dataset(
-            input_hdf5_filepath=str(cfg.actual_val_dataset_filepath), cfg=cfg
-        )
-        test_dataset = create_grid_dataset(
-            input_hdf5_filepath=str(cfg.actual_test_dataset_filepath), cfg=cfg
-        )
+    train_dataset = create_grid_dataset(
+        input_hdf5_filepath=input_dataset_full_path, cfg=cfg
+    )
+    val_dataset = create_grid_dataset(
+        input_hdf5_filepath=str(cfg.actual_val_dataset_filepath), cfg=cfg
+    )
+    test_dataset = create_grid_dataset(
+        input_hdf5_filepath=str(cfg.actual_test_dataset_filepath), cfg=cfg
+    )
 
 # %%
 print(f"Train dataset size: {len(train_dataset)}")
@@ -486,7 +366,6 @@ def sample_random_rotate_transforms_only_around_y(N: int) -> pp.LieTensor:
     return random_rotate_transforms
 
 
-
 @localscope.mfc(allowed=["PP_MATRIX_ATOL", "PP_MATRIX_RTOL"])
 def custom_collate_fn(
     batch,
@@ -499,20 +378,19 @@ def custom_collate_fn(
     (
         nerf_densities,
         nerf_densities_global,
-        passed_simulation,
-        passed_penetration_threshold,
-        passed_eval,
+        y_pick,
+        y_coll,
+        y_PGS,
         grasp_transforms,
         nerf_configs,
         grasp_configs,
-        object_y_wrt_table,
     ) = batch
 
     if debug_shuffle_labels:
-        shuffle_inds = torch.randperm(passed_simulation.shape[0])
-        passed_simulation = passed_simulation[shuffle_inds]
-        passed_penetration_threshold = passed_penetration_threshold[shuffle_inds]
-        passed_eval = passed_eval[shuffle_inds]
+        shuffle_inds = torch.randperm(y_pick.shape[0])
+        y_pick = y_pick[shuffle_inds]
+        y_coll = y_coll[shuffle_inds]
+        y_PGS = y_PGS[shuffle_inds]
 
     grasp_transforms = pp.from_matrix(
         grasp_transforms,
@@ -523,7 +401,9 @@ def custom_collate_fn(
 
     batch_size = nerf_densities.shape[0]
     if use_random_rotations:
-        random_rotate_transform = sample_random_rotate_transforms_only_around_y(N=batch_size)
+        random_rotate_transform = sample_random_rotate_transforms_only_around_y(
+            N=batch_size
+        )
     else:
         random_rotate_transform = None
 
@@ -536,104 +416,30 @@ def custom_collate_fn(
             nerf_density_threshold_value=nerf_density_threshold_value,
             grasp_configs=grasp_configs,
             nerf_densities_global=nerf_densities_global,
-            object_y_wrt_table=object_y_wrt_table,
         ),
         output=BatchDataOutput(
-            passed_simulation=passed_simulation,
-            passed_penetration_threshold=passed_penetration_threshold,
-            passed_eval=passed_eval,
-        ),
-        nerf_config=nerf_configs,
-    )
-
-
-@localscope.mfc(allowed=["PP_MATRIX_ATOL", "PP_MATRIX_RTOL"])
-def depth_image_custom_collate_fn(
-    batch,
-    fingertip_config: BaseFingertipConfig,
-    use_random_rotations: bool = True,
-    debug_shuffle_labels: bool = False,
-    nerf_density_threshold_value: Optional[float] = None,
-) -> BatchData:
-    batch = torch.utils.data.dataloader.default_collate(batch)
-    (
-        depth_uncertainty_images,
-        passed_simulation,
-        passed_penetration_threshold,
-        passed_eval,
-        grasp_transforms,
-        nerf_configs,
-        grasp_configs,
-        _,
-    ) = batch
-
-    if debug_shuffle_labels:
-        shuffle_inds = torch.randperm(passed_simulation.shape[0])
-        passed_simulation = passed_simulation[shuffle_inds]
-        passed_penetration_threshold = passed_penetration_threshold[shuffle_inds]
-        passed_eval = passed_eval[shuffle_inds]
-
-    grasp_transforms = pp.from_matrix(
-        grasp_transforms,
-        pp.SE3_type,
-        atol=PP_MATRIX_ATOL,
-        rtol=PP_MATRIX_RTOL,
-    )
-
-    batch_size = depth_uncertainty_images.shape[0]
-    if use_random_rotations:
-        random_rotate_transform = sample_random_rotate_transforms_only_around_y(N=batch_size)
-    else:
-        random_rotate_transform = None
-
-    return BatchData(
-        input=DepthImageBatchDataInput(
-            depth_uncertainty_images=depth_uncertainty_images,
-            grasp_transforms=grasp_transforms,
-            random_rotate_transform=random_rotate_transform,
-            fingertip_config=fingertip_config,
-            nerf_density_threshold_value=nerf_density_threshold_value,
-            grasp_configs=grasp_configs,
-        ),
-        output=BatchDataOutput(
-            passed_simulation=passed_simulation,
-            passed_penetration_threshold=passed_penetration_threshold,
-            passed_eval=passed_eval,
+            y_pick=y_pick,
+            y_coll=y_coll,
+            y_PGS=y_PGS,
         ),
         nerf_config=nerf_configs,
     )
 
 
 # %%
-if USE_DEPTH_IMAGES:
-    train_collate_fn = partial(
-        depth_image_custom_collate_fn,
-        fingertip_config=cfg.nerfdata_config.fingertip_config,
-        use_random_rotations=cfg.data.use_random_rotations,
-        debug_shuffle_labels=cfg.data.debug_shuffle_labels,
-        nerf_density_threshold_value=cfg.data.nerf_density_threshold_value,
-    )
-    val_test_collate_fn = partial(
-        depth_image_custom_collate_fn,
-        fingertip_config=cfg.nerfdata_config.fingertip_config,
-        use_random_rotations=False,
-        debug_shuffle_labels=cfg.data.debug_shuffle_labels,
-        nerf_density_threshold_value=cfg.data.nerf_density_threshold_value,
-    )  # Run test over actual test transforms.
-else:
-    train_collate_fn = partial(
-        custom_collate_fn,
-        fingertip_config=cfg.nerfdata_config.fingertip_config,
-        use_random_rotations=cfg.data.use_random_rotations,
-        debug_shuffle_labels=cfg.data.debug_shuffle_labels,
-        nerf_density_threshold_value=cfg.data.nerf_density_threshold_value,
-    )
-    val_test_collate_fn = partial(
-        custom_collate_fn,
-        use_random_rotations=False,
-        fingertip_config=cfg.nerfdata_config.fingertip_config,
-        nerf_density_threshold_value=cfg.data.nerf_density_threshold_value,
-    )  # Run test over actual test transforms.
+train_collate_fn = partial(
+    custom_collate_fn,
+    fingertip_config=cfg.nerfdata_config.fingertip_config,
+    use_random_rotations=cfg.data.use_random_rotations,
+    debug_shuffle_labels=cfg.data.debug_shuffle_labels,
+    nerf_density_threshold_value=cfg.data.nerf_density_threshold_value,
+)
+val_test_collate_fn = partial(
+    custom_collate_fn,
+    use_random_rotations=False,
+    fingertip_config=cfg.nerfdata_config.fingertip_config,
+    nerf_density_threshold_value=cfg.data.nerf_density_threshold_value,
+)  # Run test over actual test transforms.
 
 train_loader = DataLoader(
     train_dataset,
@@ -669,29 +475,18 @@ else:
 # %%
 @localscope.mfc
 def print_shapes(batch_data: BatchData) -> None:
-    if isinstance(batch_data.input, BatchDataInput):
-        print(f"nerf_alphas.shape: {batch_data.input.nerf_alphas.shape}")
-        print(f"coords.shape = {batch_data.input.coords.shape}")
-        print(
-            f"nerf_alphas_with_coords.shape = {batch_data.input.nerf_alphas_with_coords.shape}"
-        )
-        # print(f"nerf_alphas_with_coords_v2.shape = {batch_data.input.nerf_alphas_with_coords_v2.shape}")
-    elif isinstance(batch_data.input, DepthImageBatchDataInput):
-        print(
-            f"depth_uncertainty_images.shape: {batch_data.input.depth_uncertainty_images.shape}"
-        )
-    else:
-        raise ValueError(f"Unknown batch_data.input type: {type(batch_data.input)}")
-
+    print(f"nerf_alphas.shape: {batch_data.input.nerf_alphas.shape}")
+    print(f"coords.shape = {batch_data.input.coords.shape}")
+    print(
+        f"nerf_alphas_with_coords.shape = {batch_data.input.nerf_alphas_with_coords.shape}"
+    )
     print(
         f"augmented_grasp_transforms.shape = {batch_data.input.augmented_grasp_transforms.shape}"
     )
     print(f"grasp_transforms.shape: {batch_data.input.grasp_transforms.shape}")
-    print(f"passed_simulation.shape: {batch_data.output.passed_simulation.shape}")
-    print(
-        f"passed_penetration_threshold.shape: {batch_data.output.passed_penetration_threshold.shape}"
-    )
-    print(f"passed_eval.shape: {batch_data.output.passed_eval.shape}")
+    print(f"y_pick.shape: {batch_data.output.y_pick.shape}")
+    print(f"y_coll.shape: {batch_data.output.y_coll.shape}")
+    print(f"y_PGS.shape: {batch_data.output.y_PGS.shape}")
     print(f"len(nerf_config): {len(batch_data.nerf_config)}")
 
 
@@ -727,35 +522,31 @@ def nerf_densities_plot_example(
 
     # Extract data
     colors = batch_data.input.nerf_alphas[idx_to_visualize]
-    passed_simulation = batch_data.output.passed_simulation[idx_to_visualize].tolist()
-    passed_penetration_threshold = batch_data.output.passed_penetration_threshold[
-        idx_to_visualize
-    ].tolist()
-    passed_eval = batch_data.output.passed_eval[idx_to_visualize].tolist()
+    y_pick = batch_data.output.y_pick[idx_to_visualize].tolist()
+    y_coll = batch_data.output.y_coll[idx_to_visualize].tolist()
+    y_PGS = batch_data.output.y_PGS[idx_to_visualize].tolist()
     NUM_CLASSES = 2
-    assert_equals(len(passed_simulation), NUM_CLASSES)
-    assert_equals(len(passed_penetration_threshold), NUM_CLASSES)
-    assert_equals(len(passed_eval), NUM_CLASSES)
+    assert_equals(len(y_pick), NUM_CLASSES)
+    assert_equals(len(y_coll), NUM_CLASSES)
+    assert_equals(len(y_PGS), NUM_CLASSES)
 
     # Get probabilities of passing
-    passed_simulation = passed_simulation[1]
-    passed_penetration_threshold = passed_penetration_threshold[1]
-    passed_eval = passed_eval[1]
-    assert 0 <= passed_simulation <= 1, passed_simulation
-    assert 0 <= passed_penetration_threshold <= 1, passed_penetration_threshold
-    assert 0 <= passed_eval <= 1, passed_eval
+    y_pick = y_pick[1]
+    y_coll = y_coll[1]
+    y_PGS = y_PGS[1]
+    assert 0 <= y_pick <= 1, y_pick
+    assert 0 <= y_coll <= 1, y_coll
+    assert 0 <= y_PGS <= 1, y_PGS
 
     assert_equals(colors.shape, (NUM_FINGERS, NUM_PTS_X, NUM_PTS_Y, NUM_PTS_Z))
 
-    nerf_config_path = pathlib.Path(batch_data.nerf_config[idx_to_visualize])
-    object_code = get_object_code(nerf_config_path)
-    object_scale = get_object_scale(nerf_config_path)
+    nerf_config = pathlib.Path(batch_data.nerf_config[idx_to_visualize])
+    object_code_and_scale_str = nerf_config.parents[2].name
+    object_code, object_scale = parse_object_code_and_scale(object_code_and_scale_str)
 
     # Path to meshes
-    DEXGRASPNET_MESHDATA_ROOT = (
-        pathlib.Path(nerf_grasping.get_repo_root()) / "data" / "meshdata"
-    )
-    mesh_path = DEXGRASPNET_MESHDATA_ROOT / object_code / "coacd" / "decomposed.obj"
+    MESHDATA_ROOT = get_data_folder() / "large/meshes"
+    mesh_path = MESHDATA_ROOT / object_code / "coacd" / "decomposed.obj"
 
     print(f"Loading mesh from {mesh_path}...")
     mesh = trimesh.load(mesh_path, force="mesh")
@@ -801,198 +592,37 @@ def nerf_densities_plot_example(
     )
     # Set title to label
     fig.update_layout(
-        title_text=f"passed_simulation = {passed_simulation}, passed_penetration_threshold = {passed_penetration_threshold}, passed_eval = {passed_eval}"
+        title_text=f"y_pick = {y_pick}, y_coll = {y_coll}, y_PGS = {y_PGS}"
     )
     return fig
-
-
-@localscope.mfc(
-    allowed=[
-        "NUM_FINGERS",
-        "DEPTH_IMAGE_N_CHANNELS",
-        "DEPTH_IMAGE_HEIGHT",
-        "DEPTH_IMAGE_WIDTH",
-    ]
-)
-def depth_image_plot_example(
-    batch_data: BatchData, idx_to_visualize: int = 0, augmented: bool = False
-) -> Tuple[go.Figure, go.Figure]:
-    assert isinstance(batch_data.input, DepthImageBatchDataInput)
-
-    if augmented:
-        grasp_transforms = [
-            batch_data.input.augmented_grasp_transforms[idx_to_visualize][finger_idx]
-            .matrix()
-            .cpu()
-            .numpy()
-            for finger_idx in range(NUM_FINGERS)
-        ]
-        additional_mesh_transform = (
-            batch_data.input.random_rotate_transform[idx_to_visualize]
-            .matrix()
-            .cpu()
-            .numpy()
-            if batch_data.input.random_rotate_transform is not None
-            else None
-        )
-    else:
-        grasp_transforms = [
-            batch_data.input.grasp_transforms[idx_to_visualize][finger_idx]
-            .matrix()
-            .cpu()
-            .numpy()
-            for finger_idx in range(NUM_FINGERS)
-        ]
-        additional_mesh_transform = None
-
-    # Extract data
-    depth_uncertainty_images = batch_data.input.depth_uncertainty_images[
-        idx_to_visualize
-    ]
-    assert_equals(
-        depth_uncertainty_images.shape,
-        (NUM_FINGERS, DEPTH_IMAGE_N_CHANNELS, DEPTH_IMAGE_HEIGHT, DEPTH_IMAGE_WIDTH),
-    )
-    depth_images, uncertainty_images = (
-        depth_uncertainty_images[:, 0],
-        depth_uncertainty_images[:, 1],
-    )
-    max_depth, max_uncertainty = (
-        depth_images.max().item(),
-        uncertainty_images.max().item(),
-    )
-
-    passed_simulation = batch_data.output.passed_simulation[idx_to_visualize].tolist()
-    passed_penetration_threshold = batch_data.output.passed_penetration_threshold[
-        idx_to_visualize
-    ].tolist()
-    passed_eval = batch_data.output.passed_eval[idx_to_visualize].tolist()
-    NUM_CLASSES = 2
-    assert_equals(len(passed_simulation), NUM_CLASSES)
-    assert_equals(len(passed_penetration_threshold), NUM_CLASSES)
-    assert_equals(len(passed_eval), NUM_CLASSES)
-
-    # Get probabilities of passing
-    passed_simulation = passed_simulation[1]
-    passed_penetration_threshold = passed_penetration_threshold[1]
-    passed_eval = passed_eval[1]
-    assert 0 <= passed_simulation <= 1, passed_simulation
-    assert 0 <= passed_penetration_threshold <= 1, passed_penetration_threshold
-    assert 0 <= passed_eval <= 1, passed_eval
-
-    nerf_config_path = pathlib.Path(batch_data.nerf_config[idx_to_visualize])
-    object_code = get_object_code(nerf_config_path)
-    object_scale = get_object_scale(nerf_config_path)
-
-    # Path to meshes
-    DEXGRASPNET_MESHDATA_ROOT = (
-        pathlib.Path(nerf_grasping.get_repo_root()) / "data" / "meshdata"
-    )
-    mesh_path = DEXGRASPNET_MESHDATA_ROOT / object_code / "coacd" / "decomposed.obj"
-
-    print(f"Loading mesh from {mesh_path}...")
-    mesh = trimesh.load(mesh_path, force="mesh")
-    mesh.apply_transform(trimesh.transformations.scale_matrix(object_scale))
-    if additional_mesh_transform is not None:
-        mesh.apply_transform(additional_mesh_transform)
-
-    fig = plot_mesh_and_transforms(
-        mesh=mesh,
-        transforms=grasp_transforms,
-        num_fingers=NUM_FINGERS,
-    )
-    # Set title to label
-    fig.update_layout(
-        title_text=f"passed_simulation = {passed_simulation}, passed_penetration_threshold = {passed_penetration_threshold}, passed_eval = {passed_eval}"
-    )
-
-    titles = [
-        f"Depth {i//2}" if i % 2 == 0 else f"Uncertainty {i//2}"
-        for i in range(2 * NUM_FINGERS)
-    ]
-    fig2 = make_subplots(rows=NUM_FINGERS, cols=2, subplot_titles=titles)
-    for finger_idx in range(NUM_FINGERS):
-        row = finger_idx + 1
-        depth_image = depth_images[finger_idx].cpu().numpy()
-        uncertainty_image = uncertainty_images[finger_idx].cpu().numpy()
-
-        # Add 3 channels of this
-        N_CHANNELS = 3
-        depth_image = np.stack([depth_image] * N_CHANNELS, axis=-1)
-        uncertainty_image = np.stack([uncertainty_image] * N_CHANNELS, axis=-1)
-        assert_equals(
-            depth_image.shape, (DEPTH_IMAGE_HEIGHT, DEPTH_IMAGE_WIDTH, N_CHANNELS)
-        )
-        assert_equals(
-            uncertainty_image.shape, (DEPTH_IMAGE_HEIGHT, DEPTH_IMAGE_WIDTH, N_CHANNELS)
-        )
-
-        # Rescale
-        depth_image = (depth_image * 255 / max_depth).astype(int)
-        uncertainty_image = (uncertainty_image * 255 / max_uncertainty).astype(int)
-
-        fig2.add_trace(go.Image(z=depth_image), row=row, col=1)
-        fig2.add_trace(go.Image(z=uncertainty_image), row=row, col=2)
-
-    return fig, fig2
 
 
 # Add config var to enable / disable plotting.
 # %%
 PLOT_EXAMPLES = False
 if PLOT_EXAMPLES:
-    if USE_DEPTH_IMAGES:
-        fig, fig2 = depth_image_plot_example(
-            batch_data=EXAMPLE_BATCH_DATA, idx_to_visualize=1
-        )
-        fig.show()
-        fig2.show()
-    else:
-        fig = nerf_densities_plot_example(
-            batch_data=EXAMPLE_BATCH_DATA, idx_to_visualize=1
-        )
-        fig.show()
+    fig = nerf_densities_plot_example(batch_data=EXAMPLE_BATCH_DATA, idx_to_visualize=1)
+    fig.show()
 
 # %%
 if PLOT_EXAMPLES:
-    if USE_DEPTH_IMAGES:
-        fig, fig2 = depth_image_plot_example(
-            batch_data=EXAMPLE_BATCH_DATA, idx_to_visualize=2, augmented=True
-        )
-        fig.show()
-        fig2.show()
-    else:
-        fig = nerf_densities_plot_example(
-            batch_data=EXAMPLE_BATCH_DATA, idx_to_visualize=2, augmented=True
-        )
-        fig.show()
+    fig = nerf_densities_plot_example(
+        batch_data=EXAMPLE_BATCH_DATA, idx_to_visualize=2, augmented=True
+    )
+    fig.show()
 
 # %%
 if PLOT_EXAMPLES:
-    if USE_DEPTH_IMAGES:
-        fig, fig2 = depth_image_plot_example(
-            batch_data=EXAMPLE_BATCH_DATA, idx_to_visualize=2
-        )
-        fig.show()
-        fig2.show()
-    else:
-        fig = nerf_densities_plot_example(
-            batch_data=EXAMPLE_BATCH_DATA, idx_to_visualize=2
-        )
-        fig.show()
+    fig = nerf_densities_plot_example(batch_data=EXAMPLE_BATCH_DATA, idx_to_visualize=2)
+    fig.show()
 
 # %%
-print(f"passed_simulation = {EXAMPLE_BATCH_DATA.output.passed_simulation}")
-print(
-    f"passed_penetration_threshold = {EXAMPLE_BATCH_DATA.output.passed_penetration_threshold}"
-)
+print(f"y_pick = {EXAMPLE_BATCH_DATA.output.y_pick}")
+print(f"y_coll = {EXAMPLE_BATCH_DATA.output.y_coll}")
 
 
 # %% [markdown]
 # # Create Neural Network Model
-
-# %%
-import torch.nn as nn
 
 # %%
 # TODO(pculbert): double-check the specific instantiate call here is needed.
@@ -1000,18 +630,10 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Pull out just the CNN (without wrapping for LieTorch) for training.
 assert cfg.model_config is not None
-if USE_DEPTH_IMAGES:
-    classifier: DepthImageClassifier = (
-        cfg.model_config.get_classifier_from_camera_config(
-            camera_config=cfg.nerfdata_config.fingertip_camera_config,
-            n_tasks=cfg.task_type.n_tasks,
-        ).to(device)
-    )
-else:
-    classifier: Classifier = cfg.model_config.get_classifier_from_fingertip_config(
-        fingertip_config=cfg.nerfdata_config.fingertip_config,
-        n_tasks=cfg.task_type.n_tasks,
-    ).to(device)
+classifier: Classifier = cfg.model_config.get_classifier_from_fingertip_config(
+    fingertip_config=cfg.nerfdata_config.fingertip_config,
+    n_tasks=cfg.task_type.n_tasks,
+).to(device)
 
 # %%
 start_epoch = 0
@@ -1034,9 +656,7 @@ lr_scheduler = get_scheduler(
 
 # %%
 if cfg.checkpoint_workspace.input_dir is not None:
-    assert (
-        cfg.checkpoint_workspace.input_dir.exists()
-    ), f"checkpoint_workspace.input_dir does not exist at {cfg.checkpoint_workspace.input_dir}"
+    assert cfg.checkpoint_workspace.input_dir.exists(), f"checkpoint_workspace.input_dir does not exist at {cfg.checkpoint_workspace.input_dir}"
     print(f"Loading checkpoint ({cfg.checkpoint_workspace.input_dir})...")
     latest_checkpoint_path = cfg.checkpoint_workspace.latest_input_checkpoint_path
     assert (
@@ -1133,9 +753,9 @@ def save_checkpoint(
             "epoch": epoch,
             "classifier": classifier.state_dict(),
             "optimizer": optimizer.state_dict(),
-            "lr_scheduler": lr_scheduler.state_dict()
-            if lr_scheduler is not None
-            else None,
+            "lr_scheduler": (
+                lr_scheduler.state_dict() if lr_scheduler is not None else None
+            ),
         },
         checkpoint_filepath,
     )
@@ -1157,9 +777,9 @@ def save_checkpoint_batch(
             "batch_idx": batch_idx,
             "classifier": classifier.state_dict(),
             "optimizer": optimizer.state_dict(),
-            "lr_scheduler": lr_scheduler.state_dict()
-            if lr_scheduler is not None
-            else None,
+            "lr_scheduler": (
+                lr_scheduler.state_dict() if lr_scheduler is not None else None
+            ),
         },
         checkpoint_filepath,
     )
@@ -1168,7 +788,9 @@ def save_checkpoint_batch(
 
 # %%
 GLOBAL_BATCH_IDX = 0
-@localscope.mfc(allowed=["tqdm", "USE_DEPTH_IMAGES", "GLOBAL_BATCH_IDX"])
+
+
+@localscope.mfc(allowed=["tqdm", "GLOBAL_BATCH_IDX"])
 def _iterate_through_dataloader(
     loop_timer: LoopTimer,
     phase: Phase,
@@ -1185,8 +807,9 @@ def _iterate_through_dataloader(
     log_every_n_batches: int = 5,
 ) -> Tuple[Dict[str, List[float]], Dict[str, List[float]], Dict[str, List[float]]]:
     losses_dict = defaultdict(list)  # loss name => list of losses (one per datapoint)
-    predictions_dict, ground_truths_dict = defaultdict(list), defaultdict(
-        list
+    predictions_dict, ground_truths_dict = (
+        defaultdict(list),
+        defaultdict(list),
     )  # task name => list of predictions / ground truths (one per datapoint)
 
     assert phase in [Phase.TRAIN, Phase.VAL, Phase.TEST, Phase.EVAL_TRAIN]
@@ -1224,25 +847,7 @@ def _iterate_through_dataloader(
                 break
 
             batch_data: BatchData = batch_data.to(device)
-            if (
-                USE_DEPTH_IMAGES
-                and torch.isnan(batch_data.input.depth_uncertainty_images).any()
-            ):
-                print("!" * 80)
-                print(
-                    f"Found {torch.isnan(batch_data.input.depth_uncertainty_images).sum()} NANs in batch_data.input.depth_uncertainty_images"
-                )
-                print("Skipping batch...")
-                print("!" * 80)
-                print()
-                continue
-
-            if (
-                not USE_DEPTH_IMAGES
-                and torch.isnan(
-                    batch_data.input.nerf_alphas_with_augmented_coords
-                ).any()
-            ):
+            if torch.isnan(batch_data.input.nerf_alphas_with_augmented_coords).any():
                 print("!" * 80)
                 print(
                     f"Found {torch.isnan(batch_data.input.nerf_alphas_with_augmented_coords).sum()} NANs in batch_data.input.nerf_alphas_with_augmented_coords"
@@ -1264,22 +869,22 @@ def _iterate_through_dataloader(
                     ),
                 )
 
-                if task_type == TaskType.PASSED_SIMULATION:
-                    task_targets = [batch_data.output.passed_simulation]
-                elif task_type == TaskType.PASSED_PENETRATION_THRESHOLD:
-                    task_targets = [batch_data.output.passed_penetration_threshold]
-                elif task_type == TaskType.PASSED_EVAL:
-                    task_targets = [batch_data.output.passed_eval]
-                elif task_type == TaskType.PASSED_SIMULATION_AND_PENETRATION_THRESHOLD:
+                if task_type == TaskType.Y_PICK:
+                    task_targets = [batch_data.output.y_pick]
+                elif task_type == TaskType.Y_COLL:
+                    task_targets = [batch_data.output.y_coll]
+                elif task_type == TaskType.Y_PGS:
+                    task_targets = [batch_data.output.y_PGS]
+                elif task_type == TaskType.Y_PICK_AND_Y_COLL:
                     task_targets = [
-                        batch_data.output.passed_simulation,
-                        batch_data.output.passed_penetration_threshold,
+                        batch_data.output.y_pick,
+                        batch_data.output.y_coll,
                     ]
-                elif task_type == TaskType.PASSED_SIMULATION_AND_PENETRATION_THRESHOLD_AND_EVAL:
+                elif task_type == TaskType.Y_PICK_AND_Y_COLL_AND_Y_PGS:
                     task_targets = [
-                        batch_data.output.passed_simulation,
-                        batch_data.output.passed_penetration_threshold,
-                        batch_data.output.passed_eval,
+                        batch_data.output.y_pick,
+                        batch_data.output.y_coll,
+                        batch_data.output.y_PGS,
                     ]
                 else:
                     raise ValueError(f"Unknown task_type: {task_type}")
@@ -1433,6 +1038,7 @@ def _create_wandb_scatter_plot(
         title=title,
     )
 
+
 @localscope.mfc
 def _create_wandb_histogram_plot(
     ground_truths: List[float],
@@ -1452,9 +1058,7 @@ def _create_wandb_histogram_plot(
         unique_labels_to_preds[unique_label] = preds[idxs]
 
     # Plot histogram per label
-    for i, (unique_label, preds) in enumerate(
-        sorted(unique_labels_to_preds.items())
-    ):
+    for i, (unique_label, preds) in enumerate(sorted(unique_labels_to_preds.items())):
         axes[i].hist(preds, bins=50, alpha=0.7, color="blue")
         axes[i].set_title(f"Ground Truth: {unique_label}")
         axes[i].set_xlim(0, 1)
@@ -1754,44 +1358,38 @@ def compute_class_weight_np(
     print("Loading grasp success data for class weighting...")
     t1 = time.time()
     with h5py.File(input_dataset_full_path, "r") as hdf5_file:
-        passed_simulations_np = np.array(hdf5_file["/passed_simulation"][()])
-        passed_penetration_threshold_np = np.array(
-            hdf5_file["/passed_penetration_threshold"][()]
-        )
-        passed_eval_np = np.array(hdf5_file["/passed_eval"][()])
+        y_picks_np = np.array(hdf5_file["/y_pick"][()])
+        y_coll_np = np.array(hdf5_file["/y_coll"][()])
+        y_PGS_np = np.array(hdf5_file["/y_PGS"][()])
     t2 = time.time()
     print(f"Loaded grasp success data in {t2 - t1:.2f} s")
 
     print("Extracting training indices...")
     t3 = time.time()
     if isinstance(train_dataset, Subset):
-        passed_simulations_np = passed_simulations_np[train_dataset.indices]
-        passed_penetration_threshold_np = passed_penetration_threshold_np[
-            train_dataset.indices
-        ]
-        passed_eval_np = passed_eval_np[train_dataset.indices]
+        y_picks_np = y_picks_np[train_dataset.indices]
+        y_coll_np = y_coll_np[train_dataset.indices]
+        y_PGS_np = y_PGS_np[train_dataset.indices]
     t4 = time.time()
     print(f"Extracted training indices in {t4 - t3:.2f} s")
 
     print("Computing class weight with this data...")
     t5 = time.time()
 
-    unique_passed_simulations = get_unique_classes(passed_simulations_np)
-    unique_passed_penetration_threshold = get_unique_classes(
-        passed_penetration_threshold_np
-    )
-    unique_passed_eval = get_unique_classes(passed_eval_np)
+    unique_y_picks = get_unique_classes(y_picks_np)
+    unique_y_coll = get_unique_classes(y_coll_np)
+    unique_y_PGS = get_unique_classes(y_PGS_np)
 
     # argmax required to make binary classes
-    # passed_simulation_class_weight_np = _compute_class_weights_success_rates(
-    #     success_rates=passed_simulations_np, unique_classes=unique_passed_simulations
+    # y_pick_class_weight_np = _compute_class_weights_success_rates(
+    #     success_rates=y_picks_np, unique_classes=unique_y_picks
     # )
-    # passed_penetration_threshold_class_weight_np = _compute_class_weights_success_rates(
-    #     success_rates=passed_penetration_threshold_np,
-    #     unique_classes=unique_passed_penetration_threshold,
+    # y_coll_class_weight_np = _compute_class_weights_success_rates(
+    #     success_rates=y_coll_np,
+    #     unique_classes=unique_y_coll,
     # )
-    # passed_eval_class_weight_np = _compute_class_weights_success_rates(
-    #     success_rates=passed_eval_np, unique_classes=unique_passed_eval
+    # y_PGS_class_weight_np = _compute_class_weights_success_rates(
+    #     success_rates=y_PGS_np, unique_classes=unique_y_PGS
     # )
 
     # With soft labels, the counts of labels are a bit weird
@@ -1799,79 +1397,71 @@ def compute_class_weight_np(
     # and num of label 1 is sum(label)
     # This would be same as count if we had hard labels
     # class_weight = n_samples / (n_classes * np.bincount(y)) https://scikit-learn.org/stable/modules/generated/sklearn.utils.class_weight.compute_class_weight.html
-    assert passed_simulations_np.ndim == passed_penetration_threshold_np.ndim == passed_eval_np.ndim == 1
-    passed_simulation_class_weight_np = np.array([passed_simulations_np.shape[0] / (2 * (1 - passed_simulations_np).sum()),
-                                                  passed_simulations_np.shape[0] / (2 * passed_simulations_np.sum())])
-    passed_penetration_threshold_class_weight_np = np.array([passed_penetration_threshold_np.shape[0] / (2 * (1 - passed_penetration_threshold_np).sum()),
-                                                                passed_penetration_threshold_np.shape[0] / (2 * passed_penetration_threshold_np.sum())])
-    passed_eval_class_weight_np = np.array([passed_eval_np.shape[0] / (2 * (1 - passed_eval_np).sum()),
-                                            passed_eval_np.shape[0] / (2 * passed_eval_np.sum())])
+    assert y_picks_np.ndim == y_coll_np.ndim == y_PGS_np.ndim == 1
+    y_pick_class_weight_np = np.array(
+        [
+            y_picks_np.shape[0] / (2 * (1 - y_picks_np).sum()),
+            y_picks_np.shape[0] / (2 * y_picks_np.sum()),
+        ]
+    )
+    y_coll_class_weight_np = np.array(
+        [
+            y_coll_np.shape[0] / (2 * (1 - y_coll_np).sum()),
+            y_coll_np.shape[0] / (2 * y_coll_np.sum()),
+        ]
+    )
+    y_PGS_class_weight_np = np.array(
+        [
+            y_PGS_np.shape[0] / (2 * (1 - y_PGS_np).sum()),
+            y_PGS_np.shape[0] / (2 * y_PGS_np.sum()),
+        ]
+    )
     t6 = time.time()
     print(f"Computed class weight in {t6 - t5:.2f} s")
 
     return (
-        passed_simulation_class_weight_np,
-        passed_penetration_threshold_class_weight_np,
-        passed_eval_class_weight_np,
-        unique_passed_simulations,
-        unique_passed_penetration_threshold,
-        unique_passed_eval,
+        y_pick_class_weight_np,
+        y_coll_class_weight_np,
+        y_PGS_class_weight_np,
+        unique_y_picks,
+        unique_y_coll,
+        unique_y_PGS,
     )
 
 
 (
-    passed_simulation_class_weight,
-    passed_penetration_threshold_class_weight,
-    passed_eval_class_weight,
-    unique_passed_simulations,
-    unique_passed_penetration_threshold,
-    unique_passed_eval,
+    y_pick_class_weight,
+    y_coll_class_weight,
+    y_PGS_class_weight,
+    unique_y_picks,
+    unique_y_coll,
+    unique_y_PGS,
 ) = compute_class_weight_np(
     train_dataset=train_dataset, input_dataset_full_path=input_dataset_full_path
 )
-passed_simulation_class_weight = (
-    torch.from_numpy(passed_simulation_class_weight).float().to(device)
-)
-passed_penetration_threshold_class_weight = (
-    torch.from_numpy(passed_penetration_threshold_class_weight).float().to(device)
-)
-passed_eval_class_weight = torch.from_numpy(passed_eval_class_weight).float().to(device)
-unique_passed_simulations = (
-    torch.from_numpy(unique_passed_simulations).float().to(device)
-)
-unique_passed_penetration_threshold = (
-    torch.from_numpy(unique_passed_penetration_threshold).float().to(device)
-)
-unique_passed_eval = torch.from_numpy(unique_passed_eval).float().to(device)
-print(f"passed_simulation_class_weight = {passed_simulation_class_weight}")
-print(
-    f"passed_penetration_threshold_class_weight = {passed_penetration_threshold_class_weight}"
-)
-print(f"passed_eval_class_weight = {passed_eval_class_weight}")
-print(f"unique_passed_simulations = {unique_passed_simulations}")
-print(f"unique_passed_penetration_threshold = {unique_passed_penetration_threshold}")
-print(f"unique_passed_eval = {unique_passed_eval}")
+y_pick_class_weight = torch.from_numpy(y_pick_class_weight).float().to(device)
+y_coll_class_weight = torch.from_numpy(y_coll_class_weight).float().to(device)
+y_PGS_class_weight = torch.from_numpy(y_PGS_class_weight).float().to(device)
+unique_y_picks = torch.from_numpy(unique_y_picks).float().to(device)
+unique_y_coll = torch.from_numpy(unique_y_coll).float().to(device)
+unique_y_PGS = torch.from_numpy(unique_y_PGS).float().to(device)
+print(f"y_pick_class_weight = {y_pick_class_weight}")
+print(f"y_coll_class_weight = {y_coll_class_weight}")
+print(f"y_PGS_class_weight = {y_PGS_class_weight}")
+print(f"unique_y_picks = {unique_y_picks}")
+print(f"unique_y_coll = {unique_y_coll}")
+print(f"unique_y_PGS = {unique_y_PGS}")
 
 if cfg.training.extra_punish_false_positive_factor != 0.0:
     print(
         f"cfg.training.extra_punish_false_positive_factor = {cfg.training.extra_punish_false_positive_factor}"
     )
-    passed_simulation_class_weight[1] *= (
-        1 + cfg.training.extra_punish_false_positive_factor
-    )
-    passed_penetration_threshold_class_weight[1] *= (
-        1 + cfg.training.extra_punish_false_positive_factor
-    )
-    passed_eval_class_weight[1] *= 1 + cfg.training.extra_punish_false_positive_factor
-    print(
-        f"After adjustment, passed_simulation_class_weight: {passed_simulation_class_weight}"
-    )
-    print(
-        f"After adjustment, passed_simulation_class_weight: {passed_penetration_threshold_class_weight}"
-    )
-    print(
-        f"After adjustment, passed_simulation_class_weight: {passed_eval_class_weight}"
-    )
+    y_pick_class_weight[1] *= 1 + cfg.training.extra_punish_false_positive_factor
+    y_coll_class_weight[1] *= 1 + cfg.training.extra_punish_false_positive_factor
+    y_PGS_class_weight[1] *= 1 + cfg.training.extra_punish_false_positive_factor
+    print(f"After adjustment, y_pick_class_weight: {y_pick_class_weight}")
+    print(f"After adjustment, y_pick_class_weight: {y_coll_class_weight}")
+    print(f"After adjustment, y_pick_class_weight: {y_PGS_class_weight}")
 
 
 # %%
@@ -1985,95 +1575,95 @@ class WeightedSoftmaxL2(nn.Module):
 
 if cfg.training.loss_fn == "l1":
     print("=" * 80)
-    print(f"Using L1 loss")
+    print("Using L1 loss")
     print("=" * 80 + "\n")
-    passed_simulation_loss_fn = SoftmaxL1Loss(reduction="none")
-    passed_penetration_threshold_loss_fn = SoftmaxL1Loss(reduction="none")
-    passed_eval_loss_fn = SoftmaxL1Loss(reduction="none")
+    y_pick_loss_fn = SoftmaxL1Loss(reduction="none")
+    y_coll_loss_fn = SoftmaxL1Loss(reduction="none")
+    y_PGS_loss_fn = SoftmaxL1Loss(reduction="none")
 elif cfg.training.loss_fn == "l2":
     print("=" * 80)
-    print(f"Using L2 loss")
+    print("Using L2 loss")
     print("=" * 80 + "\n")
-    passed_simulation_loss_fn = SoftmaxL2Loss(reduction="none")
-    passed_penetration_threshold_loss_fn = SoftmaxL2Loss(reduction="none")
-    passed_eval_loss_fn = SoftmaxL2Loss(reduction="none")
+    y_pick_loss_fn = SoftmaxL2Loss(reduction="none")
+    y_coll_loss_fn = SoftmaxL2Loss(reduction="none")
+    y_PGS_loss_fn = SoftmaxL2Loss(reduction="none")
 elif cfg.training.loss_fn == "weighted_l1":
     print("=" * 80)
-    print(f"Using Weighted L1 loss")
+    print("Using Weighted L1 loss")
     print("=" * 80 + "\n")
-    passed_simulation_loss_fn = WeightedSoftmaxL1(
-        unique_label_weights=passed_simulation_class_weight,
-        unique_labels=unique_passed_simulations,
+    y_pick_loss_fn = WeightedSoftmaxL1(
+        unique_label_weights=y_pick_class_weight,
+        unique_labels=unique_y_picks,
         reduction="none",
     )
-    passed_penetration_threshold_loss_fn = WeightedSoftmaxL1(
-        unique_label_weights=passed_penetration_threshold_class_weight,
-        unique_labels=unique_passed_penetration_threshold,
+    y_coll_loss_fn = WeightedSoftmaxL1(
+        unique_label_weights=y_coll_class_weight,
+        unique_labels=unique_y_coll,
         reduction="none",
     )
-    passed_eval_loss_fn = WeightedSoftmaxL1(
-        unique_label_weights=passed_eval_class_weight,
-        unique_labels=unique_passed_eval,
+    y_PGS_loss_fn = WeightedSoftmaxL1(
+        unique_label_weights=y_PGS_class_weight,
+        unique_labels=unique_y_PGS,
         reduction="none",
     )
 elif cfg.training.loss_fn == "weighted_l2":
     print("=" * 80)
-    print(f"Using Weighted L2 loss")
+    print("Using Weighted L2 loss")
     print("=" * 80 + "\n")
-    passed_simulation_loss_fn = WeightedSoftmaxL2(
-        unique_label_weights=passed_simulation_class_weight,
-        unique_labels=unique_passed_simulations,
+    y_pick_loss_fn = WeightedSoftmaxL2(
+        unique_label_weights=y_pick_class_weight,
+        unique_labels=unique_y_picks,
         reduction="none",
     )
-    passed_penetration_threshold_loss_fn = WeightedSoftmaxL2(
-        unique_label_weights=passed_penetration_threshold_class_weight,
-        unique_labels=unique_passed_penetration_threshold,
+    y_coll_loss_fn = WeightedSoftmaxL2(
+        unique_label_weights=y_coll_class_weight,
+        unique_labels=unique_y_coll,
         reduction="none",
     )
-    passed_eval_loss_fn = WeightedSoftmaxL2(
-        unique_label_weights=passed_eval_class_weight,
-        unique_labels=unique_passed_eval,
+    y_PGS_loss_fn = WeightedSoftmaxL2(
+        unique_label_weights=y_PGS_class_weight,
+        unique_labels=unique_y_PGS,
         reduction="none",
     )
 
 elif cfg.training.loss_fn == "cross_entropy":
     print("=" * 80)
-    print(f"Using CE loss")
+    print("Using CE loss")
     print("=" * 80 + "\n")
-    passed_simulation_loss_fn = nn.CrossEntropyLoss(
-        weight=passed_simulation_class_weight,
+    y_pick_loss_fn = nn.CrossEntropyLoss(
+        weight=y_pick_class_weight,
         label_smoothing=cfg.training.label_smoothing,
         reduction="none",
     )
-    passed_penetration_threshold_loss_fn = nn.CrossEntropyLoss(
-        weight=passed_penetration_threshold_class_weight,
+    y_coll_loss_fn = nn.CrossEntropyLoss(
+        weight=y_coll_class_weight,
         label_smoothing=cfg.training.label_smoothing,
         reduction="none",
     )
-    passed_eval_loss_fn = nn.CrossEntropyLoss(
-        weight=passed_eval_class_weight,
+    y_PGS_loss_fn = nn.CrossEntropyLoss(
+        weight=y_PGS_class_weight,
         label_smoothing=cfg.training.label_smoothing,
         reduction="none",
     )
 else:
     raise ValueError("Unknown loss function")
 
-if cfg.task_type == TaskType.PASSED_SIMULATION:
-    loss_fns = [passed_simulation_loss_fn]
-elif cfg.task_type == TaskType.PASSED_PENETRATION_THRESHOLD:
-    loss_fns = [passed_penetration_threshold_loss_fn]
-elif cfg.task_type == TaskType.PASSED_EVAL:
-    loss_fns = [passed_eval_loss_fn]
-elif cfg.task_type == TaskType.PASSED_SIMULATION_AND_PENETRATION_THRESHOLD:
+if cfg.task_type == TaskType.Y_PICK:
+    loss_fns = [y_pick_loss_fn]
+elif cfg.task_type == TaskType.Y_COLL:
+    loss_fns = [y_coll_loss_fn]
+elif cfg.task_type == TaskType.Y_PGS:
+    loss_fns = [y_PGS_loss_fn]
+elif cfg.task_type == TaskType.Y_PICK_AND_Y_COLL:
     loss_fns = [
-        passed_simulation_loss_fn,
-        passed_penetration_threshold_loss_fn,
+        y_pick_loss_fn,
+        y_coll_loss_fn,
     ]
-elif cfg.task_type == TaskType.PASSED_SIMULATION_AND_PENETRATION_THRESHOLD_AND_EVAL:
+elif cfg.task_type == TaskType.Y_PICK_AND_Y_COLL_AND_Y_PGS:
     loss_fns = [
-        passed_simulation_loss_fn,
-        passed_penetration_threshold_loss_fn,
-        passed_eval_loss_fn,
+        y_pick_loss_fn,
+        y_coll_loss_fn,
+        y_PGS_loss_fn,
     ]
 else:
     raise ValueError(f"Unknown task_type: {cfg.task_type}")
@@ -2104,8 +1694,8 @@ if cfg.data.debug_shuffle_labels:
 #     DEBUG_loader = test_loader
 # else:
 #     raise ValueError(f"Unknown phase: {DEBUG_phase}")
-# 
-# 
+#
+#
 # loop_timer = LoopTimer()
 # (
 #     DEBUG_losses_dict,
@@ -2121,67 +1711,67 @@ if cfg.data.debug_shuffle_labels:
 #     task_type=cfg.task_type,
 #     max_num_batches=None,
 # )
-# 
+#
 # # %%
 # DEBUG_losses_dict.keys()
-# 
+#
 # # %%
-# DEBUG_losses_dict["passed_simulation_loss"][:10]
-# 
+# DEBUG_losses_dict["y_pick_loss"][:10]
+#
 # # %%
-# DEBUG_predictions_dict["passed_simulation"][:10]
-# 
+# DEBUG_predictions_dict["y_pick"][:10]
+#
 # # %%
-# DEBUG_ground_truths_dict["passed_simulation"][:10]
-# 
+# DEBUG_ground_truths_dict["y_pick"][:10]
+#
 # # %%
 # DEBUG_predictions_dict
-# 
+#
 # # %%
 # import matplotlib.pyplot as plt
-# 
+#
 # # Small circles
 # gaussian_noise = np.random.normal(
-#     0, 0.01, len(DEBUG_ground_truths_dict["passed_simulation"])
+#     0, 0.01, len(DEBUG_ground_truths_dict["y_pick"])
 # )
 # plt.scatter(
-#     DEBUG_ground_truths_dict["passed_simulation"] + gaussian_noise,
-#     DEBUG_predictions_dict["passed_simulation"],
+#     DEBUG_ground_truths_dict["y_pick"] + gaussian_noise,
+#     DEBUG_predictions_dict["y_pick"],
 #     s=0.1,
 # )
 # plt.xlabel("Ground Truth")
 # plt.ylabel("Prediction")
-# plt.title(f"passed_simulation Scatter Plot")
+# plt.title(f"y_pick Scatter Plot")
 # plt.show()
-# 
+#
 # # %%
-# np.unique(DEBUG_ground_truths_dict["passed_simulation"], return_counts=True)
-# 
+# np.unique(DEBUG_ground_truths_dict["y_pick"], return_counts=True)
+#
 # # %%
-# unique_labels = np.unique(DEBUG_ground_truths_dict["passed_simulation"])
+# unique_labels = np.unique(DEBUG_ground_truths_dict["y_pick"])
 # fig, axes = plt.subplots(len(unique_labels), 1, figsize=(10, 10))
 # axes = axes.flatten()
-# 
+#
 # unique_label_to_preds = {}
 # for i, unique_val in enumerate(unique_labels):
-#     preds = np.array(DEBUG_predictions_dict["passed_simulation"])
-#     idxs = np.array(DEBUG_ground_truths_dict["passed_simulation"]) == unique_val
+#     preds = np.array(DEBUG_predictions_dict["y_pick"])
+#     idxs = np.array(DEBUG_ground_truths_dict["y_pick"]) == unique_val
 #     unique_label_to_preds[unique_val] = preds[idxs]
-# 
+#
 # for i, (unique_label, preds) in enumerate(sorted(unique_label_to_preds.items())):
 #     # axes[i].hist(preds, bins=50, alpha=0.7, color="blue", log=True)
 #     axes[i].hist(preds, bins=50, alpha=0.7, color="blue")
 #     axes[i].set_title(f"Ground Truth: {unique_label}")
 #     axes[i].set_xlim(0, 1)
-# 
+#
 # # Matching ylims
 # max_y_val = max(ax.get_ylim()[1] for ax in axes)
 # for i in range(len(axes)):
 #     axes[i].set_ylim(0, max_y_val)
-# 
+#
 # fig.tight_layout()
-# 
-# 
+#
+#
 # # %%
 # DEBUG_log_dict = create_log_dict(
 #     loop_timer=loop_timer,
@@ -2192,17 +1782,17 @@ if cfg.data.debug_shuffle_labels:
 #     ground_truths_dict=DEBUG_ground_truths_dict,
 #     optimizer=optimizer,
 # )
-# 
+#
 # # %%
 # DEBUG_log_dict[f"{DEBUG_phase.name.lower()}_loss"]
-# 
+#
 # # %%
 # DEBUG_log_dict_modified = {f"{k}_v2": v for k, v in DEBUG_log_dict.items()}
-# 
+#
 # # %%
 # wandb.log(DEBUG_log_dict_modified)
-# 
-# 
+#
+#
 # # %%
 # loop_timer = LoopTimer()
 # (
@@ -2219,15 +1809,15 @@ if cfg.data.debug_shuffle_labels:
 #     task_type=cfg.task_type,
 #     max_num_batches=10,
 # )
-# 
+#
 # # %%
 # loss_names = [
-#     "passed_simulation_loss",
-#     "passed_penetration_threshold_loss",
+#     "y_pick_loss",
+#     "y_coll_loss",
 # ]
 # from plotly.subplots import make_subplots
 # import plotly.graph_objects as go
-# 
+#
 # fig = make_subplots(rows=len(loss_names), cols=1, subplot_titles=loss_names)
 # for i, loss_name in enumerate(loss_names):
 #     fig.add_trace(
@@ -2236,13 +1826,13 @@ if cfg.data.debug_shuffle_labels:
 #         col=1,
 #     )
 # fig.show()
-# 
-# 
+#
+#
 # # %%
 # def plot_distribution(data: np.ndarray, name: str) -> None:
 #     # Calculating statistics
 #     import scipy.stats as stats
-# 
+#
 #     data = np.array(data)
 #     mean = np.mean(data)
 #     max_value = np.max(data)
@@ -2254,12 +1844,12 @@ if cfg.data.debug_shuffle_labels:
 #     iqr = stats.iqr(data)  # Interquartile range
 #     percentile_25 = np.percentile(data, 25)
 #     percentile_75 = np.percentile(data, 75)
-# 
+#
 #     import matplotlib.pyplot as plt
-# 
+#
 #     # Create histogram
 #     plt.hist(data, bins=50, alpha=0.7, color="blue", log=True)
-# 
+#
 #     # Printing results
 #     print(
 #         f"Mean: {mean}, Max: {max_value}, Min: {min_value}, Range: {data_range}, Standard Deviation: {std_dev}"
@@ -2267,7 +1857,7 @@ if cfg.data.debug_shuffle_labels:
 #     print(
 #         f"Median: {median}, Mode: {mode}, IQR: {iqr}, 25th Percentile: {percentile_25}, 75th Percentile: {percentile_75}"
 #     )
-# 
+#
 #     # Add lines for mean, median, and mode
 #     plt.axvline(
 #         mean, color="red", linestyle="dashed", linewidth=2, label=f"Mean: {mean:.4f}"
@@ -2282,7 +1872,7 @@ if cfg.data.debug_shuffle_labels:
 #     plt.axvline(
 #         mode, color="yellow", linestyle="dashed", linewidth=2, label=f"Mode: {mode:.4f}"
 #     )
-# 
+#
 #     # Add lines for percentiles
 #     plt.axvline(
 #         percentile_25,
@@ -2298,7 +1888,7 @@ if cfg.data.debug_shuffle_labels:
 #         linewidth=2,
 #         label=f"75th percentile: {percentile_75:.4f}",
 #     )
-# 
+#
 #     # Add standard deviation
 #     plt.axvline(
 #         mean - std_dev,
@@ -2308,23 +1898,23 @@ if cfg.data.debug_shuffle_labels:
 #         label=f"Std Dev: {std_dev:.4f}",
 #     )
 #     plt.axvline(mean + std_dev, color="cyan", linestyle="dashdot", linewidth=2)
-# 
+#
 #     # Add legend
 #     plt.legend()
 #     plt.title(f"{name} histogram")
-# 
+#
 #     # Show plot
 #     plt.show()
-# 
-# 
+#
+#
 # plot_distribution(
-#     data=val_losses_dict["passed_penetration_threshold_loss"],
-#     name="passed_penetration_threshold_loss",
+#     data=val_losses_dict["y_coll_loss"],
+#     name="y_coll_loss",
 # )
-# 
+#
 # # %%
 # plot_distribution(
-#     data=val_losses_dict["passed_simulation_loss"], name="passed_simulation_loss"
+#     data=val_losses_dict["y_pick_loss"], name="y_pick_loss"
 # )
 
 # %%

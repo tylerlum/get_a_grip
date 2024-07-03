@@ -5,11 +5,12 @@ from dataclasses import dataclass
 from typing import Optional
 
 import tyro
+from tqdm import tqdm
+
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     is_object_code_and_scale_str,
 )
-from tqdm import tqdm
 
 
 @dataclass

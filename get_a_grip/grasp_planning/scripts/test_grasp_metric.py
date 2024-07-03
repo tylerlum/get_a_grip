@@ -1,27 +1,26 @@
-from nerf_grasping.config.grasp_metric_config import GraspMetricConfig
-from nerf_grasping.optimizer_utils import (
-    GraspMetric,
-    DepthImageGraspMetric,
-    AllegroGraspConfig,
-)
-from nerf_grasping.config.nerfdata_config import DepthImageNerfDataConfig
-from tqdm import tqdm
-import nerf_grasping
-import tyro
 import pathlib
-import numpy as np
-from typing import Optional
 from dataclasses import dataclass
-import torch
+from typing import Optional
+
 import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import tyro
+from tqdm import tqdm
+
+from get_a_grip import get_data_folder
+from get_a_grip.grasp_planning.config.grasp_metric_config import GraspMetricConfig
+from get_a_grip.grasp_planning.utils.optimizer_utils import (
+    AllegroGraspConfig,
+    GraspMetric,
+)
 
 
 @dataclass
 class Args:
     grasp_metric: GraspMetricConfig
     grasp_config_dict_path: pathlib.Path = (
-        pathlib.Path(nerf_grasping.get_repo_root())
-        / "data"
+        get_data_folder()
         / "2023-01-03_mugs_smaller0-075_noise_lightshake_mid_opt"
         / "evaled_grasp_config_dicts"
         / "core-mug-10f6e09036350e92b3f21f1137c3c347_0_0750.npy"
@@ -42,17 +41,9 @@ def main(cfg: Args):
     grasp_config = AllegroGraspConfig.from_grasp_config_dict(grasp_config_dict)
 
     # Create grasp metric
-    USE_DEPTH_IMAGES = isinstance(
-        cfg.grasp_metric.classifier_config.nerfdata_config, DepthImageNerfDataConfig
-    )
-    if USE_DEPTH_IMAGES:
-        grasp_metric = DepthImageGraspMetric.from_config(
-            cfg.grasp_metric,
-        ).to(device)
-    else:
-        grasp_metric = GraspMetric.from_config(
-            cfg.grasp_metric,
-        ).to(device)
+    grasp_metric = GraspMetric.from_config(
+        cfg.grasp_metric,
+    ).to(device)
     grasp_metric = grasp_metric.to(device)
     grasp_metric.eval()
 
@@ -61,15 +52,25 @@ def main(cfg: Args):
         predicted_pass_prob_list = []
         n_batches = len(grasp_config) // cfg.batch_size
         for batch_i in tqdm(range(n_batches)):
-            batch_grasp_config = grasp_config[batch_i * cfg.batch_size : (batch_i + 1) * cfg.batch_size].to(device)
-            predicted_failure_prob = grasp_metric.get_failure_probability(batch_grasp_config)
+            batch_grasp_config = grasp_config[
+                batch_i * cfg.batch_size : (batch_i + 1) * cfg.batch_size
+            ].to(device)
+            predicted_failure_prob = grasp_metric.get_failure_probability(
+                batch_grasp_config
+            )
             predicted_pass_prob = 1 - predicted_failure_prob
-            predicted_pass_prob_list += predicted_pass_prob.detach().cpu().numpy().tolist()
+            predicted_pass_prob_list += (
+                predicted_pass_prob.detach().cpu().numpy().tolist()
+            )
         if n_batches * cfg.batch_size < len(grasp_config):
             batch_grasp_config = grasp_config[n_batches * cfg.batch_size :].to(device)
-            predicted_failure_prob = grasp_metric.get_failure_probability(batch_grasp_config)
+            predicted_failure_prob = grasp_metric.get_failure_probability(
+                batch_grasp_config
+            )
             predicted_pass_prob = 1 - predicted_failure_prob
-            predicted_pass_prob_list += predicted_pass_prob.detach().cpu().numpy().tolist()
+            predicted_pass_prob_list += (
+                predicted_pass_prob.detach().cpu().numpy().tolist()
+            )
     print(f"Grasp predicted_pass_prob_list: {predicted_pass_prob_list}")
 
     # Ensure grasp_config was not modified
@@ -81,11 +82,11 @@ def main(cfg: Args):
         ), f"Key {key} was modified!"
 
     # Compare to ground truth
-    passed_eval = grasp_config_dict["passed_eval"]
-    print(f"Passed eval: {passed_eval}")
+    y_PGS = grasp_config_dict["y_PGS"]
+    print(f"Passed eval: {y_PGS}")
 
     # Plot predicted vs. ground truth
-    plt.scatter(passed_eval, predicted_pass_prob_list, label="Predicted")
+    plt.scatter(y_PGS, predicted_pass_prob_list, label="Predicted")
     plt.plot([0, 1], [0, 1], c="r", label="Ground truth")
     plt.xlabel("Ground truth")
     plt.ylabel("Predicted")

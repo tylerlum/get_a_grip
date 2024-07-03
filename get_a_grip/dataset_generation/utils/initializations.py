@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional
 import transforms3d
 import trimesh as tm
+
 from get_a_grip.dataset_generation.utils.allegro_hand_info import (
     ALLEGRO_HAND_JOINT_ANGLES_MU,
     ALLEGRO_HAND_ROTATION,

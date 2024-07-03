@@ -1,8 +1,9 @@
 from typing import Tuple
+
 import torch
 import torch.nn as nn
 
-from nerf_grasping.dexdiffuser.fc_resblock import FCResBlock
+from get_a_grip.model_training.models.components.fc_resblock import FCResBlock
 
 DEFAULT_LATENT_DIM = 5  # From FFHNet paper
 

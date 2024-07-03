@@ -1,48 +1,28 @@
 from __future__ import annotations
+
+import pathlib
 from dataclasses import dataclass, field
-from typing import Optional, Literal, Tuple, List, Union
-from nerf_grasping.config.fingertip_config import UnionFingertipConfig
-from nerf_grasping.classifier import (
-    CNN_3D_XYZXYZ_Classifier,
-    CNN_3D_XYZXYZY_Classifier,
-    CNN_3D_XYZY_Classifier,
-    CNN_3D_XYZ_Classifier,
-    CNN_3D_XYZ_Global_CNN_Classifier,
-    CNN_3D_XYZ_Global_CNN_Cropped_Classifier,
-    CNN_3D_XYZ_Global_MLP_Classifier,
-    CNN_2D_1D_Classifier,
-    Simple_CNN_2D_1D_Classifier,
-    Simple_CNN_1D_2D_Classifier,
-    Simple_CNN_LSTM_Classifier,
-    DepthImage_CNN_2D_Classifier,
-    Classifier,
-    DepthImageClassifier,
-    ResnetType2d,
-    ConvOutputTo1D,
-)
-from nerf_grasping.learned_metric.DexGraspNet_batch_data import (
-    ConditioningType,
-)
-from nerf_grasping.config.base import WandbConfig, CONFIG_DATETIME_STR
-from nerf_grasping.config.nerfdata_config import (
-    BaseNerfDataConfig,
-    GridNerfDataConfig,
-    DepthImageNerfDataConfig,
-    EvenlySpacedFingertipConfig,
-    CameraConfig,
-)
-from nerf_grasping.dataset.nerf_densities_global_config import (
+from enum import Enum, auto
+from typing import List, Literal, Optional, Tuple
+
+import tyro
+
+from get_a_grip.model_training.config.base import CONFIG_DATETIME_STR, WandbConfig
+from get_a_grip.model_training.config.fingertip_config import UnionFingertipConfig
+from get_a_grip.model_training.config.nerf_densities_global_config import (
     NERF_DENSITIES_GLOBAL_NUM_X,
     NERF_DENSITIES_GLOBAL_NUM_Y,
     NERF_DENSITIES_GLOBAL_NUM_Z,
-    NERF_DENSITIES_GLOBAL_NUM_X_CROPPED,
-    NERF_DENSITIES_GLOBAL_NUM_Y_CROPPED,
-    NERF_DENSITIES_GLOBAL_NUM_Z_CROPPED,
 )
-
-from enum import Enum, auto
-import tyro
-import pathlib
+from get_a_grip.model_training.config.nerfdata_config import (
+    BaseNerfDataConfig,
+    GridNerfDataConfig,
+)
+from get_a_grip.model_training.models.classifier import (
+    Classifier,
+    CNN_3D_XYZ_Classifier,
+    CNN_3D_XYZ_Global_CNN_Classifier,
+)
 
 DEFAULT_WANDB_PROJECT = "learned_metric"
 
@@ -50,11 +30,11 @@ DEFAULT_WANDB_PROJECT = "learned_metric"
 class TaskType(Enum):
     """Enum for task type."""
 
-    PASSED_SIMULATION = auto()
-    PASSED_PENETRATION_THRESHOLD = auto()
-    PASSED_EVAL = auto()
-    PASSED_SIMULATION_AND_PENETRATION_THRESHOLD = auto()
-    PASSED_SIMULATION_AND_PENETRATION_THRESHOLD_AND_EVAL = auto()
+    Y_PICK = auto()
+    Y_COLL = auto()
+    Y_PGS = auto()
+    Y_PICK_AND_Y_COLL = auto()
+    Y_PICK_AND_Y_COLL_AND_Y_PGS = auto()
 
     @property
     def n_tasks(self) -> int:
@@ -62,22 +42,22 @@ class TaskType(Enum):
 
     @property
     def task_names(self) -> List[str]:
-        if self == TaskType.PASSED_SIMULATION:
-            return ["passed_simulation"]
-        elif self == TaskType.PASSED_PENETRATION_THRESHOLD:
-            return ["passed_penetration_threshold"]
-        elif self == TaskType.PASSED_EVAL:
-            return ["passed_eval"]
-        elif self == TaskType.PASSED_SIMULATION_AND_PENETRATION_THRESHOLD:
+        if self == TaskType.Y_PICK:
+            return ["y_pick"]
+        elif self == TaskType.Y_COLL:
+            return ["y_coll"]
+        elif self == TaskType.Y_PGS:
+            return ["y_PGS"]
+        elif self == TaskType.Y_PICK_AND_Y_COLL:
             return [
-                "passed_simulation",
-                "passed_penetration_threshold",
+                "y_pick",
+                "y_coll",
             ]
-        elif self == TaskType.PASSED_SIMULATION_AND_PENETRATION_THRESHOLD_AND_EVAL:
+        elif self == TaskType.Y_PICK_AND_Y_COLL_AND_Y_PGS:
             return [
-                "passed_simulation",
-                "passed_penetration_threshold",
-                "passed_eval",
+                "y_pick",
+                "y_coll",
+                "y_PGS",
             ]
         else:
             raise ValueError(f"Unknown task_type: {self}")
@@ -192,7 +172,7 @@ class CheckpointWorkspaceConfig:
     """Parameters for paths to checkpoints."""
 
     root_dir: pathlib.Path = pathlib.Path(
-        "Train_DexGraspNet_NeRF_Grasp_Metric_workspaces"
+        "nerf_grasp_evaluator_workspaces"
     )
     """Root directory for checkpoints."""
 
@@ -279,122 +259,6 @@ class ClassifierModelConfig:
     ) -> Classifier:
         """Helper method to return the correct classifier from config."""
         raise NotImplementedError("Implement in subclass.")
-
-
-@dataclass(frozen=True)
-class CNN_3D_XYZY_ModelConfig(ClassifierModelConfig):
-    """Parameters for the CNN_3D_XYZY_Classifier."""
-
-    conv_channels: List[int]
-    """List of channels for each convolutional layer. Length specifies number of layers."""
-
-    mlp_hidden_layers: List[int]
-    """List of hidden layer sizes for the MLP. Length specifies number of layers."""
-
-    n_fingers: int = 4
-    """Number of fingers."""
-
-    def input_shape_from_fingertip_config(self, fingertip_config: UnionFingertipConfig):
-        n_density_channels = 1
-        n_xyz_channels = 3
-        n_y_channels = 1
-        return [
-            n_density_channels + n_xyz_channels + n_y_channels,
-            fingertip_config.num_pts_x,
-            fingertip_config.num_pts_y,
-            fingertip_config.num_pts_z,
-        ]
-
-    def get_classifier_from_fingertip_config(
-        self, fingertip_config: UnionFingertipConfig, n_tasks: int
-    ) -> Classifier:
-        """Helper method to return the correct classifier from config."""
-
-        input_shape = self.input_shape_from_fingertip_config(fingertip_config)
-        return CNN_3D_XYZY_Classifier(
-            input_shape=input_shape,
-            n_fingers=fingertip_config.n_fingers,
-            n_tasks=n_tasks,
-            conv_channels=self.conv_channels,
-            mlp_hidden_layers=self.mlp_hidden_layers,
-        )
-
-
-@dataclass(frozen=True)
-class CNN_3D_XYZXYZY_ModelConfig(ClassifierModelConfig):
-    """Parameters for the CNN_3D_XYZXYZY_Classifier."""
-
-    conv_channels: List[int]
-    """List of channels for each convolutional layer. Length specifies number of layers."""
-
-    mlp_hidden_layers: List[int]
-    """List of hidden layer sizes for the MLP. Length specifies number of layers."""
-
-    n_fingers: int = 4
-    """Number of fingers."""
-
-    def input_shape_from_fingertip_config(self, fingertip_config: UnionFingertipConfig):
-        n_density_channels = 1
-        n_xyz_channels = 3
-        n_y_channels = 1
-        return [
-            n_density_channels + n_xyz_channels + n_xyz_channels + n_y_channels,
-            fingertip_config.num_pts_x,
-            fingertip_config.num_pts_y,
-            fingertip_config.num_pts_z,
-        ]
-
-    def get_classifier_from_fingertip_config(
-        self, fingertip_config: UnionFingertipConfig, n_tasks: int
-    ) -> Classifier:
-        """Helper method to return the correct classifier from config."""
-
-        input_shape = self.input_shape_from_fingertip_config(fingertip_config)
-        return CNN_3D_XYZXYZY_Classifier(
-            input_shape=input_shape,
-            n_fingers=fingertip_config.n_fingers,
-            n_tasks=n_tasks,
-            conv_channels=self.conv_channels,
-            mlp_hidden_layers=self.mlp_hidden_layers,
-        )
-
-
-@dataclass(frozen=True)
-class CNN_3D_XYZXYZ_ModelConfig(ClassifierModelConfig):
-    """Parameters for the CNN_3D_XYZXYZ_Classifier."""
-
-    conv_channels: List[int]
-    """List of channels for each convolutional layer. Length specifies number of layers."""
-
-    mlp_hidden_layers: List[int]
-    """List of hidden layer sizes for the MLP. Length specifies number of layers."""
-
-    n_fingers: int = 4
-    """Number of fingers."""
-
-    def input_shape_from_fingertip_config(self, fingertip_config: UnionFingertipConfig):
-        n_density_channels = 1
-        n_xyz_channels = 3
-        return [
-            n_density_channels + n_xyz_channels + n_xyz_channels,
-            fingertip_config.num_pts_x,
-            fingertip_config.num_pts_y,
-            fingertip_config.num_pts_z,
-        ]
-
-    def get_classifier_from_fingertip_config(
-        self, fingertip_config: UnionFingertipConfig, n_tasks: int
-    ) -> Classifier:
-        """Helper method to return the correct classifier from config."""
-
-        input_shape = self.input_shape_from_fingertip_config(fingertip_config)
-        return CNN_3D_XYZXYZ_Classifier(
-            input_shape=input_shape,
-            n_fingers=fingertip_config.n_fingers,
-            n_tasks=n_tasks,
-            conv_channels=self.conv_channels,
-            mlp_hidden_layers=self.mlp_hidden_layers,
-        )
 
 
 @dataclass(frozen=True)
@@ -493,313 +357,6 @@ class CNN_3D_XYZ_Global_CNN_ModelConfig(ClassifierModelConfig):
         )
 
 
-@dataclass(frozen=True)
-class CNN_3D_XYZ_Global_CNN_Cropped_ModelConfig(ClassifierModelConfig):
-    """Parameters for the CNN_3D_XYZ_Global_CNN_Cropped_Classifier."""
-
-    conv_channels: List[int]
-    """List of channels for each convolutional layer. Length specifies number of layers."""
-
-    mlp_hidden_layers: List[int]
-    """List of hidden layer sizes for the MLP. Length specifies number of layers."""
-
-    global_conv_channels: List[int]
-    """List of channels for each convolutional layer for the global CNN. Length specifies number of layers."""
-
-    n_fingers: int = 4
-    """Number of fingers."""
-
-    def input_shape_from_fingertip_config(self, fingertip_config: UnionFingertipConfig):
-        n_density_channels = 1
-        n_xyz_channels = 3
-        return [
-            n_density_channels + n_xyz_channels,
-            fingertip_config.num_pts_x,
-            fingertip_config.num_pts_y,
-            fingertip_config.num_pts_z,
-        ]
-
-    def global_input_shape(self):
-        n_density_channels = 1
-        n_xyz_channels = 3
-        return (
-            n_density_channels + n_xyz_channels,
-            NERF_DENSITIES_GLOBAL_NUM_X_CROPPED,
-            NERF_DENSITIES_GLOBAL_NUM_Y_CROPPED,
-            NERF_DENSITIES_GLOBAL_NUM_Z_CROPPED,
-        )
-
-    def get_classifier_from_fingertip_config(
-        self,
-        fingertip_config: UnionFingertipConfig,
-        n_tasks: int,
-    ) -> Classifier:
-        """Helper method to return the correct classifier from config."""
-
-        input_shape = self.input_shape_from_fingertip_config(fingertip_config)
-        global_input_shape = self.global_input_shape()
-        return CNN_3D_XYZ_Global_CNN_Cropped_Classifier(
-            input_shape=input_shape,
-            n_fingers=fingertip_config.n_fingers,
-            n_tasks=n_tasks,
-            conv_channels=self.conv_channels,
-            mlp_hidden_layers=self.mlp_hidden_layers,
-            global_input_shape=global_input_shape,
-            global_conv_channels=self.global_conv_channels,
-        )
-
-
-
-@dataclass(frozen=True)
-class CNN_3D_XYZ_Global_MLP_ModelConfig(ClassifierModelConfig):
-    """Parameters for the CNN_3D_XYZ_Global_MLP_Classifier."""
-
-    conv_channels: List[int]
-    """List of channels for each convolutional layer. Length specifies number of layers."""
-
-    mlp_hidden_layers: List[int]
-    """List of hidden layer sizes for the MLP. Length specifies number of layers."""
-
-    global_mlp_hidden_layers: List[int]
-    """List of hidden layer sizes for the MLP for the global CNN. Length specifies number of layers."""
-
-    n_fingers: int = 4
-    """Number of fingers."""
-
-    def input_shape_from_fingertip_config(self, fingertip_config: UnionFingertipConfig):
-        n_density_channels = 1
-        n_xyz_channels = 3
-        return [
-            n_density_channels + n_xyz_channels,
-            fingertip_config.num_pts_x,
-            fingertip_config.num_pts_y,
-            fingertip_config.num_pts_z,
-        ]
-
-    def global_input_shape(self):
-        return (NERF_DENSITIES_GLOBAL_NUM_X * NERF_DENSITIES_GLOBAL_NUM_Y * NERF_DENSITIES_GLOBAL_NUM_Z,)
-
-    def get_classifier_from_fingertip_config(
-        self,
-        fingertip_config: UnionFingertipConfig,
-        n_tasks: int,
-    ) -> Classifier:
-        """Helper method to return the correct classifier from config."""
-
-        input_shape = self.input_shape_from_fingertip_config(fingertip_config)
-        global_input_shape = self.global_input_shape()
-        return CNN_3D_XYZ_Global_MLP_Classifier(
-            input_shape=input_shape,
-            n_fingers=fingertip_config.n_fingers,
-            n_tasks=n_tasks,
-            conv_channels=self.conv_channels,
-            mlp_hidden_layers=self.mlp_hidden_layers,
-            global_input_shape=global_input_shape,
-            global_mlp_hidden_layers=self.global_mlp_hidden_layers,
-        )
-
-
-@dataclass(frozen=True)
-class CNN_2D_1D_ModelConfig(ClassifierModelConfig):
-    """Parameters for the CNN_2D_1D_Classifier."""
-
-    conv_2d_film_hidden_layers: List[int]
-    mlp_hidden_layers: List[int]
-    conditioning_type: ConditioningType
-    use_pretrained_2d: bool
-    resnet_type_2d: ResnetType2d
-    pooling_method_2d: ConvOutputTo1D
-    n_fingers: int = 4
-
-    @classmethod
-    def grid_shape_from_fingertip_config(
-        self, fingertip_config: UnionFingertipConfig
-    ) -> List[int]:
-        return [
-            fingertip_config.num_pts_x,
-            fingertip_config.num_pts_y,
-            fingertip_config.num_pts_z,
-        ]
-
-    def get_classifier_from_fingertip_config(
-        self,
-        fingertip_config: UnionFingertipConfig,
-        n_tasks: int,
-    ) -> Classifier:
-        """Helper method to return the correct classifier from config."""
-
-        return CNN_2D_1D_Classifier(
-            conditioning_type=self.conditioning_type,
-            grid_shape=self.grid_shape_from_fingertip_config(fingertip_config),
-            n_fingers=self.n_fingers,
-            n_tasks=n_tasks,
-            conv_2d_film_hidden_layers=self.conv_2d_film_hidden_layers,
-            mlp_hidden_layers=self.mlp_hidden_layers,
-            use_pretrained_2d=self.use_pretrained_2d,
-            resnet_type_2d=self.resnet_type_2d,
-            pooling_method_2d=self.pooling_method_2d,
-        )
-
-
-@dataclass(frozen=True)
-class Simple_CNN_2D_1D_ModelConfig(ClassifierModelConfig):
-    mlp_hidden_layers: List[int]
-    conv_2d_channels: List[int]
-    conv_1d_channels: List[int]
-    film_2d_hidden_layers: List[int]
-    film_1d_hidden_layers: List[int]
-    mlp_hidden_layers: List[int]
-    conditioning_type: ConditioningType
-    n_fingers: int = 4
-
-    @classmethod
-    def grid_shape_from_fingertip_config(
-        self, fingertip_config: UnionFingertipConfig
-    ) -> List[int]:
-        return [
-            fingertip_config.num_pts_x,
-            fingertip_config.num_pts_y,
-            fingertip_config.num_pts_z,
-        ]
-
-    def get_classifier_from_fingertip_config(
-        self,
-        fingertip_config: UnionFingertipConfig,
-        n_tasks: int,
-    ) -> Classifier:
-        """Helper method to return the correct classifier from config."""
-
-        return Simple_CNN_2D_1D_Classifier(
-            conditioning_type=self.conditioning_type,
-            grid_shape=self.grid_shape_from_fingertip_config(fingertip_config),
-            n_fingers=self.n_fingers,
-            n_tasks=n_tasks,
-            mlp_hidden_layers=self.mlp_hidden_layers,
-            conv_2d_channels=self.conv_2d_channels,
-            conv_1d_channels=self.conv_1d_channels,
-            film_2d_hidden_layers=self.film_2d_hidden_layers,
-            film_1d_hidden_layers=self.film_1d_hidden_layers,
-        )
-
-
-@dataclass(frozen=True)
-class Simple_CNN_1D_2D_ModelConfig(ClassifierModelConfig):
-    mlp_hidden_layers: List[int]
-    conv_2d_channels: List[int]
-    conv_1d_channels: List[int]
-    film_2d_hidden_layers: List[int]
-    film_1d_hidden_layers: List[int]
-    mlp_hidden_layers: List[int]
-    conditioning_type: ConditioningType
-    n_fingers: int = 4
-
-    @classmethod
-    def grid_shape_from_fingertip_config(
-        self, fingertip_config: UnionFingertipConfig
-    ) -> List[int]:
-        return [
-            fingertip_config.num_pts_x,
-            fingertip_config.num_pts_y,
-            fingertip_config.num_pts_z,
-        ]
-
-    def get_classifier_from_fingertip_config(
-        self,
-        fingertip_config: UnionFingertipConfig,
-        n_tasks: int,
-    ) -> Classifier:
-        """Helper method to return the correct classifier from config."""
-
-        return Simple_CNN_1D_2D_Classifier(
-            conditioning_type=self.conditioning_type,
-            grid_shape=self.grid_shape_from_fingertip_config(fingertip_config),
-            n_fingers=self.n_fingers,
-            n_tasks=n_tasks,
-            mlp_hidden_layers=self.mlp_hidden_layers,
-            conv_2d_channels=self.conv_2d_channels,
-            conv_1d_channels=self.conv_1d_channels,
-            film_2d_hidden_layers=self.film_2d_hidden_layers,
-            film_1d_hidden_layers=self.film_1d_hidden_layers,
-        )
-
-
-@dataclass(frozen=True)
-class Simple_CNN_LSTM_ModelConfig(ClassifierModelConfig):
-    mlp_hidden_layers: List[int]
-    conv_2d_channels: List[int]
-    film_2d_hidden_layers: List[int]
-    lstm_hidden_size: int
-    num_lstm_layers: int
-    conditioning_type: ConditioningType
-    n_fingers: int = 4
-
-    @classmethod
-    def grid_shape_from_fingertip_config(
-        self, fingertip_config: UnionFingertipConfig
-    ) -> List[int]:
-        return [
-            fingertip_config.num_pts_x,
-            fingertip_config.num_pts_y,
-            fingertip_config.num_pts_z,
-        ]
-
-    def get_classifier_from_fingertip_config(
-        self,
-        fingertip_config: UnionFingertipConfig,
-        n_tasks: int,
-    ) -> Classifier:
-        """Helper method to return the correct classifier from config."""
-
-        return Simple_CNN_LSTM_Classifier(
-            conditioning_type=self.conditioning_type,
-            grid_shape=self.grid_shape_from_fingertip_config(fingertip_config),
-            n_fingers=self.n_fingers,
-            n_tasks=n_tasks,
-            mlp_hidden_layers=self.mlp_hidden_layers,
-            conv_2d_channels=self.conv_2d_channels,
-            film_2d_hidden_layers=self.film_2d_hidden_layers,
-            lstm_hidden_size=self.lstm_hidden_size,
-            num_lstm_layers=self.num_lstm_layers,
-        )
-
-
-@dataclass(frozen=True)
-class DepthImage_CNN_2D_ModelConfig(ClassifierModelConfig):
-    # TODO: should we make a new base ClassifierModelConfig for depth images?
-
-    conv_2d_film_hidden_layers: List[int]
-    mlp_hidden_layers: List[int]
-    conditioning_type: ConditioningType
-    use_pretrained_2d: bool
-    resnet_type_2d: ResnetType2d
-    pooling_method_2d: ConvOutputTo1D
-    n_fingers: int = 4
-
-    def get_classifier_from_camera_config(
-        self,
-        camera_config: CameraConfig,
-        n_tasks: int,
-    ) -> DepthImageClassifier:
-        """Helper method to return the correct classifier from config."""
-        NUM_CHANNELS_DEPTH_UNCERTAINTY = 2
-
-        return DepthImage_CNN_2D_Classifier(
-            conditioning_type=self.conditioning_type,
-            img_shape=(
-                NUM_CHANNELS_DEPTH_UNCERTAINTY,
-                camera_config.H,
-                camera_config.W,
-            ),
-            n_fingers=self.n_fingers,
-            n_tasks=n_tasks,
-            conv_2d_film_hidden_layers=self.conv_2d_film_hidden_layers,
-            mlp_hidden_layers=self.mlp_hidden_layers,
-            use_pretrained_2d=self.use_pretrained_2d,
-            resnet_type_2d=self.resnet_type_2d,
-            pooling_method_2d=self.pooling_method_2d,
-        )
-
-
 @dataclass
 class ClassifierConfig:
     model_config: ClassifierModelConfig
@@ -812,8 +369,7 @@ class ClassifierConfig:
     dataloader: ClassifierDataLoaderConfig = ClassifierDataLoaderConfig()
     training: ClassifierTrainingConfig = ClassifierTrainingConfig()
     checkpoint_workspace: CheckpointWorkspaceConfig = CheckpointWorkspaceConfig()
-    task_type: TaskType = TaskType.PASSED_EVAL
-
+    task_type: TaskType = TaskType.Y_PICK_AND_Y_COLL_AND_Y_PGS
     wandb: WandbConfig = field(
         default_factory=lambda: WandbConfig(project=DEFAULT_WANDB_PROJECT)
     )
@@ -835,10 +391,11 @@ class ClassifierConfig:
             )
 
         assert (
-            self.val_dataset_filepath is None and self.test_dataset_filepath is None
-        ) or (
-            self.val_dataset_filepath is not None
-            and self.test_dataset_filepath is not None
+            (self.val_dataset_filepath is None and self.test_dataset_filepath is None)
+            or (
+                self.val_dataset_filepath is not None
+                and self.test_dataset_filepath is not None
+            )
         ), f"Must specify both val and test dataset filepaths, or neither. Got val: {self.val_dataset_filepath}, test: {self.test_dataset_filepath}"
 
         # Set the name of the run if given
@@ -876,24 +433,6 @@ class ClassifierConfig:
 
 
 DEFAULTS_DICT = {
-    "cnn-3d-xyzxyz": ClassifierConfig(
-        model_config=CNN_3D_XYZXYZ_ModelConfig(
-            conv_channels=[32, 64, 128], mlp_hidden_layers=[256, 256]
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "cnn-3d-xyzy": ClassifierConfig(
-        model_config=CNN_3D_XYZY_ModelConfig(
-            conv_channels=[32, 64, 128], mlp_hidden_layers=[256, 256]
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "cnn-3d-xyzxyzy": ClassifierConfig(
-        model_config=CNN_3D_XYZXYZY_ModelConfig(
-            conv_channels=[32, 64, 128], mlp_hidden_layers=[256, 256]
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
     "cnn-3d-xyz": ClassifierConfig(
         model_config=CNN_3D_XYZ_ModelConfig(
             conv_channels=[32, 64, 128], mlp_hidden_layers=[256, 256]
@@ -907,379 +446,6 @@ DEFAULTS_DICT = {
             global_conv_channels=[32, 64, 128],
         ),
         nerfdata_config=GridNerfDataConfig(),
-    ),
-    "cnn-3d-xyz-global-cnn-cropped": ClassifierConfig(
-        model_config=CNN_3D_XYZ_Global_CNN_Cropped_ModelConfig(
-            conv_channels=[32, 64, 128],
-            mlp_hidden_layers=[256, 256],
-            global_conv_channels=[32, 64, 128],
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "cnn-3d-xyz-global-mlp": ClassifierConfig(
-        model_config=CNN_3D_XYZ_Global_MLP_ModelConfig(
-            conv_channels=[32, 64, 128],
-            mlp_hidden_layers=[256, 256],
-            global_mlp_hidden_layers=[256, 256],
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "cnn-2d-1d-smallest": ClassifierConfig(
-        model_config=CNN_2D_1D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_TRANSFORM,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=False,
-            resnet_type_2d=ResnetType2d.RESNET_SMALLEST,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "cnn-2d-1d-smaller": ClassifierConfig(
-        model_config=CNN_2D_1D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_TRANSFORM,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=False,
-            resnet_type_2d=ResnetType2d.RESNET_SMALLER,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "cnn-2d-1d-small": ClassifierConfig(
-        model_config=CNN_2D_1D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_TRANSFORM,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=False,
-            resnet_type_2d=ResnetType2d.RESNET_SMALL,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "cnn-2d-1d-18": ClassifierConfig(
-        model_config=CNN_2D_1D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_TRANSFORM,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=True,
-            resnet_type_2d=ResnetType2d.RESNET18,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-        dataloader=ClassifierDataLoaderConfig(batch_size=8),
-    ),
-    "cnn-2d-1d-34": ClassifierConfig(
-        model_config=CNN_2D_1D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_TRANSFORM,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=True,
-            resnet_type_2d=ResnetType2d.RESNET34,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-        dataloader=ClassifierDataLoaderConfig(batch_size=8),
-    ),
-    "simple-cnn-2d-1d": ClassifierConfig(
-        model_config=Simple_CNN_2D_1D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_TRANSFORM,
-            mlp_hidden_layers=[32, 32],
-            conv_2d_channels=[32, 64, 128],
-            conv_1d_channels=[32, 32],
-            film_2d_hidden_layers=[32, 32],
-            film_1d_hidden_layers=[32, 32],
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "small-simple-cnn-2d-1d": ClassifierConfig(
-        model_config=Simple_CNN_2D_1D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_TRANSFORM,
-            mlp_hidden_layers=[32, 32],
-            conv_2d_channels=[8, 8, 16],
-            conv_1d_channels=[8, 8],
-            film_2d_hidden_layers=[8, 8],
-            film_1d_hidden_layers=[8, 8],
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "grasp-cond-cnn-2d-1d-smallest": ClassifierConfig(
-        model_config=CNN_2D_1D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_CONFIG,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=False,
-            resnet_type_2d=ResnetType2d.RESNET_SMALLEST,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "grasp-cond-cnn-2d-1d-smaller": ClassifierConfig(
-        model_config=CNN_2D_1D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_CONFIG,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=False,
-            resnet_type_2d=ResnetType2d.RESNET_SMALLER,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "grasp-cond-cnn-2d-1d-small": ClassifierConfig(
-        model_config=CNN_2D_1D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_CONFIG,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=False,
-            resnet_type_2d=ResnetType2d.RESNET_SMALL,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "grasp-cond-cnn-2d-1d-18": ClassifierConfig(
-        model_config=CNN_2D_1D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_CONFIG,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=True,
-            resnet_type_2d=ResnetType2d.RESNET18,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "grasp-cond-cnn-2d-1d-34": ClassifierConfig(
-        model_config=CNN_2D_1D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_CONFIG,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=True,
-            resnet_type_2d=ResnetType2d.RESNET34,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "grasp-cond-simple-cnn-2d-1d": ClassifierConfig(
-        model_config=Simple_CNN_2D_1D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_CONFIG,
-            mlp_hidden_layers=[256, 256],
-            conv_2d_channels=[16, 32, 128, 256],
-            conv_1d_channels=[128],
-            film_2d_hidden_layers=[128, 128],
-            film_1d_hidden_layers=[16, 16],
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "grasp-cond-simple-cnn-1d-2d": ClassifierConfig(
-        model_config=Simple_CNN_1D_2D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_CONFIG,
-            mlp_hidden_layers=[32, 32],
-            conv_2d_channels=[32, 64, 128],
-            conv_1d_channels=[128, 64, 32],
-            film_2d_hidden_layers=[32, 32],
-            film_1d_hidden_layers=[32, 32],
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "grasp-cond-cnn-lstm": ClassifierConfig(
-        model_config=Simple_CNN_LSTM_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_CONFIG,
-            mlp_hidden_layers=[64, 64],
-            conv_2d_channels=[32, 32, 32, 32],
-            film_2d_hidden_layers=[64, 64],
-            lstm_hidden_size=64,
-            num_lstm_layers=1,
-        ),
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "depth-cnn-2d-smallest": ClassifierConfig(
-        model_config=DepthImage_CNN_2D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_TRANSFORM,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=False,
-            resnet_type_2d=ResnetType2d.RESNET_SMALLEST,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=DepthImageNerfDataConfig(
-            fingertip_config=EvenlySpacedFingertipConfig(
-                finger_width_mm=50,
-                finger_height_mm=50,
-                grasp_depth_mm=20,
-                distance_between_pts_mm=0.5,
-            ),
-            fingertip_camera_config=CameraConfig(H=60, W=60),
-        ),
-    ),
-    "depth-cnn-2d-smaller": ClassifierConfig(
-        model_config=DepthImage_CNN_2D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_TRANSFORM,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=False,
-            resnet_type_2d=ResnetType2d.RESNET_SMALLER,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=DepthImageNerfDataConfig(
-            fingertip_config=EvenlySpacedFingertipConfig(
-                finger_width_mm=50,
-                finger_height_mm=50,
-                grasp_depth_mm=20,
-                distance_between_pts_mm=0.5,
-            ),
-            fingertip_camera_config=CameraConfig(H=60, W=60),
-        ),
-    ),
-    "depth-cnn-2d-small": ClassifierConfig(
-        model_config=DepthImage_CNN_2D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_TRANSFORM,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=False,
-            resnet_type_2d=ResnetType2d.RESNET_SMALL,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=DepthImageNerfDataConfig(
-            fingertip_config=EvenlySpacedFingertipConfig(
-                finger_width_mm=50,
-                finger_height_mm=50,
-                grasp_depth_mm=20,
-                distance_between_pts_mm=0.5,
-            ),
-            fingertip_camera_config=CameraConfig(H=60, W=60),
-        ),
-    ),
-    "depth-cnn-2d-18": ClassifierConfig(
-        model_config=DepthImage_CNN_2D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_TRANSFORM,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=True,
-            resnet_type_2d=ResnetType2d.RESNET18,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=DepthImageNerfDataConfig(
-            fingertip_config=EvenlySpacedFingertipConfig(
-                finger_width_mm=50,
-                finger_height_mm=50,
-                grasp_depth_mm=20,
-                distance_between_pts_mm=0.5,
-            ),
-            fingertip_camera_config=CameraConfig(H=60, W=60),
-        ),
-    ),
-    "depth-cnn-2d-34": ClassifierConfig(
-        model_config=DepthImage_CNN_2D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_TRANSFORM,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=True,
-            resnet_type_2d=ResnetType2d.RESNET34,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=DepthImageNerfDataConfig(
-            fingertip_config=EvenlySpacedFingertipConfig(
-                finger_width_mm=50,
-                finger_height_mm=50,
-                grasp_depth_mm=20,
-                distance_between_pts_mm=0.5,
-            ),
-            fingertip_camera_config=CameraConfig(H=60, W=60),
-        ),
-    ),
-    "grasp-cond-depth-cnn-2d-smallest": ClassifierConfig(
-        model_config=DepthImage_CNN_2D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_CONFIG,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=False,
-            resnet_type_2d=ResnetType2d.RESNET_SMALLEST,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=DepthImageNerfDataConfig(
-            fingertip_config=EvenlySpacedFingertipConfig(
-                finger_width_mm=50,
-                finger_height_mm=50,
-                grasp_depth_mm=20,
-                distance_between_pts_mm=0.5,
-            ),
-            fingertip_camera_config=CameraConfig(H=60, W=60),
-        ),
-    ),
-    "grasp-cond-depth-cnn-2d-smaller": ClassifierConfig(
-        model_config=DepthImage_CNN_2D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_CONFIG,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=False,
-            resnet_type_2d=ResnetType2d.RESNET_SMALLER,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=DepthImageNerfDataConfig(
-            fingertip_config=EvenlySpacedFingertipConfig(
-                finger_width_mm=50,
-                finger_height_mm=50,
-                grasp_depth_mm=20,
-                distance_between_pts_mm=0.5,
-            ),
-            fingertip_camera_config=CameraConfig(H=60, W=60),
-        ),
-    ),
-    "grasp-cond-depth-cnn-2d-small": ClassifierConfig(
-        model_config=DepthImage_CNN_2D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_CONFIG,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=False,
-            resnet_type_2d=ResnetType2d.RESNET_SMALL,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=DepthImageNerfDataConfig(
-            fingertip_config=EvenlySpacedFingertipConfig(
-                finger_width_mm=50,
-                finger_height_mm=50,
-                grasp_depth_mm=20,
-                distance_between_pts_mm=0.5,
-            ),
-            fingertip_camera_config=CameraConfig(H=60, W=60),
-        ),
-    ),
-    "grasp-cond-depth-cnn-2d-18": ClassifierConfig(
-        model_config=DepthImage_CNN_2D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_CONFIG,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=True,
-            resnet_type_2d=ResnetType2d.RESNET18,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=DepthImageNerfDataConfig(
-            fingertip_config=EvenlySpacedFingertipConfig(
-                finger_width_mm=50,
-                finger_height_mm=50,
-                grasp_depth_mm=20,
-                distance_between_pts_mm=0.5,
-            ),
-            fingertip_camera_config=CameraConfig(H=60, W=60),
-        ),
-    ),
-    "grasp-cond-depth-cnn-2d-34": ClassifierConfig(
-        model_config=DepthImage_CNN_2D_ModelConfig(
-            conditioning_type=ConditioningType.GRASP_CONFIG,
-            conv_2d_film_hidden_layers=[256, 256],
-            mlp_hidden_layers=[256, 256],
-            use_pretrained_2d=True,
-            resnet_type_2d=ResnetType2d.RESNET34,
-            pooling_method_2d=ConvOutputTo1D.AVG_POOL_SPATIAL,
-        ),
-        nerfdata_config=DepthImageNerfDataConfig(
-            fingertip_config=EvenlySpacedFingertipConfig(
-                finger_width_mm=50,
-                finger_height_mm=50,
-                grasp_depth_mm=20,
-                distance_between_pts_mm=0.5,
-            ),
-            fingertip_camera_config=CameraConfig(H=60, W=60),
-        ),
     ),
 }
 

@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import transforms3d
+
 from get_a_grip import get_assets_folder
 
 ALLEGRO_HAND_JOINT_NAMES = [
