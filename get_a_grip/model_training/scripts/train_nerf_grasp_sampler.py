@@ -15,7 +15,7 @@ from get_a_grip.model_training.config.nerf_densities_global_config import (
     NERF_DENSITIES_GLOBAL_NUM_Y,
     NERF_DENSITIES_GLOBAL_NUM_Z,
 )
-from get_a_grip.model_training.models.dex_sampler import (
+from get_a_grip.model_training.models.nerf_sampler import (
     NerfSampler,
 )
 from get_a_grip.model_training.utils.diffusion import (
@@ -46,7 +46,6 @@ def main() -> None:
                     n_epochs=20000,
                     batch_size=256,
                 ),
-                use_nerf_sampler=True,
                 multigpu=True,
                 wandb_log=True,
             ),
@@ -55,11 +54,9 @@ def main() -> None:
 
     train_dataset = NerfGraspSampleDataset(
         input_hdf5_filepath=config.train_hdf5_path,
-        get_all_labels=False,
     )
     val_dataset = NerfGraspSampleDataset(
         input_hdf5_filepath=config.val_hdf5_path,
-        get_all_labels=False,
     )
 
     model = NerfSampler(

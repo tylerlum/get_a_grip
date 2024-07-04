@@ -15,7 +15,9 @@ from curobo.wrap.reacher.motion_gen import (
 )
 from nerfstudio.pipelines.base_pipeline import Pipeline
 
-from get_a_grip.grasp_planning.config.grasp_metric_config import GraspMetricConfig
+from get_a_grip.grasp_planning.config.nerf_evaluator_wrapper_config import (
+    NerfEvaluatorWrapperConfig,
+)
 from get_a_grip.grasp_planning.config.optimization_config import OptimizationConfig
 from get_a_grip.grasp_planning.config.optimizer_config import (
     RandomSamplingConfig,
@@ -36,10 +38,12 @@ from get_a_grip.grasp_planning.utils import (
     ablation_utils,
     train_nerf_return_trainer,
 )
-from get_a_grip.grasp_planning.utils.optimizer_utils import (
+from get_a_grip.grasp_planning.utils.joint_limit_utils import (
     clamp_in_limits,
-    get_sorted_grasps_from_dict,
     is_in_limits,
+)
+from get_a_grip.grasp_planning.utils.optimizer_utils import (
+    get_sorted_grasps_from_dict,
 )
 from get_a_grip.model_training.utils.nerf_load_utils import load_nerf_pipeline
 from get_a_grip.model_training.utils.nerf_utils import compute_centroid_from_nerf
@@ -240,9 +244,9 @@ def compute_ablation_grasps(
         cfg=OptimizationConfig(
             use_rich=False,  # Not used because causes issues with logging
             init_grasp_config_dict_path=cfg.init_grasp_config_dict_path,
-            grasp_metric=GraspMetricConfig(
+            nerf_evaluator_wrapper=NerfEvaluatorWrapperConfig(
                 nerf_config=nerf_config,
-                classifier_config_path=cfg.classifier_config_path,
+                nerf_evaluator_config_path=cfg.nerf_evaluator_config_path,
                 X_N_Oy=X_N_Oy,
             ),  # This is not used
             optimizer=RandomSamplingConfig(
@@ -513,7 +517,9 @@ def main() -> None:
         cfg=args,
         q_fr3=DEFAULT_Q_FR3,
         q_algr=DEFAULT_Q_ALGR,
-        ckpt_path=pathlib.Path("/juno/u/tylerlum/github_repos/nerf_grasping/2024-06-03_ALBERT_DexEvaluator_models/ckpt_yp920sn0_final.pth"),
+        ckpt_path=pathlib.Path(
+            "/juno/u/tylerlum/github_repos/nerf_grasping/2024-06-03_ALBERT_DexEvaluator_models/ckpt_yp920sn0_final.pth"
+        ),
         optimize=True,
         robot_cfg=robot_cfg,
         ik_solver=ik_solver,

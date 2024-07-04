@@ -6,28 +6,28 @@ import numpy as np
 import tyro
 
 from get_a_grip import get_data_folder, get_repo_folder
-from get_a_grip.model_training.config.classifier_config import (
-    DEFAULTS_DICT as CLASSIFIER_DEFAULTS_DICT,
+from get_a_grip.model_training.config.nerf_evaluator_config import (
+    DEFAULTS_DICT as NERF_EVALUATOR_DEFAULTS_DICT,
 )
-from get_a_grip.model_training.config.classifier_config import (
-    ClassifierConfig,
+from get_a_grip.model_training.config.nerf_evaluator_config import (
+    NerfEvaluatorConfig,
 )
 
 
 @dataclass
-class GraspMetricConfig:
+class NerfEvaluatorWrapperConfig:
     """Top-level config for creating a grasp metric."""
 
-    classifier_config: ClassifierConfig = CLASSIFIER_DEFAULTS_DICT[
+    nerf_evaluator_config: NerfEvaluatorConfig = NERF_EVALUATOR_DEFAULTS_DICT[
         "grasp-cond-simple-cnn-2d-1d"
     ]
-    classifier_config_path: Optional[pathlib.Path] = (
+    nerf_evaluator_config_path: Optional[pathlib.Path] = (
         get_repo_folder()
         / "nerf_grasp_evaluator_workspaces"
         / "mugs_grid_grasp-cond-simple-cnn-2d-1d"
         / "config.yaml"
     )
-    classifier_checkpoint: int = -1  # Load latest checkpoint if -1.
+    nerf_evaluator_checkpoint: int = -1  # Load latest checkpoint if -1.
     nerf_config: pathlib.Path = (
         get_data_folder()
         / "2023-01-03_mugs_smaller0-075_noise_lightshake_mid_opt"
@@ -41,15 +41,17 @@ class GraspMetricConfig:
 
     def __post_init__(self):
         """
-        Load classifier config from file if classifier config is not None.
+        Load nerf_evaluator config from file if nerf_evaluator config is not None.
         """
-        if self.classifier_config_path is not None:
-            print(f"Loading classifier config from {self.classifier_config_path}")
-            self.classifier_config = tyro.extras.from_yaml(
-                type(self.classifier_config), self.classifier_config_path.open()
+        if self.nerf_evaluator_config_path is not None:
+            print(
+                f"Loading nerf_evaluator config from {self.nerf_evaluator_config_path}"
+            )
+            self.nerf_evaluator_config = tyro.extras.from_yaml(
+                type(self.nerf_evaluator_config), self.nerf_evaluator_config_path.open()
             )
         else:
-            print("Loading default classifier config.")
+            print("Loading default nerf_evaluator config.")
 
         if self.X_N_Oy is None:
             # HACK: Should try to compute this or use cfg to be told what to do
@@ -72,5 +74,5 @@ class GraspMetricConfig:
 
 
 if __name__ == "__main__":
-    cfg = tyro.cli(GraspMetricConfig)
+    cfg = tyro.cli(NerfEvaluatorWrapperConfig)
     print(cfg)

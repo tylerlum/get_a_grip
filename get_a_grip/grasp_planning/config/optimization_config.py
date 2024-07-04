@@ -5,11 +5,11 @@ from typing import Optional, Union
 import tyro
 
 from get_a_grip import get_data_folder
-from get_a_grip.grasp_planning.config.grasp_metric_config import (
-    GraspMetricConfig,
+from get_a_grip.grasp_planning.config.nerf_evaluator_wrapper_config import (
+    NerfEvaluatorWrapperConfig,
 )
 from get_a_grip.grasp_planning.config.optimizer_config import (
-    CEMOptimizerConfig,
+    RandomSamplingConfig,
     SGDOptimizerConfig,
 )
 from get_a_grip.model_training.config.base import WandbConfig
@@ -21,8 +21,10 @@ DEFAULT_WANDB_PROJECT = "optimize_metric"
 class OptimizationConfig:
     """Top-level config for optimizing grasp metric."""
 
-    optimizer: Union[SGDOptimizerConfig, CEMOptimizerConfig]
-    grasp_metric: GraspMetricConfig = field(default_factory=GraspMetricConfig)
+    optimizer: Union[SGDOptimizerConfig, RandomSamplingConfig]
+    nerf_evaluator_wrapper: NerfEvaluatorWrapperConfig = field(
+        default_factory=NerfEvaluatorWrapperConfig
+    )
     init_grasp_config_dict_path: pathlib.Path = (
         get_data_folder()
         / "2023-01-03_mugs_smaller0-075_noise_lightshake_mid_opt"
@@ -54,7 +56,7 @@ class OptimizationConfig:
         """
         if self.output_path is None:
             print("Using default output path.")
-            filename = self.grasp_metric.object_name
+            filename = self.nerf_evaluator_wrapper.object_name
             input_folder_path = self.init_grasp_config_dict_path.parent
             output_folder_path = (
                 input_folder_path.parent / f"{input_folder_path.name}_optimized"

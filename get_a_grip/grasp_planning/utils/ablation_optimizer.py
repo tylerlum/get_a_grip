@@ -1,15 +1,16 @@
 import pypose as pp
 import torch
-from nerf_grasping.dexdiffuser.dex_evaluator import DexEvaluator
-from nerf_grasping.optimizer_utils import (
+
+from get_a_grip.grasp_planning.utils.joint_limit_utils import (
     get_joint_limits,
 )
+from get_a_grip.model_training.models.dex_evaluator import DexEvaluator
 
 
 class RandomSamplingOptimizer:
     def __init__(
         self, dex_evaluator: DexEvaluator, bps: torch.Tensor, init_grasps: torch.Tensor
-    ):
+    ) -> None:
         self.dex_evaluator = dex_evaluator
         self.bps = bps
         self.grasps = init_grasps
@@ -48,17 +49,21 @@ class RandomSamplingOptimizer:
             print()
             return updated_losses
 
-    def add_noise(self, grasps):
+    def add_noise(self, grasps: torch.Tensor) -> torch.Tensor:
         B = grasps.shape[0]
         N_FINGERS = 4
-        xyz_noise = torch.randn_like(grasps[:, :3]) * self.trans_noise
-        rot_noise = (pp.randn_so3(B) * self.rot_noise).Exp().to(device=grasps.device)
-        joint_noise = torch.randn_like(grasps[:, 9:25]) * self.joint_angle_noise
-        grasp_orientation_perturbations = (
-            (pp.randn_so3((B, N_FINGERS)) * self.grasp_orientation_noise)
-            .Exp()
-            .to(device=grasps.device)
+        xyz_noise = (
+            torch.randn_like(grasps[:, :3], device=grasps.device) * self.trans_noise
         )
+        rot_noise = (pp.randn_so3(B, device=grasps.device) * self.rot_noise).Exp()
+        joint_noise = (
+            torch.randn_like(grasps[:, 9:25], device=grasps.device)
+            * self.joint_angle_noise
+        )
+        grasp_orientation_perturbations = (
+            pp.randn_so3(B, N_FINGERS, device=grasps.device)
+            * self.grasp_orientation_noise
+        ).Exp()
 
         new_xyz = grasps[:, :3] + xyz_noise
         new_rot6d = self.add_noise_to_rot6d(grasps[:, 3:9].reshape(B, 3, 2), rot_noise)
@@ -150,8 +155,8 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dex_evaluator = DexEvaluator(in_grasp=37, in_bps=4096).to(device)
     dex_evaluator.eval()
-    bps = torch.zeros(2, 4096).to(device)
-    init_grasps = torch.randn(2, 37).to(device)
+    bps = torch.zeros(2, 4096, device=device)
+    init_grasps = torch.randn(2, 37, device=device)
 
     random_samping_optimizer = RandomSamplingOptimizer(
         dex_evaluator=dex_evaluator, bps=bps, init_grasps=init_grasps

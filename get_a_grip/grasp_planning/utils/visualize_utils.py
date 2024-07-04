@@ -1,57 +1,17 @@
 from __future__ import annotations
 
-import math
-import pathlib
-import time
-from collections import defaultdict
-from dataclasses import dataclass
-from typing import Literal, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import plotly.graph_objects as go
-import pypose as pp
 import torch
 import trimesh
-import tyro
-import wandb
-from nerfstudio.pipelines.base_pipeline import Pipeline
-from tqdm import tqdm
-from get_a_grip.grasp_planning.nerf_conversions.nerf_to_bps import nerf_to_bps
 
-from get_a_grip import get_package_folder
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.joint_angle_targets import (
-    compute_fingertip_dirs,
     compute_optimized_joint_angle_targets_given_grasp_orientations,
 )
 from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_to_pose
-from get_a_grip.grasp_planning.config.grasp_metric_config import GraspMetricConfig
-from get_a_grip.grasp_planning.config.optimization_config import OptimizationConfig
-from get_a_grip.grasp_planning.config.optimizer_config import (
-    RandomSamplingConfig,
-)
-from get_a_grip.grasp_planning.scripts.optimizer import (
-    sample_random_rotate_transforms_only_around_y,
-)
-from get_a_grip.grasp_planning.utils import (
-    ablation_utils,
-    train_nerf_return_trainer,
-)
-from get_a_grip.grasp_planning.utils.ablation_optimizer import RandomSamplingOptimizer
-from get_a_grip.grasp_planning.utils.nerfstudio_point_cloud import ExportPointCloud
-from get_a_grip.grasp_planning.utils.optimizer_utils import (
-    AllegroGraspConfig,
-    AllegroHandConfig,
-    hand_config_to_hand_model,
-)
-from get_a_grip.model_training.models.dex_evaluator import DexEvaluator
-from get_a_grip.model_training.utils.nerf_load_utils import load_nerf_pipeline
-from get_a_grip.model_training.utils.nerf_utils import (
-    compute_centroid_from_nerf,
-)
-from get_a_grip.model_training.utils.point_utils import (
-    transform_points,
-)
 
 
 def plot_point_cloud_and_bps_and_mesh_and_grasp(

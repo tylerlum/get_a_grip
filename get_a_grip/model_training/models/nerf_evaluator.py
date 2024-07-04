@@ -17,7 +17,7 @@ def assert_equals(a, b):
     assert a == b, f"{a} != {b}"
 
 
-class Classifier(nn.Module):
+class NerfEvaluator(nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
@@ -34,7 +34,7 @@ class Classifier(nn.Module):
         )
 
         # REMOVE, using to ensure gradients are non-zero
-        # for overfit classifier.
+        # for overfit nerf_evaluator.
         PROB_SCALING = 1e0
 
         # TODO: Consider scaling differently for each task
@@ -83,7 +83,7 @@ class Classifier(nn.Module):
         return 2
 
 
-class CNN_3D_XYZ_Classifier(Classifier):
+class CNN_3D_XYZ_NerfEvaluator(NerfEvaluator):
     def __init__(
         self,
         input_shape: Iterable[int],
@@ -109,7 +109,7 @@ class CNN_3D_XYZ_Classifier(Classifier):
         return all_logits
 
 
-class CNN_3D_XYZ_Global_CNN_Classifier(Classifier):
+class CNN_3D_XYZ_Global_CNN_NerfEvaluator(NerfEvaluator):
     def __init__(
         self,
         input_shape: Iterable[int],
@@ -183,7 +183,7 @@ def main() -> None:
     ).to(DEVICE)
 
     # Create model
-    cnn_3d_classifier = CNN_3D_XYZ_Classifier(
+    cnn_3d_nerf_evaluator = CNN_3D_XYZ_NerfEvaluator(
         input_shape=batch_data_input.nerf_alphas_with_augmented_coords.shape[-4:],
         conv_channels=[32, 64, 128],
         mlp_hidden_layers=[256, 256],
@@ -192,8 +192,8 @@ def main() -> None:
     ).to(DEVICE)
 
     # Run model
-    cnn_3d_all_logits = cnn_3d_classifier.get_all_logits(batch_data_input)
-    cnn_3d_scores = cnn_3d_classifier.get_failure_probability(batch_data_input)
+    cnn_3d_all_logits = cnn_3d_nerf_evaluator.get_all_logits(batch_data_input)
+    cnn_3d_scores = cnn_3d_nerf_evaluator.get_failure_probability(batch_data_input)
     print(f"cnn_3d_all_logits.shape = {cnn_3d_all_logits.shape}")
     print(f"cnn_3d_scores: {cnn_3d_scores}")
     print(f"cnn_3d_scores.shape: {cnn_3d_scores.shape}" + "\n")

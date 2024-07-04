@@ -32,10 +32,12 @@ from get_a_grip.grasp_planning.utils import (
     frogger_utils,
     train_nerf_return_trainer,
 )
-from get_a_grip.grasp_planning.utils.optimizer_utils import (
+from get_a_grip.grasp_planning.utils.joint_limit_utils import (
     clamp_in_limits,
-    get_sorted_grasps_from_dict,
     is_in_limits,
+)
+from get_a_grip.grasp_planning.utils.optimizer_utils import (
+    get_sorted_grasps_from_dict,
 )
 from get_a_grip.model_training.utils.nerf_load_utils import load_nerf_pipeline
 from get_a_grip.model_training.utils.nerf_utils import compute_centroid_from_nerf

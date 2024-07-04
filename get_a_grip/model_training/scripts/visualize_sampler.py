@@ -59,7 +59,6 @@ def main(GRASP_IDX: int = 0, refine: bool = True) -> None:
     # loading data
     test_eval_dataset = BpsGraspEvalDataset(
         input_hdf5_filepath=pathlib.Path("TODO"),
-        get_all_labels=False,
     )
     test_loader = data.DataLoader(test_eval_dataset, batch_size=1, shuffle=False)
 
@@ -97,7 +96,6 @@ def main(GRASP_IDX: int = 0, refine: bool = True) -> None:
     # running just the sampler
     test_sample_dataset = BpsGraspSampleDataset(
         input_hdf5_filepath=pathlib.Path("TODO"),
-        get_all_labels=False,
     )
     GRASP_IDX = 0
     _, bps, _ = test_sample_dataset[GRASP_IDX]

@@ -80,11 +80,9 @@ class BpsGraspEvalDataset(BpsGraspDataset):
     def __init__(
         self,
         input_hdf5_filepath: pathlib.Path,
-        get_all_labels: bool = False,
         frac_throw_away: float = 0.0,
     ) -> None:
         super().__init__(input_hdf5_filepath=input_hdf5_filepath)
-        self.get_all_labels = get_all_labels
         self.frac_throw_away = frac_throw_away
         print(f"Dataset has {self.num_grasps} grasps")
 
@@ -101,21 +99,14 @@ class BpsGraspEvalDataset(BpsGraspDataset):
         self, grasp_idx: int
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         bps_idx = self.grasp_bps_idxs[grasp_idx]
-        if self.get_all_labels:
-            labels = torch.concatenate(
-                (
-                    self.y_picks[grasp_idx],
-                    self.y_colls[grasp_idx],
-                    self.y_PGSs[grasp_idx],
-                ),
-            )  # shape=(3,)
-            return self.grasps[grasp_idx], self.bpss[bps_idx], labels
-        else:
-            return (
-                self.grasps[grasp_idx],
-                self.bpss[bps_idx],
+        labels = torch.concatenate(
+            (
+                self.y_picks[grasp_idx],
+                self.y_colls[grasp_idx],
                 self.y_PGSs[grasp_idx],
-            )
+            ),
+        )  # shape=(3,)
+        return self.grasps[grasp_idx], self.bpss[bps_idx], labels
 
     ###### Extras ######
     def get_point_cloud_filepath(self, grasp_idx: int) -> pathlib.Path:
@@ -138,12 +129,9 @@ class BpsGraspSampleDataset(BpsGraspDataset):
     def __init__(
         self,
         input_hdf5_filepath: pathlib.Path,
-        get_all_labels: bool = False,
         y_PGS_threshold: float = 0.9,
     ) -> None:
         super().__init__(input_hdf5_filepath=input_hdf5_filepath)
-        self.get_all_labels = get_all_labels
-
         self.y_PGS_threshold = y_PGS_threshold
         self.successful_grasp_idxs = torch.where(self.y_PGSs >= y_PGS_threshold)[0]
         self.num_successful_grasps = len(self.successful_grasp_idxs)
@@ -156,21 +144,14 @@ class BpsGraspSampleDataset(BpsGraspDataset):
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         grasp_idx = self.successful_grasp_idxs[successful_grasp_idx]
         bps_idx = self.grasp_bps_idxs[grasp_idx]
-        if self.get_all_labels:
-            labels = torch.concatenate(
-                (
-                    self.y_picks[grasp_idx],
-                    self.y_colls[grasp_idx],
-                    self.y_PGSs[grasp_idx],
-                ),
-            )  # shape=(3,)
-            return self.grasps[grasp_idx], self.bpss[bps_idx], labels
-        else:
-            return (
-                self.grasps[grasp_idx],
-                self.bpss[bps_idx],
+        labels = torch.concatenate(
+            (
+                self.y_picks[grasp_idx],
+                self.y_colls[grasp_idx],
                 self.y_PGSs[grasp_idx],
-            )
+            ),
+        )  # shape=(3,)
+        return self.grasps[grasp_idx], self.bpss[bps_idx], labels
 
     ###### Extras ######
     def get_point_cloud_filepath(self, successful_grasp_idx: int) -> pathlib.Path:

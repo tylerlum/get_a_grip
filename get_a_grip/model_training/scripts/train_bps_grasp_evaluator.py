@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import tyro
 import wandb
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -23,20 +24,22 @@ class DexEvaluatorTrainingConfig:
     # training parameters
     batch_size: int = 32768
     learning_rate: float = 1e-4
-    num_epochs: int = 10000
+    num_epochs: int = 1000
     device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     random_seed: int = 42
 
     # validation, printing, and saving
-    snapshot_freq: int = 5000
-    log_path: Path = Path("logs/dexdiffuser_evaluator")
+    snapshot_freq: int = 5
+    log_path: Path = Path(
+        f"logs/dexdiffuser_evaluator/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    )
 
     # wandb
     wandb_project: str = "dexdiffuser-evaluator"
     wandb_log: bool = True
 
     # whether to train gg-nerf or the dexdiffuser baseline
-    train_ablation: bool = False  # Figure this out
+    train_frac_throw_away: float = 0.0  # Increase for ablation
 
     # whether to use multigpu training
     multigpu: bool = True
@@ -65,13 +68,11 @@ def setup(cfg: DexEvaluatorTrainingConfig, rank: int = 0):
     # get datasets
     train_dataset = BpsGraspEvalDataset(
         input_hdf5_filepath=Path("TODO"),
-        get_all_labels=cfg.train_ablation,
-        frac_throw_away=0.0,  # TODO Parameterize
+        frac_throw_away=cfg.train_frac_throw_away,
     )
     val_dataset = BpsGraspEvalDataset(
         input_hdf5_filepath=Path("TODO"),
-        get_all_labels=cfg.train_ablation,
-        frac_throw_away=0.0,  # TODO Parameterize
+        frac_throw_away=0.0,
     )
 
     # make dataloaders
@@ -182,10 +183,7 @@ def train(cfg: DexEvaluatorTrainingConfig, rank: int = 0) -> None:
                 #######################
 
                 optimizer.zero_grad()
-                if not cfg.train_ablation:
-                    y_pred = model(f_O, g_O)[..., -1]
-                else:
-                    y_pred = model(f_O, g_O)
+                y_pred = model(f_O, g_O)
 
                 assert y_pred.shape == y.shape
                 loss = torch.nn.functional.mse_loss(y_pred, y)
@@ -214,7 +212,7 @@ def train(cfg: DexEvaluatorTrainingConfig, rank: int = 0) -> None:
             with torch.no_grad():
                 for i, (g_O, f_O, y) in enumerate(val_loader):
                     f_O, g_O, y = f_O.to(device), g_O.to(device), y.to(device)
-                    y_pred = model(f_O, g_O)[..., -1]
+                    y_pred = model(f_O, g_O)
                     assert y_pred.shape == y.shape
                     loss = torch.nn.functional.mse_loss(y_pred, y)
                     val_loss += loss.item()
@@ -252,34 +250,8 @@ def _train_multigpu(rank, cfg):
 
 
 if __name__ == "__main__":
-    cfg = DexEvaluatorTrainingConfig(
-        num_epochs=1000,
-        batch_size=4096 * 8,
-        learning_rate=1e-4,
-        device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-        random_seed=42,
-        snapshot_freq=5,
-        log_path=Path(
-            f"logs/dexdiffuser_evaluator/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        ),
-        wandb_project="dexdiffuser-evaluator",
-        wandb_log=True,
-        multigpu=True,
-        num_gpus=torch.cuda.device_count(),
-        num_workers=4,
-        train_ablation=False,
-    )
+    cfg = tyro.cli(DexEvaluatorTrainingConfig)
     if cfg.multigpu:
         mp.spawn(_train_multigpu, args=(cfg,), nprocs=cfg.num_gpus, join=True)
     else:
         train(cfg, rank=0)
-    # testing loading
-    # device = torch.device("cuda")
-    # dex_evaluator = DexEvaluator(3 + 6 + 16 + 12, 4096).to(device)
-    # ckpt_path = "/home/albert/research/nerf_grasping/nerf_grasping/dexdiffuser/logs/dexdiffuser_evaluator/20240602_165946/ckpt-p9u7vl8l-step-0.pth"
-    # dex_evaluator.load_state_dict(torch.load(f"{ckpt_path}"))
-    # batch_size = 2
-    # f_O = torch.rand(batch_size, 4096).to(device)
-    # g_O = torch.rand(batch_size, 3 + 6 + 16 + 12).to(device)
-    # labels = dex_evaluator(f_O=f_O, g_O=g_O)
-    breakpoint()

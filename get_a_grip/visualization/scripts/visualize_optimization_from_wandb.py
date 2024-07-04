@@ -41,9 +41,10 @@ def main() -> None:
         for plotly_file_path in plotly_file_paths
     ]
 
+    visualization_freq = get_visualization_freq_from_wandb(run_path)
     new_fig = create_figure_with_buttons_and_slider(
         input_figs=input_figs,
-        visualization_freq=get_visualization_freq_from_wandb(run_path),
+        optimization_steps=[i for i in range(0, len(input_figs), visualization_freq)],
         frame_duration=args.frame_duration,
         transition_duration=args.transition_duration,
     )

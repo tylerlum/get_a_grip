@@ -8,20 +8,21 @@ from typing import List, Literal, Optional, Tuple
 import tyro
 
 from get_a_grip.model_training.config.base import CONFIG_DATETIME_STR, WandbConfig
-from get_a_grip.model_training.config.fingertip_config import UnionFingertipConfig
+from get_a_grip.model_training.config.fingertip_config import (
+    EvenlySpacedFingertipConfig,
+)
 from get_a_grip.model_training.config.nerf_densities_global_config import (
     NERF_DENSITIES_GLOBAL_NUM_X,
     NERF_DENSITIES_GLOBAL_NUM_Y,
     NERF_DENSITIES_GLOBAL_NUM_Z,
 )
 from get_a_grip.model_training.config.nerfdata_config import (
-    BaseNerfDataConfig,
     GridNerfDataConfig,
 )
-from get_a_grip.model_training.models.classifier import (
-    Classifier,
-    CNN_3D_XYZ_Classifier,
-    CNN_3D_XYZ_Global_CNN_Classifier,
+from get_a_grip.model_training.models.nerf_evaluator import (
+    CNN_3D_XYZ_Global_CNN_NerfEvaluator,
+    CNN_3D_XYZ_NerfEvaluator,
+    NerfEvaluator,
 )
 
 DEFAULT_WANDB_PROJECT = "learned_metric"
@@ -64,7 +65,7 @@ class TaskType(Enum):
 
 
 @dataclass(frozen=True)
-class ClassifierDataConfig:
+class DataConfig:
     """Parameters for dataset loading."""
 
     frac_val: float = 0.1
@@ -85,7 +86,7 @@ class ClassifierDataConfig:
 
 
 @dataclass(frozen=True)
-class ClassifierDataLoaderConfig:
+class DataLoaderConfig:
     """Parameters for dataloader."""
 
     batch_size: int = 256
@@ -96,21 +97,9 @@ class ClassifierDataLoaderConfig:
     pin_memory: bool = True
     """Flag to pin memory for the dataloader."""
 
-    load_nerf_grid_inputs_in_ram: bool = False
-    """Flag to load the nerf grid inputs in RAM -- otherwise load on the fly."""
-
-    load_grasp_labels_in_ram: bool = False
-    """Flag to load the grasp successes in RAM -- otherwise load on the fly."""
-
-    load_grasp_transforms_in_ram: bool = False
-    """Flag to load the grasp transforms in RAM -- otherwise load on the fly."""
-
-    load_nerf_configs_in_ram: bool = False
-    """Flag to load the nerf configs in RAM -- otherwise load on the fly."""
-
 
 @dataclass(frozen=True)
-class ClassifierTrainingConfig:
+class TrainingConfig:
     """Hyperparameters for training."""
 
     grad_clip_val: float = 1.0
@@ -125,9 +114,6 @@ class ClassifierTrainingConfig:
 
     label_smoothing: float = 0.0
     """Cross entropy loss label smoothing"""
-
-    extra_punish_false_positive_factor: float = 0.0
-    """eps: multiply the loss weight for false positives by (1 + eps)."""
 
     lr_scheduler_name: Literal[
         "constant",
@@ -162,8 +148,6 @@ class ClassifierTrainingConfig:
         "cross_entropy",
         "l1",
         "l2",
-        "weighted_l1",
-        "weighted_l2",
     ] = "l1"
 
 
@@ -171,9 +155,7 @@ class ClassifierTrainingConfig:
 class CheckpointWorkspaceConfig:
     """Parameters for paths to checkpoints."""
 
-    root_dir: pathlib.Path = pathlib.Path(
-        "nerf_grasp_evaluator_workspaces"
-    )
+    root_dir: pathlib.Path = pathlib.Path("nerf_grasp_evaluator_workspaces")
     """Root directory for checkpoints."""
 
     input_leaf_dir_name: Optional[str] = None
@@ -249,21 +231,21 @@ class CheckpointWorkspaceConfig:
 
 
 @dataclass(frozen=True)
-class ClassifierModelConfig:
-    """Default (abstract) parameters for the classifier."""
+class ModelConfig:
+    """Default (abstract) parameters for the nerf_evaluator."""
 
-    def get_classifier_from_fingertip_config(
+    def get_nerf_evaluator_from_fingertip_config(
         self,
-        fingertip_config: UnionFingertipConfig,
+        fingertip_config: EvenlySpacedFingertipConfig,
         n_tasks: int,
-    ) -> Classifier:
-        """Helper method to return the correct classifier from config."""
+    ) -> NerfEvaluator:
+        """Helper method to return the correct nerf_evaluator from config."""
         raise NotImplementedError("Implement in subclass.")
 
 
 @dataclass(frozen=True)
-class CNN_3D_XYZ_ModelConfig(ClassifierModelConfig):
-    """Parameters for the CNN_3D_XYZ_Classifier."""
+class CNN_3D_XYZ_ModelConfig(ModelConfig):
+    """Parameters for the CNN_3D_XYZ_NerfEvaluator."""
 
     conv_channels: List[int]
     """List of channels for each convolutional layer. Length specifies number of layers."""
@@ -274,7 +256,9 @@ class CNN_3D_XYZ_ModelConfig(ClassifierModelConfig):
     n_fingers: int = 4
     """Number of fingers."""
 
-    def input_shape_from_fingertip_config(self, fingertip_config: UnionFingertipConfig):
+    def input_shape_from_fingertip_config(
+        self, fingertip_config: EvenlySpacedFingertipConfig
+    ):
         n_density_channels = 1
         n_xyz_channels = 3
         return [
@@ -284,15 +268,15 @@ class CNN_3D_XYZ_ModelConfig(ClassifierModelConfig):
             fingertip_config.num_pts_z,
         ]
 
-    def get_classifier_from_fingertip_config(
+    def get_nerf_evaluator_from_fingertip_config(
         self,
-        fingertip_config: UnionFingertipConfig,
+        fingertip_config: EvenlySpacedFingertipConfig,
         n_tasks: int,
-    ) -> Classifier:
-        """Helper method to return the correct classifier from config."""
+    ) -> NerfEvaluator:
+        """Helper method to return the correct nerf_evaluator from config."""
 
         input_shape = self.input_shape_from_fingertip_config(fingertip_config)
-        return CNN_3D_XYZ_Classifier(
+        return CNN_3D_XYZ_NerfEvaluator(
             input_shape=input_shape,
             n_fingers=fingertip_config.n_fingers,
             n_tasks=n_tasks,
@@ -302,8 +286,8 @@ class CNN_3D_XYZ_ModelConfig(ClassifierModelConfig):
 
 
 @dataclass(frozen=True)
-class CNN_3D_XYZ_Global_CNN_ModelConfig(ClassifierModelConfig):
-    """Parameters for the CNN_3D_XYZ_Global_CNN_Classifier."""
+class CNN_3D_XYZ_Global_CNN_ModelConfig(ModelConfig):
+    """Parameters for the CNN_3D_XYZ_Global_CNN_NerfEvaluator."""
 
     conv_channels: List[int]
     """List of channels for each convolutional layer. Length specifies number of layers."""
@@ -317,7 +301,9 @@ class CNN_3D_XYZ_Global_CNN_ModelConfig(ClassifierModelConfig):
     n_fingers: int = 4
     """Number of fingers."""
 
-    def input_shape_from_fingertip_config(self, fingertip_config: UnionFingertipConfig):
+    def input_shape_from_fingertip_config(
+        self, fingertip_config: EvenlySpacedFingertipConfig
+    ):
         n_density_channels = 1
         n_xyz_channels = 3
         return [
@@ -337,16 +323,16 @@ class CNN_3D_XYZ_Global_CNN_ModelConfig(ClassifierModelConfig):
             NERF_DENSITIES_GLOBAL_NUM_Z,
         )
 
-    def get_classifier_from_fingertip_config(
+    def get_nerf_evaluator_from_fingertip_config(
         self,
-        fingertip_config: UnionFingertipConfig,
+        fingertip_config: EvenlySpacedFingertipConfig,
         n_tasks: int,
-    ) -> Classifier:
-        """Helper method to return the correct classifier from config."""
+    ) -> NerfEvaluator:
+        """Helper method to return the correct nerf_evaluator from config."""
 
         input_shape = self.input_shape_from_fingertip_config(fingertip_config)
         global_input_shape = self.global_input_shape()
-        return CNN_3D_XYZ_Global_CNN_Classifier(
+        return CNN_3D_XYZ_Global_CNN_NerfEvaluator(
             input_shape=input_shape,
             n_fingers=fingertip_config.n_fingers,
             n_tasks=n_tasks,
@@ -358,22 +344,40 @@ class CNN_3D_XYZ_Global_CNN_ModelConfig(ClassifierModelConfig):
 
 
 @dataclass
-class ClassifierConfig:
-    model_config: ClassifierModelConfig
-    nerfdata_config: BaseNerfDataConfig
+class PlotConfig:
+    """Parameters for plotting."""
+
+    scatter_predicted_vs_actual: bool = False
+    """Flag to plot predicted vs actual scatter plot."""
+
+    histogram_predictions: bool = False
+    """Flag to plot histogram of predictions."""
+
+    confusion_matrices: bool = False
+    """Flag to plot confusion matrices."""
+
+    batch_data: bool = False
+    """Flag to plot batch data."""
+
+
+@dataclass
+class NerfEvaluatorConfig:
+    model_config: ModelConfig
+    nerfdata_config: GridNerfDataConfig
     nerfdata_config_path: Optional[pathlib.Path] = None
     train_dataset_filepath: Optional[pathlib.Path] = None
     val_dataset_filepath: Optional[pathlib.Path] = None
     test_dataset_filepath: Optional[pathlib.Path] = None
-    data: ClassifierDataConfig = ClassifierDataConfig()
-    dataloader: ClassifierDataLoaderConfig = ClassifierDataLoaderConfig()
-    training: ClassifierTrainingConfig = ClassifierTrainingConfig()
+    data: DataConfig = DataConfig()
+    dataloader: DataLoaderConfig = DataLoaderConfig()
+    training: TrainingConfig = TrainingConfig()
     checkpoint_workspace: CheckpointWorkspaceConfig = CheckpointWorkspaceConfig()
     task_type: TaskType = TaskType.Y_PICK_AND_Y_COLL_AND_Y_PGS
     wandb: WandbConfig = field(
         default_factory=lambda: WandbConfig(project=DEFAULT_WANDB_PROJECT)
     )
     name: Optional[str] = None
+    plot: PlotConfig = PlotConfig()
 
     random_seed: int = 42
 
@@ -433,13 +437,13 @@ class ClassifierConfig:
 
 
 DEFAULTS_DICT = {
-    "cnn-3d-xyz": ClassifierConfig(
+    "cnn-3d-xyz": NerfEvaluatorConfig(
         model_config=CNN_3D_XYZ_ModelConfig(
             conv_channels=[32, 64, 128], mlp_hidden_layers=[256, 256]
         ),
         nerfdata_config=GridNerfDataConfig(),
     ),
-    "cnn-3d-xyz-global-cnn": ClassifierConfig(
+    "cnn-3d-xyz-global-cnn": NerfEvaluatorConfig(
         model_config=CNN_3D_XYZ_Global_CNN_ModelConfig(
             conv_channels=[32, 64, 128],
             mlp_hidden_layers=[256, 256],
@@ -449,8 +453,8 @@ DEFAULTS_DICT = {
     ),
 }
 
-UnionClassifierConfig = tyro.extras.subcommand_type_from_defaults(DEFAULTS_DICT)
+UnionNerfEvaluatorConfig = tyro.extras.subcommand_type_from_defaults(DEFAULTS_DICT)
 
 if __name__ == "__main__":
-    cfg = tyro.cli(UnionClassifierConfig)
+    cfg = tyro.cli(UnionNerfEvaluatorConfig)
     print(cfg)

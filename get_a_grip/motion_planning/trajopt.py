@@ -31,7 +31,6 @@ from get_a_grip.motion_planning.world import (
 
 DEFAULT_Q_FR3 = np.array([0, -0.7854, 0.0, -2.3562, 0.0, 1.5708, 0.7854])
 DEFAULT_Q_ALGR = np.array([0, 1.5, 1, 1, 0, 1.5, 1, 1, 0, 1.5, 1, 1, 0.5, 0.5, 1.5, 1])
-DEFAULT_Q = np.concatenate([DEFAULT_Q_FR3, DEFAULT_Q_ALGR])
 
 
 def solve_trajopt(

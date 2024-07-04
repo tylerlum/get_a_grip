@@ -41,7 +41,6 @@ def main() -> None:
                     n_epochs=20000,
                     batch_size=16384,
                 ),
-                use_nerf_sampler=False,
                 multigpu=True,
                 wandb_log=True,
             ),
@@ -50,11 +49,9 @@ def main() -> None:
 
     train_dataset = BpsGraspSampleDataset(
         input_hdf5_filepath=config.train_hdf5_path,
-        get_all_labels=False,
     )
     val_dataset = BpsGraspSampleDataset(
         input_hdf5_filepath=config.val_hdf5_path,
-        get_all_labels=False,
     )
     model = DexSampler(
         n_pts=config.diffusion.data.n_pts,

@@ -22,14 +22,6 @@ class SGDOptimizerConfig(BaseOptimizerConfig):
 
 
 @dataclass
-class CEMOptimizerConfig(BaseOptimizerConfig):
-    num_steps: int = 30
-    num_samples: int = 5
-    num_elite: int = 2
-    min_cov_std: float = 1e-2
-
-
-@dataclass
 class RandomSamplingConfig(BaseOptimizerConfig):
     wrist_trans_noise: float = 0.005
     wrist_rot_noise: float = 0.05
@@ -39,7 +31,6 @@ class RandomSamplingConfig(BaseOptimizerConfig):
 
 UnionGraspOptimizerConfig = tyro.extras.subcommand_type_from_defaults(
     {
-        "cem": CEMOptimizerConfig(),
         "sgd": SGDOptimizerConfig(),
         "random-sampling": RandomSamplingConfig(),
     }

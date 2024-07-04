@@ -11,22 +11,17 @@ import trimesh
 from nerfstudio.models.base_model import Model
 from tqdm import tqdm
 
-from get_a_grip.dataset_generation.utils.hand_model import HandModel
-from get_a_grip.dataset_generation.utils.joint_angle_targets import (
-    compute_optimized_joint_angle_targets_given_grasp_orientations,
-)
-from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_to_pose
 from get_a_grip.grasp_planning.config.optimization_config import OptimizationConfig
-from get_a_grip.grasp_planning.utils.visualize_utils import (
-    plot_nerf_densities,
-    plot_mesh_and_grasp,
+from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
+    AllegroGraspConfig,
 )
 from get_a_grip.grasp_planning.utils.grasp_utils import (
     compute_grasp_orientations,
     rot6d_to_matrix,
 )
-from get_a_grip.grasp_planning.utils.optimizer_utils import (
-    AllegroGraspConfig,
+from get_a_grip.grasp_planning.utils.visualize_utils import (
+    plot_mesh_and_grasp,
+    plot_nerf_densities,
 )
 from get_a_grip.model_training.config.diffusion_config import (
     DiffusionConfig,
@@ -39,6 +34,7 @@ from get_a_grip.model_training.config.nerf_densities_global_config import (
     lb_Oy,
     ub_Oy,
 )
+from get_a_grip.model_training.models.nerf_sampler import NerfSampler
 from get_a_grip.model_training.utils.diffusion import Diffusion
 from get_a_grip.model_training.utils.nerf_utils import (
     get_density,
@@ -47,6 +43,7 @@ from get_a_grip.model_training.utils.point_utils import (
     get_points_in_grid,
     transform_points,
 )
+
 
 def get_optimized_grasps(
     cfg: OptimizationConfig,
@@ -62,13 +59,25 @@ def get_optimized_grasps(
         training=TrainingConfig(
             log_path=ckpt_path.parent,
         ),
-        use_nerf_sampler=True,
     )
-    runner = Diffusion(config, load_multigpu_ckpt=True)
-    runner.load_checkpoint(config, name=ckpt_path.stem)
-    runner.model.HACK_MODE_FOR_PERFORMANCE = (
+    model = NerfSampler(
+        global_grid_shape=(
+            4,
+            NERF_DENSITIES_GLOBAL_NUM_X,
+            NERF_DENSITIES_GLOBAL_NUM_Y,
+            NERF_DENSITIES_GLOBAL_NUM_Z,
+        ),
+        grasp_dim=config.data.grasp_dim,
+        d_model=128,
+        virtual_seq_len=4,
+        conv_channels=(32, 64, 128),
+    )
+    model.HACK_MODE_FOR_PERFORMANCE = (
         True  # Big hack to speed up from sampling wasting dumb compute
     )
+
+    runner = Diffusion(config=config, model=model, load_multigpu_ckpt=True)
+    runner.load_checkpoint(config, name=ckpt_path.stem)
     device = runner.device
 
     # Get nerf densities global
@@ -273,22 +282,12 @@ def get_optimized_grasps(
     wrist_pose_matrix[:, :3, :3] = torch.from_numpy(rot).float().to(device)
     wrist_pose_matrix[:, :3, 3] = torch.from_numpy(trans).float().to(device)
 
-    try:
-        wrist_pose = pp.from_matrix(
-            wrist_pose_matrix,
-            pp.SE3_type,
-        ).to(device)
-    except ValueError as e:
-        print("Error in pp.from_matrix")
-        print(e)
-        print("rot = ", rot)
-        print("Orthogonalization did not work, running with looser tolerances")
-        wrist_pose = pp.from_matrix(
-            wrist_pose_matrix,
-            pp.SE3_type,
-            atol=1e-3,
-            rtol=1e-3,
-        ).to(device)
+    wrist_pose = pp.from_matrix(
+        wrist_pose_matrix.to(device),
+        pp.SE3_type,
+        atol=1e-3,
+        rtol=1e-3,
+    )
 
     assert wrist_pose.lshape == (NUM_GRASP_SAMPLES,)
 

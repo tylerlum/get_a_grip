@@ -16,41 +16,25 @@ import wandb
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
+from tqdm import tqdm as std_tqdm
 
 from get_a_grip.grasp_planning.config.optimization_config import OptimizationConfig
 from get_a_grip.grasp_planning.config.optimizer_config import (
-    CEMOptimizerConfig,
     RandomSamplingConfig,
     SGDOptimizerConfig,
 )
-from get_a_grip.grasp_planning.utils.optimizer_utils import (
+from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
     AllegroGraspConfig,
-    GraspMetric,
-    get_hand_surface_points_Oy,
-    get_joint_limits,
-    predict_in_collision_with_object,
-    predict_in_collision_with_table,
 )
-
-
-def is_notebook() -> bool:
-    try:
-        shell = get_ipython().__class__.__name__
-        if shell == "ZMQInteractiveShell":
-            return True  # Jupyter notebook or qtconsole
-        elif shell == "TerminalInteractiveShell":
-            return False  # Terminal running IPython
-        else:
-            return False  # Other type (?)
-    except NameError:
-        return False  # Probably standard Python interpreter
-
-
-# Switch to format the tqdm progress bar based on whether we're in a notebook or not.
-if is_notebook():
-    from tqdm.notebook import tqdm as std_tqdm
-else:
-    from tqdm import tqdm as std_tqdm
+from get_a_grip.grasp_planning.utils.joint_limit_utils import (
+    get_joint_limits,
+)
+from get_a_grip.grasp_planning.utils.nerf_evaluator_wrapper import (
+    NerfEvaluatorWrapper,
+)
+from get_a_grip.grasp_planning.utils.optimizer_utils import (
+    sample_random_rotate_transforms_only_around_y,
+)
 
 tqdm = partial(std_tqdm, dynamic_ncols=True)
 
@@ -63,22 +47,23 @@ class Optimizer:
     def __init__(
         self,
         init_grasp_config: AllegroGraspConfig,
-        grasp_metric: GraspMetric,
+        nerf_evaluator_wrapper: NerfEvaluatorWrapper,
     ):
-        # Put on the correct device. (TODO: DO WE NEED THIS?)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        grasp_metric = grasp_metric.to(device=self.device)
+        nerf_evaluator_wrapper = nerf_evaluator_wrapper.to(device=self.device)
         init_grasp_config = init_grasp_config.to(device=self.device)
 
         self.grasp_config = init_grasp_config
-        self.grasp_metric = grasp_metric
+        self.nerf_evaluator_wrapper = nerf_evaluator_wrapper
 
     def compute_grasp_losses(self) -> torch.Tensor:
-        return self.grasp_metric.get_failure_probability(self.grasp_config)
+        return self.nerf_evaluator_wrapper.get_failure_probability(self.grasp_config)
 
     def compute_grasp_losses_no_grad(self) -> torch.Tensor:
         with torch.no_grad():
-            return self.grasp_metric.get_failure_probability(self.grasp_config)
+            return self.nerf_evaluator_wrapper.get_failure_probability(
+                self.grasp_config
+            )
 
     def step(self):
         raise NotImplementedError()
@@ -88,7 +73,7 @@ class SGDOptimizer(Optimizer):
     def __init__(
         self,
         init_grasp_config: AllegroGraspConfig,
-        grasp_metric: GraspMetric,
+        nerf_evaluator_wrapper: NerfEvaluatorWrapper,
         optimizer_config: SGDOptimizerConfig,
     ):
         """
@@ -96,10 +81,10 @@ class SGDOptimizer(Optimizer):
 
         Args:
             init_grasp_config: Initial grasp configuration.
-            grasp_metric: GraspMetric object defining the metric to optimize.
+            nerf_evaluator_wrapper: NerfEvaluatorWrapper object defining the metric to optimize.
             optimizer_config: SGDOptimizerConfig object defining the optimizer configuration.
         """
-        super().__init__(init_grasp_config, grasp_metric)
+        super().__init__(init_grasp_config, nerf_evaluator_wrapper)
         self.optimizer_config = optimizer_config
 
         # Add requires_grad to grasp config.
@@ -109,9 +94,7 @@ class SGDOptimizer(Optimizer):
             optimizer_config.opt_grasp_dirs
         )
 
-        # TODO: Config this
         USE_ADAMW = True
-
         if optimizer_config.opt_fingers:
             self.joint_optimizer = (
                 torch.optim.SGD(
@@ -205,7 +188,7 @@ class RandomSamplingOptimizer(Optimizer):
     def __init__(
         self,
         init_grasp_config: AllegroGraspConfig,
-        grasp_metric: GraspMetric,
+        nerf_evaluator_wrapper: NerfEvaluatorWrapper,
         optimizer_config: RandomSamplingConfig,
     ):
         """
@@ -213,10 +196,10 @@ class RandomSamplingOptimizer(Optimizer):
 
         Args:
             init_grasp_config: Initial grasp configuration.
-            grasp_metric: GraspMetric object defining the metric to optimize.
+            nerf_evaluator_wrapper: NerfEvaluatorWrapper object defining the metric to optimize.
             optimizer_config: RandomSamplingConfig object defining the optimizer configuration.
         """
-        super().__init__(init_grasp_config, grasp_metric)
+        super().__init__(init_grasp_config, nerf_evaluator_wrapper)
         self.optimizer_config = optimizer_config
 
         joint_lower_limits, joint_upper_limits = get_joint_limits()
@@ -242,7 +225,7 @@ class RandomSamplingOptimizer(Optimizer):
         with torch.no_grad():
             # Eval old
             old_losses = (
-                self.grasp_metric.get_failure_probability(self.grasp_config)
+                self.nerf_evaluator_wrapper.get_failure_probability(self.grasp_config)
                 .detach()
                 .cpu()
                 .numpy()
@@ -302,7 +285,7 @@ class RandomSamplingOptimizer(Optimizer):
 
             # Eval new
             new_losses = (
-                self.grasp_metric.get_failure_probability(new_grasp_config)
+                self.nerf_evaluator_wrapper.get_failure_probability(new_grasp_config)
                 .detach()
                 .cpu()
                 .numpy()
@@ -325,111 +308,9 @@ class RandomSamplingOptimizer(Optimizer):
             ).to(device=self.device)
 
 
-class CEMOptimizer(Optimizer):
-    def __init__(
-        self,
-        grasp_config: AllegroGraspConfig,
-        grasp_metric: GraspMetric,
-        optimizer_config: CEMOptimizerConfig,
-    ):
-        """
-        Constructor for SGDOptimizer.
-
-        Args:
-            init_grasp_config: Initial grasp configuration.
-            grasp_metric: GraspMetric object defining the metric to optimize.
-            optimizer_config: SGDOptimizerConfig object defining the optimizer configuration.
-        """
-        super().__init__(grasp_config, grasp_metric)
-        self.optimizer_config = optimizer_config
-
-    def step(self):
-        # Find the elite fraction of samples.
-        elite_inds = torch.argsort(self.compute_grasp_losses())[
-            : self.optimizer_config.num_elite
-        ]
-        elite_grasps = self.grasp_config[elite_inds]
-
-        # Compute the mean and covariance of the grasp config.
-        elite_mean = elite_grasps.mean()
-        (
-            elite_cov_wrist_pose,
-            elite_cov_joint_angles,
-            elite_cov_grasp_orientations,
-        ) = elite_grasps.cov()
-
-        elite_chol_wrist_pose = (
-            torch.linalg.cholesky(
-                elite_cov_wrist_pose
-                + self.optimizer_config.min_cov_std**2
-                * torch.eye(6, device=elite_cov_wrist_pose.device)
-            )
-        ).unsqueeze(0)
-
-        wrist_pose_perturbations = torch.randn_like(
-            elite_mean.wrist_pose.Log()
-            .expand(self.optimizer_config.num_samples, -1)
-            .unsqueeze(-1)
-        )
-
-        wrist_pose_innovations = (
-            elite_chol_wrist_pose @ wrist_pose_perturbations
-        ).squeeze(-1)
-
-        elite_chol_joint_angles = (
-            torch.linalg.cholesky(
-                elite_cov_joint_angles
-                + self.optimizer_config.min_cov_std**2
-                * torch.eye(16, device=elite_cov_joint_angles.device)
-            )
-        ).unsqueeze(0)
-
-        joint_angle_perturbations = torch.randn_like(
-            elite_mean.joint_angles.expand(self.optimizer_config.num_samples, -1)
-        ).unsqueeze(-1)
-
-        joint_angle_innovations = (
-            elite_chol_joint_angles @ joint_angle_perturbations
-        ).squeeze(-1)
-
-        elite_chol_grasp_orientations = (
-            torch.linalg.cholesky(
-                elite_cov_grasp_orientations
-                + self.optimizer_config.min_cov_std**2
-                * torch.eye(3, device=elite_cov_grasp_orientations.device).unsqueeze(0)
-            )
-        ).unsqueeze(0)
-
-        grasp_orientation_perturbations = (
-            torch.randn_like(elite_mean.grasp_orientations.Log())
-            .expand(self.optimizer_config.num_samples, -1, -1)
-            .unsqueeze(-1)
-        )
-
-        grasp_orientation_innovations = (
-            elite_chol_grasp_orientations @ grasp_orientation_perturbations
-        ).squeeze(-1)
-
-        # Sample grasp configs from the current mean and covariance.
-        self.grasp_config = AllegroGraspConfig.from_values(
-            wrist_pose=elite_mean.wrist_pose.expand(
-                self.optimizer_config.num_samples, -1
-            )
-            + wrist_pose_innovations,
-            joint_angles=elite_mean.joint_angles.expand(
-                self.optimizer_config.num_samples, -1
-            )
-            + joint_angle_innovations,
-            grasp_orientations=elite_mean.grasp_orientations.expand(
-                self.optimizer_config.num_samples, -1, -1
-            )
-            + grasp_orientation_innovations,
-        )
-
-
 def run_optimizer_loop(
     optimizer: Optimizer,
-    optimizer_config: Union[SGDOptimizerConfig, CEMOptimizerConfig],
+    optimizer_config: Union[SGDOptimizerConfig, RandomSamplingConfig],
     print_freq: int,
     save_grasps_freq: int,
     output_path: pathlib.Path,
@@ -524,7 +405,7 @@ def run_optimizer_loop(
                     allow_pickle=True,
                 )
 
-    optimizer.grasp_metric.eval()
+    optimizer.nerf_evaluator_wrapper.eval()
 
     return (
         optimizer.compute_grasp_losses_no_grad(),
@@ -534,7 +415,7 @@ def run_optimizer_loop(
 
 def get_optimized_grasps(
     cfg: OptimizationConfig,
-    grasp_metric: Optional[GraspMetric] = None,
+    nerf_evaluator_wrapper: Optional[NerfEvaluatorWrapper] = None,
 ) -> Dict[str, np.ndarray]:
     # print("=" * 80)
     # print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
@@ -605,17 +486,17 @@ def get_optimized_grasps(
 
     # Create grasp metric
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if grasp_metric is None:
+    if nerf_evaluator_wrapper is None:
         print(
-            f"Loading classifier config from {cfg.grasp_metric.classifier_config_path}"
+            f"Loading nerf_evaluator config from {cfg.nerf_evaluator_wrapper.nerf_evaluator_config_path}"
         )
-        grasp_metric = GraspMetric.from_config(
-            cfg.grasp_metric,
+        nerf_evaluator_wrapper = NerfEvaluatorWrapper.from_config(
+            cfg.nerf_evaluator_wrapper,
             console=console,
         )
     else:
         print("Using provided grasp metric.")
-    grasp_metric = grasp_metric.to(device=device)
+    nerf_evaluator_wrapper = nerf_evaluator_wrapper.to(device=device)
 
     # Put this here to ensure that the random seed is set before sampling random rotations.
     if cfg.random_seed is not None:
@@ -623,8 +504,6 @@ def get_optimized_grasps(
 
     BATCH_SIZE = cfg.eval_batch_size
     all_success_preds = []
-    all_predicted_in_collision_obj = []
-    all_predicted_in_collision_table = []
     with torch.no_grad():
         # Sample random rotations
         N_SAMPLES = 1 + cfg.n_random_rotations_per_grasp
@@ -673,9 +552,6 @@ def get_optimized_grasps(
                 f"Filtered less feasible grasps. New batch size: {new_grasp_configs.batch_size}"
             )
 
-        # HACK TO DEBUG 1
-        # new_grasp_configs = new_grasp_configs[[0,1]]
-
         # Evaluate grasp metric and collisions
         n_batches = math.ceil(new_grasp_configs.batch_size / BATCH_SIZE)
         for batch_i in tqdm(
@@ -692,58 +568,18 @@ def get_optimized_grasps(
 
             # Metric
             success_preds = (
-                (1 - grasp_metric.get_failure_probability(temp_grasp_configs))
+                (1 - nerf_evaluator_wrapper.get_failure_probability(temp_grasp_configs))
                 .detach()
                 .cpu()
                 .numpy()
             )
             all_success_preds.append(success_preds)
 
-            # Collision with object and table
-            USE_OBJECT = False
-            USE_TABLE = False
-            hand_surface_points_Oy = None
-            if USE_OBJECT or USE_TABLE:
-                hand_surface_points_Oy = get_hand_surface_points_Oy(
-                    grasp_config=temp_grasp_configs
-                )
-            if USE_OBJECT:
-                predicted_in_collision_obj = predict_in_collision_with_object(
-                    nerf_field=grasp_metric.nerf_field,
-                    hand_surface_points_Oy=hand_surface_points_Oy,
-                )
-                all_predicted_in_collision_obj.append(predicted_in_collision_obj)
-            else:
-                all_predicted_in_collision_obj.append(np.zeros_like(success_preds))
-            if USE_TABLE:
-                table_y_Oy = -cfg.grasp_metric.X_N_Oy[2, 3]
-                predicted_in_collision_table = predict_in_collision_with_table(
-                    table_y_Oy=table_y_Oy,
-                    hand_surface_points_Oy=hand_surface_points_Oy,
-                )
-                all_predicted_in_collision_table.append(predicted_in_collision_table)
-            else:
-                all_predicted_in_collision_table.append(np.zeros_like(success_preds))
-
         # Aggregate
         all_success_preds = np.concatenate(all_success_preds)
-        all_predicted_in_collision_obj = np.concatenate(all_predicted_in_collision_obj)
-        all_predicted_in_collision_table = np.concatenate(
-            all_predicted_in_collision_table
-        )
         assert all_success_preds.shape == (new_grasp_configs.batch_size,)
-        assert all_predicted_in_collision_obj.shape == (new_grasp_configs.batch_size,)
-        assert all_predicted_in_collision_table.shape == (new_grasp_configs.batch_size,)
 
-        # Filter out grasps that are in collision
-        new_all_success_preds = np.where(
-            np.logical_or(
-                all_predicted_in_collision_obj, all_predicted_in_collision_table
-            ),
-            np.zeros_like(all_success_preds),
-            all_success_preds,
-        )
-        ordered_idxs_best_first = np.argsort(new_all_success_preds)[::-1].copy()
+        ordered_idxs_best_first = np.argsort(all_success_preds)[::-1].copy()
         print(
             f"ordered_idxs_best_first = {ordered_idxs_best_first[:cfg.optimizer.num_grasps]}"
         )
@@ -756,19 +592,13 @@ def get_optimized_grasps(
     if isinstance(cfg.optimizer, SGDOptimizerConfig):
         optimizer = SGDOptimizer(
             init_grasp_configs,
-            grasp_metric,
-            cfg.optimizer,
-        )
-    elif isinstance(cfg.optimizer, CEMOptimizerConfig):
-        optimizer = CEMOptimizer(
-            init_grasp_configs,
-            grasp_metric,
+            nerf_evaluator_wrapper,
             cfg.optimizer,
         )
     elif isinstance(cfg.optimizer, RandomSamplingConfig):
         optimizer = RandomSamplingOptimizer(
             init_grasp_configs,
-            grasp_metric,
+            nerf_evaluator_wrapper,
             cfg.optimizer,
         )
     else:
@@ -841,32 +671,6 @@ def get_optimized_grasps(
 def main() -> None:
     cfg = tyro.cli(OptimizationConfig)
     get_optimized_grasps(cfg)
-
-
-def sample_random_rotate_transforms_only_around_y(N: int) -> pp.LieTensor:
-    # TODO: Move to utils
-    PP_MATRIX_ATOL, PP_MATRIX_RTOL = 1e-4, 1e-4
-    # Sample big rotations in tangent space of SO(3).
-    # Choose 4 * \pi as a heuristic to get pretty evenly spaced rotations.
-    # TODO(pculbert): Figure out better uniform sampling on SO(3).
-    x_rotations = torch.zeros(N)
-    y_rotations = 4 * torch.pi * (2 * torch.rand(N) - 1)
-    z_rotations = torch.zeros(N)
-    xyz_rotations = torch.stack([x_rotations, y_rotations, z_rotations], dim=-1)
-    log_random_rotations = pp.so3(xyz_rotations)
-
-    # Return exponentiated rotations.
-    random_SO3_rotations = log_random_rotations.Exp()
-
-    # A bit annoying -- need to cast SO(3) -> SE(3).
-    random_rotate_transforms = pp.from_matrix(
-        random_SO3_rotations.matrix(),
-        pp.SE3_type,
-        atol=PP_MATRIX_ATOL,
-        rtol=PP_MATRIX_RTOL,
-    )
-
-    return random_rotate_transforms
 
 
 if __name__ == "__main__":

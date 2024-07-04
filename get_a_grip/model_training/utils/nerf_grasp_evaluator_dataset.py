@@ -1,3 +1,4 @@
+import pathlib
 from typing import Optional
 
 import h5py
@@ -6,7 +7,9 @@ import pypose as pp
 import torch
 from torch.utils.data import Dataset
 
-from get_a_grip.model_training.config.fingertip_config import BaseFingertipConfig
+from get_a_grip.model_training.config.fingertip_config import (
+    EvenlySpacedFingertipConfig,
+)
 from get_a_grip.model_training.config.nerf_densities_global_config import (
     NERF_DENSITIES_GLOBAL_NUM_X,
     NERF_DENSITIES_GLOBAL_NUM_Y,
@@ -22,15 +25,15 @@ def assert_equals(a, b):
     assert a == b, f"{a} != {b}"
 
 
-class NeRFGrid_To_GraspSuccess_HDF5_Dataset(Dataset):
+class NerfGraspEvalDataset(Dataset):
     def __init__(
         self,
-        input_hdf5_filepath: str,
-        fingertip_config: BaseFingertipConfig,
+        input_hdf5_filepath: pathlib.Path,
+        fingertip_config: EvenlySpacedFingertipConfig,
         max_num_data_points: Optional[int] = None,
-        load_nerf_densities_in_ram: bool = False,
-        load_nerf_densities_global_in_ram: bool = False,
-        load_nerf_densities_global_idx_in_ram: bool = False,
+        load_nerf_densities_in_ram: bool = False,  # Too big for RAM
+        load_nerf_densities_global_in_ram: bool = False,  # Too big for RAM
+        load_nerf_densities_global_idx_in_ram: bool = True,
         load_grasp_labels_in_ram: bool = True,
         load_grasp_transforms_in_ram: bool = True,
         load_nerf_configs_in_ram: bool = True,
@@ -129,17 +132,6 @@ class NeRFGrid_To_GraspSuccess_HDF5_Dataset(Dataset):
             self.grasp_configs = (
                 torch.from_numpy(hdf5_file["/grasp_configs"][()]).float()
                 if load_grasp_configs_in_ram
-                else None
-            )
-
-            self.object_scale = (
-                torch.from_numpy(hdf5_file["/object_scale"][()]).float()
-                if False
-                else None
-            )
-            self.object_state = (
-                torch.from_numpy(hdf5_file["/object_state"][()]).float()
-                if False
                 else None
             )
 
@@ -249,16 +241,6 @@ class NeRFGrid_To_GraspSuccess_HDF5_Dataset(Dataset):
             if self.grasp_configs is None
             else self.grasp_configs[idx]
         )
-        object_scale = (
-            torch.from_numpy(self.hdf5_file["/object_scale"][idx : idx + 1]).float()
-            if self.object_scale is None
-            else self.object_scale[idx : idx + 1]
-        )[0]
-        object_state = (
-            torch.from_numpy(self.hdf5_file["/object_state"][idx]).float()
-            if self.object_state is None
-            else self.object_state[idx]
-        )
 
         assert_equals(
             nerf_densities.shape,
@@ -279,8 +261,6 @@ class NeRFGrid_To_GraspSuccess_HDF5_Dataset(Dataset):
         assert_equals(y_PGS.shape, (NUM_CLASSES,))
         assert_equals(grasp_transforms.shape, (self.NUM_FINGERS, 4, 4))
         assert_equals(grasp_configs.shape, (self.NUM_FINGERS, 7 + 16 + 4))
-        assert_equals(object_scale.shape, ())
-        assert_equals(object_state.shape, (13,))
 
         return (
             nerf_densities,

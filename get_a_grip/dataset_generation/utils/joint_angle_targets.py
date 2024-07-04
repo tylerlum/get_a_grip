@@ -279,12 +279,14 @@ def compute_grasp_orientations(
     hand_model: HandModel,
     object_model: ObjectModel,
 ) -> torch.Tensor:
-    # Can't just compute_grasp_dirs because we need to know the orientation of the fingers
-    # Each finger has a rotation matrix [x, y, z] where x y z are column vectors
-    #    * z is direction the fingertip moves
-    #    * y is direction "up" along finger (from finger center to fingertip), modified to be perpendicular to z
-    #    * x is direction "right" along finger (from finger center to fingertip), modified to be perpendicular to z and y
-    # if y.cross(z) == 0, then need backup
+    """
+    Can't just compute_grasp_dirs because we need to know the orientation of the fingers
+    Each finger has a rotation matrix [x, y, z] where x y z are column vectors
+       * z is direction the fingertip moves
+       * y is direction "up" along finger (from finger center to fingertip), modified to be perpendicular to z
+       * x is direction "right" along finger (from finger center to fingertip), modified to be perpendicular to z and y
+    if y.cross(z) == 0, then need backup
+    """
     batch_size = joint_angles_start.shape[0]
 
     (
@@ -300,22 +302,31 @@ def compute_grasp_orientations(
     nearest_hand_to_object_directions = -nearest_object_to_hand_directions
     z_dirs = nearest_hand_to_object_directions
     assert z_dirs.shape == (batch_size, hand_model.num_fingers, 3)
+    return compute_grasp_orientations_from_z_dirs(
+        joint_angles_start=joint_angles_start,
+        hand_model=hand_model,
+        z_dirs=z_dirs,
+    )
 
-    if torch.any(z_dirs.norm(dim=-1) == 0):
-        bad_inds = torch.where(z_dirs.norm(dim=-1) == 0)
-        z_dirs[bad_inds] = -hand_contact_nearest_points[bad_inds]
-        print(
-            f"WARNING: {len(bad_inds)} z_dirs have 0 norm, using hand_contact_nearest_points instead"
-        )
 
-    assert (z_dirs.norm(dim=-1).min() > 0).all()
+def compute_grasp_orientations_from_z_dirs(
+    joint_angles_start: torch.Tensor,
+    hand_model: HandModel,
+    z_dirs: torch.Tensor,
+) -> torch.Tensor:
+    batch_size = joint_angles_start.shape[0]
+    assert z_dirs.shape == (batch_size, hand_model.num_fingers, 3)
+
+    assert (z_dirs.norm(dim=-1).min() > 0).all(), f"z_dirs = {z_dirs}"
     z_dirs = z_dirs / z_dirs.norm(dim=-1, keepdim=True)
 
     (center_to_right_dirs, center_to_tip_dirs) = compute_fingertip_dirs(
         joint_angles=joint_angles_start,
         hand_model=hand_model,
     )
-    option_1_ok = torch.cross(center_to_tip_dirs, z_dirs).norm(dim=-1, keepdim=True) > 0
+    option_1_ok = (
+        torch.cross(center_to_tip_dirs, z_dirs).norm(dim=-1, keepdim=True) > 1e-4
+    )
 
     y_dirs = torch.where(
         option_1_ok,
@@ -330,8 +341,15 @@ def compute_grasp_orientations(
     x_dirs = torch.cross(y_dirs, z_dirs)
     assert (x_dirs.norm(dim=-1).min() > 0).all()
     x_dirs = x_dirs / x_dirs.norm(dim=-1, keepdim=True)
-    grasp_orientations = torch.stack([x_dirs, y_dirs, z_dirs], dim=-1)
 
+    # Make sure y and z are orthogonal
+    assert (torch.einsum("...l,...l->...", y_dirs, z_dirs).abs().max() < 1e-3).all(), (
+        f"y_dirs = {y_dirs}",
+        f"z_dirs = {z_dirs}",
+        f"torch.einsum('...l,...l->...', y_dirs, z_dirs).abs().max() = {torch.einsum('...l,...l->...', y_dirs, z_dirs).abs().max()}",
+    )
+
+    grasp_orientations = torch.stack([x_dirs, y_dirs, z_dirs], dim=-1)
     assert grasp_orientations.shape == (batch_size, hand_model.num_fingers, 3, 3)
     return grasp_orientations
 
@@ -385,6 +403,28 @@ def compute_fingertip_targets(
     grasp_directions = grasp_orientations[:, :, :, 2]
     assert grasp_directions.shape == (batch_size, num_fingers, 3)
 
+    return compute_fingertip_targets_from_grasp_dirs(
+        joint_angles_start=joint_angles_start,
+        hand_model=hand_model,
+        grasp_dirs=grasp_directions,
+        dist_move_finger=dist_move_finger,
+    )
+
+
+def compute_fingertip_targets_from_grasp_dirs(
+    joint_angles_start: torch.Tensor,
+    hand_model: HandModel,
+    grasp_dirs: torch.Tensor,
+    dist_move_finger: Optional[float] = None,
+) -> torch.Tensor:
+    if dist_move_finger is None:
+        dist_move_finger = DEFAULT_DIST_MOVE_FINGER
+
+    # Sanity check
+    batch_size = joint_angles_start.shape[0]
+    num_fingers = hand_model.num_fingers
+    assert grasp_dirs.shape == (batch_size, num_fingers, 3)
+
     # Get current positions
     fingertip_mean_positions = compute_fingertip_mean_contact_positions(
         joint_angles=joint_angles_start,
@@ -392,7 +432,7 @@ def compute_fingertip_targets(
     )
     assert fingertip_mean_positions.shape == (batch_size, num_fingers, 3)
 
-    fingertip_targets = fingertip_mean_positions + grasp_directions * dist_move_finger
+    fingertip_targets = fingertip_mean_positions + grasp_dirs * dist_move_finger
     return fingertip_targets
 
 
@@ -408,6 +448,7 @@ def compute_optimized_joint_angle_targets_given_fingertip_targets(
     assert fingertip_targets.shape == (batch_size, num_fingers, num_xyz)
 
     # Store original hand pose for later
+    assert hand_model.hand_pose is not None
     original_hand_pose = hand_model.hand_pose.detach().clone()
 
     # Optimize joint angles
@@ -459,6 +500,31 @@ def compute_optimized_joint_angle_targets_given_grasp_orientations(
         joint_angles_start=joint_angles_start,
         hand_model=hand_model,
         grasp_orientations=grasp_orientations,
+        dist_move_finger=dist_move_finger,
+    )
+
+    (
+        joint_angle_targets,
+        debug_info,
+    ) = compute_optimized_joint_angle_targets_given_fingertip_targets(
+        joint_angles_start=joint_angles_start,
+        hand_model=hand_model,
+        fingertip_targets=fingertip_targets,
+    )
+    return joint_angle_targets, debug_info
+
+
+def compute_optimized_joint_angle_targets_given_grasp_dirs(
+    joint_angles_start: torch.Tensor,
+    hand_model: HandModel,
+    grasp_dirs: torch.Tensor,
+    dist_move_finger: Optional[float] = None,
+) -> Tuple[torch.Tensor, defaultdict]:
+    # Get fingertip targets
+    fingertip_targets = compute_fingertip_targets_from_grasp_dirs(
+        joint_angles_start=joint_angles_start,
+        hand_model=hand_model,
+        grasp_dirs=grasp_dirs,
         dist_move_finger=dist_move_finger,
     )
 

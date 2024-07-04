@@ -100,7 +100,7 @@ def parse_object_code_and_scale(object_code_and_scale_str: str) -> Tuple[str, fl
     return object_code, object_scale
 
 
-def nerf_to_urdf(args: Args) -> tuple[pathlib.Path, pathlib.Path]:
+def nerf_to_urdf(args: Args) -> Tuple[pathlib.Path, pathlib.Path]:
     print("=" * 80)
     print(f"{pathlib.Path(__file__).name} args: {args}")
     print("=" * 80 + "\n")
