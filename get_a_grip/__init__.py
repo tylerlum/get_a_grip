@@ -10,7 +10,7 @@ def get_package_folder() -> Path:
     return package_path
 
 
-def get_repo_root() -> Path:
+def get_repo_folder() -> Path:
     """Returns the path to the root of the repository."""
     # Get the package folder path
     package_folder = get_package_folder()
@@ -22,7 +22,7 @@ def get_repo_root() -> Path:
 def get_assets_folder() -> Path:
     """Returns the path to the assets folder located in the repository root."""
     # Get the repository root
-    repo_root = get_repo_root()
+    repo_root = get_repo_folder()
     # Define the path to the assets folder
     assets_folder = repo_root / "assets"
     return assets_folder
@@ -31,7 +31,7 @@ def get_assets_folder() -> Path:
 def get_data_folder() -> Path:
     """Returns the path to the data folder located in the repository root."""
     # Get the repository root
-    repo_root = get_repo_root()
+    repo_root = get_repo_folder()
     # Define the path to the data folder
     data_folder = repo_root / "data"
     return data_folder

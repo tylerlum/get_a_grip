@@ -2,6 +2,7 @@ from typing import Tuple
 
 import numpy as np
 import torch
+
 from get_a_grip.dataset_generation.utils.rot6d import (
     robust_compute_rotation_matrix_from_ortho6d,
 )

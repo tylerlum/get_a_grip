@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional
 import numpy as np
 import plotly.graph_objects as go
 import torch
+
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.joint_angle_targets import (
     compute_fingertip_mean_contact_positions,
@@ -55,7 +56,7 @@ def get_grasp_config_dict_plotly_data_list(
 ) -> list:
     if "grasp_orientations" not in config_dict:
         print(
-            f"This is not a grasp_config_dict, skipping get_grasp_config_dict_plotly_data_list"
+            "This is not a grasp_config_dict, skipping get_grasp_config_dict_plotly_data_list"
         )
         return []
 
@@ -256,36 +257,26 @@ def create_config_dict_fig(
         energy_str = f"Energy: {energy}\n  {energy_terms_str}"
         fig.add_annotation(text=energy_str, x=0.5, y=0.1, xref="paper", yref="paper")
 
-    # passed_eval
-    if "passed_eval" in config_dict:
-        passed_eval = config_dict["passed_eval"][idx_to_visualize]
-        passed_eval_str = (
-            f"Passed eval: {passed_eval}" if not concise_title else f"E: {passed_eval}"
-        )
-        fig.add_annotation(
-            text=passed_eval_str, x=0.5, y=0.05, xref="paper", yref="paper"
-        )
+    # y_PGS
+    if "y_PGS" in config_dict:
+        y_PGS = config_dict["y_PGS"][idx_to_visualize]
+        y_PGS_str = f"y_PGS: {y_PGS}" if not concise_title else f"E: {y_PGS}"
+        fig.add_annotation(text=y_PGS_str, x=0.5, y=0.05, xref="paper", yref="paper")
         # For some reason, annotations not showing up in the multi fig plot
-        title += f" | {passed_eval_str}"
+        title += f" | {y_PGS_str}"
 
-    if "passed_penetration_threshold" in config_dict:
-        passed_penetration_threshold = config_dict["passed_penetration_threshold"][
-            idx_to_visualize
-        ]
-        passed_penetration_threshold_str = (
-            f"Passed penetration threshold: {passed_penetration_threshold}"
-            if not concise_title
-            else f"P: {passed_penetration_threshold}"
-        )
+    if "y_coll" in config_dict:
+        y_coll = config_dict["y_coll"][idx_to_visualize]
+        y_coll_str = f"y_coll: {y_coll}" if not concise_title else f"P: {y_coll}"
         fig.add_annotation(
-            text=passed_penetration_threshold_str,
+            text=y_coll_str,
             x=0.5,
             y=0.1,
             xref="paper",
             yref="paper",
         )
         # For some reason, annotations not showing up in the multi fig plot
-        title += f" | {passed_penetration_threshold_str}"
+        title += f" | {y_coll_str}"
 
     if "penetration" in config_dict:
         penetration = config_dict["penetration"][idx_to_visualize]
@@ -298,18 +289,12 @@ def create_config_dict_fig(
         # For some reason, annotations not showing up in the multi fig plot
         title += f" | {penetration_str}"
 
-    if "passed_simulation" in config_dict:
-        passed_simulation = config_dict["passed_simulation"][idx_to_visualize]
-        passed_simulation_str = (
-            f"Passed simulation: {passed_simulation}"
-            if not concise_title
-            else f"S: {passed_simulation}"
-        )
-        fig.add_annotation(
-            text=passed_simulation_str, x=0.5, y=0.2, xref="paper", yref="paper"
-        )
+    if "y_pick" in config_dict:
+        y_pick = config_dict["y_pick"][idx_to_visualize]
+        y_pick_str = f"y_pick: {y_pick}" if not concise_title else f"S: {y_pick}"
+        fig.add_annotation(text=y_pick_str, x=0.5, y=0.2, xref="paper", yref="paper")
         # For some reason, annotations not showing up in the multi fig plot
-        title += f" | {passed_simulation_str}"
+        title += f" | {y_pick_str}"
 
     # loss
     if "loss" in config_dict:

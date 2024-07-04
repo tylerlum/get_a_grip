@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import plotly.graph_objects as go
 import torch
 import tyro
+
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.object_model import ObjectModel
 from get_a_grip.dataset_generation.utils.seed import set_seed

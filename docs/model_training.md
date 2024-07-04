@@ -37,7 +37,7 @@ python nerf_grasping/dexdiffuser/train_dexdiffuser_evaluator.py
 
 ```
 python nerf_grasping/learned_metric/Train_DexGraspNet_NeRF_Grasp_Metric.py cnn-3d-xyz-global-cnn \
---task-type PASSED_SIMULATION_AND_PENETRATION_THRESHOLD_AND_EVAL \
+--task-type Y_PICK_AND_Y_COLL_AND_Y_PGS \
 --train-dataset-filepath data/NEW_DATASET/grid_dataset/dataset.h5 \
 --val-dataset-filepath data/NEW_DATASET/grid_dataset/dataset.h5 (TODO) \
 --test-dataset-filepath data/NEW_DATASET/grid_dataset/dataset.h5 (TODO) \

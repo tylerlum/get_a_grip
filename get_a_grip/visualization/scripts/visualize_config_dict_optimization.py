@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import plotly.graph_objects as go
 import tyro
+from tqdm import tqdm
+
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.object_model import ObjectModel
@@ -13,10 +15,10 @@ from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
 from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_to_pose
-from tqdm import tqdm
-
-from visualize_config_dict_helper import create_config_dict_fig
-from visualize_optimization_helper import (
+from get_a_grip.visualization.utils.visualize_config_dict_helper import (
+    create_config_dict_fig,
+)
+from get_a_grip.visualization.utils.visualize_optimization_helper import (
     create_figure_with_buttons_and_slider,
 )
 

@@ -2,6 +2,7 @@ from collections import defaultdict
 from typing import Dict, Optional, Tuple
 
 import torch
+
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.object_model import ObjectModel
 

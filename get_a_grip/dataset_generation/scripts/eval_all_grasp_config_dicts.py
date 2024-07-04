@@ -9,9 +9,10 @@ from functools import partial
 from typing import List, Optional
 
 import tyro
+from tqdm import tqdm
+
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.isaac_validator import ValidationType
-from tqdm import tqdm
 
 
 @dataclass
@@ -31,9 +32,7 @@ class EvalAllGraspConfigDictsArgs:
 
     debug_index: Optional[int] = None
     use_gui: bool = False
-    use_cpu: bool = (
-        False  # NOTE: Tyler has had big discrepancy between using GPU vs CPU, hypothesize that CPU is safer
-    )
+    use_cpu: bool = False  # NOTE: Tyler has had big discrepancy between using GPU vs CPU, hypothesize that CPU is safer
     randomize_order_seed: Optional[int] = None
     mid_optimization_steps: List[int] = field(default_factory=list)
     use_multiprocess: bool = True

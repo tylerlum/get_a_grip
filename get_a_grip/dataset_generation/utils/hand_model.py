@@ -12,6 +12,14 @@ import pytorch_kinematics as pk
 import torch
 import transforms3d
 import trimesh as tm
+from kaolin.metrics.trianglemesh import (
+    CUSTOM_index_vertices_by_faces as index_vertices_by_faces,
+)
+from kaolin.metrics.trianglemesh import (
+    compute_sdf,
+)
+from urdf_parser_py.urdf import Box, Robot, Sphere
+
 from get_a_grip.dataset_generation.utils.allegro_hand_info import (
     ALLEGRO_HAND_CONTACT_POINTS_PATH,
     ALLEGRO_HAND_FINGER_KEYWORDS,
@@ -21,13 +29,6 @@ from get_a_grip.dataset_generation.utils.allegro_hand_info import (
 from get_a_grip.dataset_generation.utils.rot6d import (
     robust_compute_rotation_matrix_from_ortho6d,
 )
-from kaolin.metrics.trianglemesh import (
-    CUSTOM_index_vertices_by_faces as index_vertices_by_faces,
-)
-from kaolin.metrics.trianglemesh import (
-    compute_sdf,
-)
-from urdf_parser_py.urdf import Box, Robot, Sphere
 
 
 class HandModel:

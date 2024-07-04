@@ -13,6 +13,9 @@ import torch
 import tyro
 import wandb
 from clean_loop_timer import LoopTimer
+from torch.multiprocessing import set_start_method
+from tqdm import tqdm
+
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.energy import (
     ENERGY_NAME_TO_SHORTHAND_DICT,
@@ -29,8 +32,6 @@ from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
 )
 from get_a_grip.dataset_generation.utils.pose_conversion import pose_to_hand_config
 from get_a_grip.dataset_generation.utils.seed import set_seed
-from torch.multiprocessing import set_start_method
-from tqdm import tqdm
 
 try:
     set_start_method("spawn")
@@ -46,7 +47,9 @@ np.seterr(all="raise")
 class GenerateHandConfigDictsArgs:
     # experiment settings
     meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
-    output_hand_config_dicts_path: pathlib.Path = get_data_folder() / "NEW_DATASET/hand_config_dicts"
+    output_hand_config_dicts_path: pathlib.Path = (
+        get_data_folder() / "NEW_DATASET/hand_config_dicts"
+    )
     rand_object_scale: bool = False
     object_scale: Optional[float] = 0.075
     min_object_scale: float = 0.05
@@ -63,7 +66,7 @@ class GenerateHandConfigDictsArgs:
     use_wandb: bool = False
     wandb_name: str = ""
     wandb_entity: str = "tylerlum"
-    wandb_project: str = "DexGraspNet_v1"
+    wandb_project: str = "get_a_grip_datagen"
     wandb_visualization_freq: Optional[int] = 50
 
     # hyper parameters

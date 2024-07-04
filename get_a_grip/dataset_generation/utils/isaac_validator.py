@@ -15,6 +15,10 @@ import numpy as np
 import torch
 import transforms3d
 import trimesh
+from isaacgym import gymapi, gymtorch, gymutil, torch_utils
+from PIL import Image
+from tqdm import tqdm
+
 from get_a_grip import get_assets_folder
 from get_a_grip.dataset_generation.utils.allegro_hand_info import (
     ALLEGRO_HAND_ALLOWED_CONTACT_LINK_NAMES,
@@ -26,9 +30,6 @@ from get_a_grip.dataset_generation.utils.torch_quat_utils import (
     T_to_pose,
     pose_to_T,
 )
-from isaacgym import gymapi, gymtorch, gymutil, torch_utils
-from PIL import Image
-from tqdm import tqdm
 
 # Spawn the hand at a far away position far away from the object
 FAR_AWAY_INIT_HAND_POS = gymapi.Vec3(0, 1, 0)

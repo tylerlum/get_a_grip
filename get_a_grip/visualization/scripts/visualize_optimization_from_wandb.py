@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import plotly
 import tyro
 
-from visualize_optimization_helper import (
+from get_a_grip.visualization.utils.visualize_optimization_helper import (
     create_figure_with_buttons_and_slider,
     download_plotly_files_from_wandb,
     get_visualization_freq_from_wandb,
@@ -14,7 +14,7 @@ from visualize_optimization_helper import (
 @dataclass
 class VisualizeOptimizationFromWandbArgs:
     wandb_entity: str = "tylerlum"
-    wandb_project: str = "DexGraspNet_v1"
+    wandb_project: str = "get_a_grip_datagen"
     wandb_run_id: str = "qg17990t"
     max_files_to_read: int = 100
     frame_duration: int = 200

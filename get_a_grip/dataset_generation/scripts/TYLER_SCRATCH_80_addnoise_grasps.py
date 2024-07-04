@@ -6,6 +6,9 @@ from typing import Tuple
 import numpy as np
 import plotly.graph_objects as go
 import torch
+from localscope import localscope
+from tqdm import tqdm
+
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.joint_angle_targets import (
     compute_fingertip_dirs,
@@ -13,8 +16,6 @@ from get_a_grip.dataset_generation.utils.joint_angle_targets import (
 from get_a_grip.dataset_generation.utils.pose_conversion import (
     hand_config_to_pose,
 )
-from localscope import localscope
-from tqdm import tqdm
 
 # %%
 DEBUG_NO_NOISE = False
@@ -190,9 +191,9 @@ objs = list(obj_to_all_grasps.keys())
 # Step 2: Get obj_to_good_grasps
 obj_to_good_grasps = {}
 for obj, all_grasps_dict in tqdm(obj_to_all_grasps.items()):
-    good_idxs = all_grasps_dict["passed_eval"] > 0.5
+    good_idxs = all_grasps_dict["y_PGS"] > 0.5
     good_data_dict = {k: v[good_idxs] for k, v in all_grasps_dict.items()}
-    if good_data_dict["passed_eval"].shape[0] > 0:
+    if good_data_dict["y_PGS"].shape[0] > 0:
         obj_to_good_grasps[obj] = good_data_dict
 
 
@@ -202,11 +203,11 @@ print(f"len(obj_to_good_grasps): {len(obj_to_good_grasps)}")
 
 # %%
 for obj, good_grasps_dict in obj_to_good_grasps.items():
-    print(f"{obj}: {good_grasps_dict['passed_eval'].shape}")
+    print(f"{obj}: {good_grasps_dict['y_PGS'].shape}")
 
 print()
 for obj, all_grasps_dict in obj_to_all_grasps.items():
-    print(f"{obj}: {all_grasps_dict['passed_eval'].shape}")
+    print(f"{obj}: {all_grasps_dict['y_PGS'].shape}")
 
 
 # %%
@@ -491,14 +492,14 @@ print(f"n_grasps: {n_grasps}")
 #     obj_to_new_grasps[obj] = new_dict
 #
 # %%
-# passed_evals = [x for d in obj_to_all_grasps.values() for x in d['passed_eval']]
-# passed_sims = [x for d in obj_to_all_grasps.values() for x in d['passed_simulation']]
+# y_PGSs = [x for d in obj_to_all_grasps.values() for x in d['y_PGS']]
+# y_picks = [x for d in obj_to_all_grasps.values() for x in d['y_pick']]
 # # %%
 # import matplotlib.pyplot as plt
-# plt.hist(passed_evals, bins=100)
+# plt.hist(y_PGSs, bins=100)
 #
 # # %%
-# plt.hist(passed_sims, bins=100)
+# plt.hist(y_picks, bins=100)
 #
 # #
 # #

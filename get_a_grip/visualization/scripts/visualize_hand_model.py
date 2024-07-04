@@ -2,6 +2,7 @@ import os
 
 import plotly.graph_objects as go
 import torch
+
 from get_a_grip.dataset_generation.utils.allegro_hand_info import (
     ALLEGRO_HAND_JOINT_ANGLES_MU,
     ALLEGRO_HAND_ROTATION,

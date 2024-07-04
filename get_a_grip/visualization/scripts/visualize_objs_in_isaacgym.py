@@ -24,15 +24,16 @@ Press 'R' to reset the  simulation
 import pathlib
 import random
 from math import sqrt
-from typing import List, Set, Tuple
+from typing import List, Tuple
 
 import numpy as np
+from isaacgym import gymapi, gymutil
+from tqdm import tqdm
+
 from get_a_grip import get_assets_folder
 from get_a_grip.dataset_generation.utils.allegro_hand_info import (
     ALLEGRO_HAND_ROOT_HAND_FILE,
 )
-from isaacgym import gymapi, gymutil
-from tqdm import tqdm
 
 
 def sample_object_codes_and_scales(
@@ -88,22 +89,19 @@ def get_urdf_paths(object_codes: List[str], meshdata_root_path: pathlib.Path) ->
     return selected_urdf_paths
 
 
-def load_assets(gym, sim, selected_urdf_paths) -> list:
+def load_assets(gym, sim, selected_urdf_paths: List[pathlib.Path]) -> list:
     # Asset options
     obj_asset_options = gymapi.AssetOptions()
     obj_asset_options.override_com = True
     obj_asset_options.override_inertia = True
     obj_asset_options.density = 500
     obj_asset_options.vhacd_enabled = (
-        # True  # Convex decomposition is better than convex hull
-        False  # Convex decomposition is better than convex hull
+        False  # Don't need convex decomposition for visualization only
     )
     obj_asset_options.fix_base_link = True
 
     assets = [
-        gym.load_asset(
-            sim, str(urdf_path.parents[0]), urdf_path.name, obj_asset_options
-        )
+        gym.load_asset(sim, str(urdf_path.parent), urdf_path.name, obj_asset_options)
         for urdf_path in tqdm(selected_urdf_paths, desc="Loading assets")
     ]
     return assets

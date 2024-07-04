@@ -11,7 +11,9 @@ from get_a_grip import get_data_folder
 @dataclass
 class MergeConfigDictsArgs:
     input_config_dicts_paths: List[pathlib.Path]
-    output_config_dicts_path: pathlib.Path = get_data_folder() / "large/evaled_grasp_config_dicts"
+    output_config_dicts_path: pathlib.Path = (
+        get_data_folder() / "large/evaled_grasp_config_dicts"
+    )
 
 
 def main() -> None:
