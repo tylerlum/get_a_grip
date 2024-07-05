@@ -17,7 +17,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import trimesh
 import tyro
-import wandb
 from clean_loop_timer import LoopTimer
 from sklearn.metrics import (
     accuracy_score,
@@ -31,9 +30,8 @@ from torch.utils.data import (
     random_split,
 )
 from tqdm import tqdm as std_tqdm
-from wandb.util import generate_id
-from wandb.viz import CustomChart
 
+import wandb
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
@@ -67,9 +65,12 @@ from get_a_grip.model_training.utils.nerf_grasp_evaluator_dataset import (
     NerfGraspEvalDataset,
 )
 from get_a_grip.model_training.utils.plot_utils import (
+    plot_mesh_and_high_density_points,
     plot_mesh_and_query_points,
 )
 from get_a_grip.model_training.utils.scheduler import get_scheduler
+from wandb.util import generate_id
+from wandb.viz import CustomChart
 
 tqdm = partial(std_tqdm, dynamic_ncols=True)
 
@@ -397,8 +398,8 @@ def nerf_densities_plot_example(
     )
     fig = plot_mesh_and_query_points(
         mesh=mesh,
-        query_points=query_points.detach().cpu().numpy(),
-        query_points_colors=query_point_colors.detach().cpu().numpy(),
+        all_query_points=query_points.detach().cpu().numpy(),
+        all_query_points_colors=query_point_colors.detach().cpu().numpy(),
         num_fingers=NUM_FINGERS,
     )
     # Set title to label
@@ -484,13 +485,13 @@ def nerf_densities_global_plot_example(
             NUM_XYZ,
         ),
     )
-    query_points = query_points[None, ...]
-    query_point_colors = colors[None, ...]
-    fig = plot_mesh_and_query_points(
+    query_points = query_points.reshape(-1, NUM_XYZ)
+    query_point_colors = colors.reshape(-1)
+    fig = plot_mesh_and_high_density_points(
         mesh=mesh,
-        query_points=query_points.detach().cpu().numpy(),
-        query_points_colors=query_point_colors.detach().cpu().numpy(),
-        num_fingers=1,  # Just to get the 1 plot
+        all_query_points=query_points.detach().cpu().numpy(),
+        all_query_points_colors=query_point_colors.detach().cpu().numpy(),
+        density_threshold=0.01,
     )
     # Set title to label
     fig.update_layout(
@@ -703,6 +704,7 @@ def save_checkpoint(
 
 def save_checkpoint_batch(
     checkpoint_output_dir: pathlib.Path,
+    epoch: int,
     batch_idx: int,
     nerf_evaluator: NerfEvaluator,
     optimizer: torch.optim.Optimizer,
@@ -713,6 +715,7 @@ def save_checkpoint_batch(
     print(f"Saving checkpoint to {checkpoint_filepath}")
     torch.save(
         {
+            "epoch": epoch,
             "batch_idx": batch_idx,
             "nerf_evaluator": nerf_evaluator.state_dict(),
             "optimizer": optimizer.state_dict(),
@@ -725,7 +728,8 @@ def save_checkpoint_batch(
     print("Done saving checkpoint")
 
 
-# Global variable to keep track of batch_idx for saving checkpoints
+# Global variables to keep track for saving checkpoints
+GLOBAL_EPOCH = 0
 GLOBAL_BATCH_IDX = 0
 
 
@@ -781,6 +785,7 @@ def _iterate_through_dataloader(
                 save_checkpoint_batch(
                     checkpoint_output_dir=checkpoint_output_dir,
                     batch_idx=GLOBAL_BATCH_IDX,
+                    epoch=GLOBAL_EPOCH,
                     nerf_evaluator=nerf_evaluator,
                     optimizer=optimizer,
                     lr_scheduler=lr_scheduler,
@@ -1170,6 +1175,9 @@ def run_training_loop(
     lr_scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
     start_epoch: int = 0,
 ) -> None:
+    global GLOBAL_EPOCH
+    GLOBAL_EPOCH = start_epoch
+
     wandb.watch(nerf_evaluator, log="gradients", log_freq=100)
 
     training_loop_base_description = "Training Loop"
@@ -1180,6 +1188,8 @@ def run_training_loop(
         )
     ):
         epoch = int(epoch)
+        GLOBAL_EPOCH = epoch
+
         wandb_log_dict = {}
         wandb_log_dict["epoch"] = epoch
 
@@ -1262,19 +1272,19 @@ def main() -> None:
     print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
     print("=" * 80 + "\n")
 
-    # Save out config to file
-    cfg_path = pathlib.Path(cfg.checkpoint_workspace.output_dir) / "config.yaml"
-    if not cfg_path.exists():
-        cfg_yaml = tyro.extras.to_yaml(cfg)
-        with open(cfg_path, "w") as f:
-            f.write(cfg_yaml)
-
     set_seed(cfg.random_seed)
 
     # Setup Checkpoint Workspace and Maybe Resume Previous Run
     wandb_run_id = setup_checkpoint_workspace(
         cfg=cfg,
     )
+
+    # Save out config to file
+    cfg_path = pathlib.Path(cfg.checkpoint_workspace.output_dir) / "config.yaml"
+    if not cfg_path.exists():
+        cfg_yaml = tyro.extras.to_yaml(cfg)
+        with open(cfg_path, "w") as f:
+            f.write(cfg_yaml)
 
     # Setup Wandb Logging
     wandb.init(

@@ -224,13 +224,11 @@ class NerfGraspDataset(data.Dataset):
                 hdf5_file["/object_state"][()]
             ).float()
             assert (
-                self.object_codes.shape[0]
-                == self.nerf_global_grids_with_coords.shape[0]
-            ), f"Expected {self.nerf_global_grids_with_coords.shape[0]} object_codes, got {self.object_codes.shape[0]}"
+                self.object_codes.shape[0] == self.num_grasps
+            ), f"Expected {self.num_grasps} object_codes, got {self.object_codes.shape[0]}"
             assert (
-                self.object_scales.shape[0]
-                == self.nerf_global_grids_with_coords.shape[0]
-            ), f"Expected {self.nerf_global_grids_with_coords.shape[0]} object_scales, got {self.object_scales.shape[0]}"
+                self.object_scales.shape[0] == self.num_grasps
+            ), f"Expected {self.num_grasps} object_scales, got {self.object_scales.shape[0]}"
             assert (
                 self.object_states.shape[0] == self.num_grasps
             ), f"Expected {self.num_grasps} object_states, got {self.object_states.shape[0]}"
@@ -259,11 +257,12 @@ class NerfGraspEvalDataset(NerfGraspDataset):
 
         labels = torch.concatenate(
             (
-                self.y_picks[grasp_idx],
-                self.y_colls[grasp_idx],
-                self.y_PGSs[grasp_idx],
+                self.y_picks[grasp_idx].reshape(1),
+                self.y_colls[grasp_idx].reshape(1),
+                self.y_PGSs[grasp_idx].reshape(1),
             ),
-        )  # shape=(3,)
+        )
+        assert labels.shape == (3,), f"Expected shape (3,), got {labels.shape}"
         return (
             self.grasps[grasp_idx],
             self.nerf_global_grids_with_coords[nerf_global_grid_idx],
@@ -272,12 +271,10 @@ class NerfGraspEvalDataset(NerfGraspDataset):
 
     ###### Extras ######
     def get_object_code(self, grasp_idx: int) -> str:
-        nerf_global_grids_idx = self.global_grid_idxs[grasp_idx]
-        return self.object_codes[nerf_global_grids_idx].decode("utf-8")
+        return self.object_codes[grasp_idx].decode("utf-8")
 
     def get_object_scale(self, grasp_idx: int) -> float:
-        nerf_global_grids_idx = self.global_grid_idxs[grasp_idx]
-        return self.object_scales[nerf_global_grids_idx]
+        return self.object_scales[grasp_idx]
 
     def get_object_state(self, grasp_idx: int) -> torch.Tensor:
         return self.object_states[grasp_idx]
@@ -306,11 +303,12 @@ class NerfGraspSampleDataset(NerfGraspDataset):
 
         labels = torch.concatenate(
             (
-                self.y_picks[grasp_idx],
-                self.y_colls[grasp_idx],
-                self.y_PGSs[grasp_idx],
+                self.y_picks[grasp_idx].reshape(1),
+                self.y_colls[grasp_idx].reshape(1),
+                self.y_PGSs[grasp_idx].reshape(1),
             ),
-        )  # shape=(3,)
+        )
+        assert labels.shape == (3,), f"Expected shape (3,), got {labels.shape}"
         return (
             self.grasps[grasp_idx],
             self.nerf_global_grids_with_coords[nerf_global_grid_idx],
@@ -320,13 +318,11 @@ class NerfGraspSampleDataset(NerfGraspDataset):
     ###### Extras ######
     def get_object_code(self, successful_grasp_idx: int) -> str:
         grasp_idx = self.successful_grasp_idxs[successful_grasp_idx]
-        nerf_global_grids_idx = self.global_grid_idxs[grasp_idx]
-        return self.object_codes[nerf_global_grids_idx].decode("utf-8")
+        return self.object_codes[grasp_idx].decode("utf-8")
 
     def get_object_scale(self, successful_grasp_idx: int) -> float:
         grasp_idx = self.successful_grasp_idxs[successful_grasp_idx]
-        nerf_global_grids_idx = self.global_grid_idxs[grasp_idx]
-        return self.object_scales[nerf_global_grids_idx]
+        return self.object_scales[grasp_idx]
 
     def get_object_state(self, successful_grasp_idx: int) -> torch.Tensor:
         grasp_idx = self.successful_grasp_idxs[successful_grasp_idx]
@@ -334,6 +330,7 @@ class NerfGraspSampleDataset(NerfGraspDataset):
 
 
 def main() -> None:
+    # TODO: Rewrite this
     import pathlib
 
     import plotly.graph_objects as go

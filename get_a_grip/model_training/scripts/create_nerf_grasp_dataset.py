@@ -544,7 +544,7 @@ def main() -> None:
     # Prepare output filepath
     if cfg.output_filepath is None:
         cfg.output_filepath = (
-            cfg.evaled_grasp_config_dicts_path.parent
+            cfg.input_evaled_grasp_config_dicts_path.parent
             / "learned_metric_dataset"
             / f"{CONFIG_DATETIME_STR}_learned_metric_dataset.h5"
         )
@@ -556,31 +556,30 @@ def main() -> None:
         print(f"Output folder {cfg.output_filepath.parent} already exists")
 
     if cfg.output_filepath.exists():
-        print(f"Output file {cfg.output_filepath} already exists")
-        assert False, "Output file already exists"
+        raise ValueError(f"Output file {cfg.output_filepath} already exists")
 
     # Find all nerf configs
     assert (
-        cfg.nerf_checkpoints_path.exists()
-    ), f"{cfg.nerf_checkpoints_path} does not exist"
+        cfg.input_nerfcheckpoints_path.exists()
+    ), f"{cfg.input_nerfcheckpoints_path} does not exist"
     nerf_configs = get_nerf_configs(
-        nerf_checkpoints_path=str(cfg.nerf_checkpoints_path),
+        nerfcheckpoints_path=str(cfg.input_nerfcheckpoints_path),
     )
     assert (
         len(nerf_configs) > 0
-    ), f"Did not find any nerf configs in {cfg.nerf_checkpoints_path}"
+    ), f"Did not find any nerf configs in {cfg.input_nerfcheckpoints_path}"
     print(f"Found {len(nerf_configs)} nerf configs")
 
     # Find all evaled grasp config dicts
     assert (
-        cfg.evaled_grasp_config_dicts_path.exists()
-    ), f"{cfg.evaled_grasp_config_dicts_path} does not exist"
+        cfg.input_evaled_grasp_config_dicts_path.exists()
+    ), f"{cfg.input_evaled_grasp_config_dicts_path} does not exist"
     evaled_grasp_config_dict_filepaths = sorted(
-        list(cfg.evaled_grasp_config_dicts_path.glob("*.npy"))
+        list(cfg.input_evaled_grasp_config_dicts_path.glob("*.npy"))
     )
     assert (
         len(evaled_grasp_config_dict_filepaths) > 0
-    ), f"Did not find any evaled grasp config dicts in {cfg.evaled_grasp_config_dicts_path}"
+    ), f"Did not find any evaled grasp config dicts in {cfg.input_evaled_grasp_config_dicts_path}"
     print(f"Found {len(evaled_grasp_config_dict_filepaths)} evaled grasp config dicts")
 
     # Precompute ray origins in finger frame
@@ -726,6 +725,8 @@ def main() -> None:
         if cfg.print_timing:
             loop_timer.pretty_print_section_times()
         print()
+
+    hdf5_file.close()
 
 
 if __name__ == "__main__":

@@ -160,3 +160,44 @@ def grasp_to_grasp_config(grasp: torch.Tensor) -> AllegroGraspConfig:
         grasp_orientations=grasp_orientations,
     )
     return grasp_configs
+
+
+def grasp_config_to_grasp(grasp_config: AllegroGraspConfig) -> torch.Tensor:
+    B = grasp_config.wrist_pose.lshape[0]
+    N_FINGERS = 4
+    GRASP_DIM = 3 + 6 + 16 + N_FINGERS * 3
+
+    trans = grasp_config.wrist_pose.translation()
+    rot = grasp_config.wrist_pose.rotation().matrix()
+    joint_angles = grasp_config.joint_angles
+    grasp_orientations = grasp_config.grasp_orientations.matrix()
+
+    # Shape check
+    B = trans.shape[0]
+    assert trans.shape == (B, 3), f"Expected shape ({B}, 3), got {trans.shape}"
+    assert rot.shape == (B, 3, 3), f"Expected shape ({B}, 3, 3), got {rot.shape}"
+    assert joint_angles.shape == (
+        B,
+        16,
+    ), f"Expected shape ({B}, 16), got {joint_angles.shape}"
+    assert grasp_orientations.shape == (
+        B,
+        N_FINGERS,
+        3,
+        3,
+    ), f"Expected shape ({B}, 3, 3), got {grasp_orientations.shape}"
+    grasp_dirs = grasp_orientations[..., 2]
+    grasps = torch.cat(
+        [
+            trans,
+            rot[..., :2].reshape(B, 6),
+            joint_angles,
+            grasp_dirs.reshape(B, -1),
+        ],
+        dim=1,
+    )
+    assert grasps.shape == (
+        B,
+        GRASP_DIM,
+    ), f"Expected shape ({B}, {GRASP_DIM}), got {grasps.shape}"
+    return grasps

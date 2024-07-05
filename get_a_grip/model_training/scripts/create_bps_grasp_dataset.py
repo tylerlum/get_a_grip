@@ -1,10 +1,12 @@
 import pathlib
 import time
 from dataclasses import dataclass
+from typing import Dict, List
 
 import h5py
 import numpy as np
 import open3d as o3d
+import tyro
 from bps import bps
 from joblib import Parallel, delayed
 from scipy.sparse import csr_matrix
@@ -12,8 +14,15 @@ from scipy.sparse.csgraph import connected_components
 from scipy.spatial import KDTree
 from tqdm import tqdm
 
+from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
+)
+from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
+    AllegroGraspConfig,
+)
+from get_a_grip.grasp_planning.utils.grasp_utils import (
+    grasp_config_to_grasp,
 )
 
 N_FINGERS = 4
@@ -21,21 +30,25 @@ GRASP_DIM = 3 + 6 + 16 + N_FINGERS * 3
 
 
 @dataclass
-class BpsGraspConfig:
-    point_cloud_folder: pathlib.Path
-    config_dict_folder: pathlib.Path
-    output_filepath: pathlib.Path
+class BpsGraspDatasetConfig:
+    input_pointclouds_path: pathlib.Path = get_data_folder() / "large/pointclouds"
+    input_evaled_grasp_config_dicts_path: pathlib.Path = (
+        get_data_folder() / "large/final_evaled_grasp_config_dicts_train"
+    )
+    output_filepath: pathlib.Path = (
+        get_data_folder() / "large/bps_grasp_dataset/train_dataset.h5"
+    )
     N_BASIS_PTS: int = 4096
     BASIS_RADIUS: float = 0.3
     overwrite: bool = False
 
     def __post_init__(self):
         assert (
-            self.point_cloud_folder.exists()
-        ), f"Path {self.point_cloud_folder} does not exist"
+            self.input_pointclouds_path.exists()
+        ), f"Path {self.input_pointclouds_path} does not exist"
         assert (
-            self.config_dict_folder.exists()
-        ), f"Path {self.config_dict_folder} does not exist"
+            self.input_evaled_grasp_config_dicts_path.exists()
+        ), f"Path {self.input_evaled_grasp_config_dicts_path} does not exist"
 
         if not self.overwrite:
             assert (
@@ -51,7 +64,7 @@ class BpsGraspConfig:
             print(f"Creating {self.output_filepath} at end of script")
 
 
-def construct_graph(points, distance_threshold=0.01):
+def construct_graph(points: np.ndarray, distance_threshold: float = 0.01) -> csr_matrix:
     kdtree = KDTree(points)
     rows, cols = [], []
 
@@ -69,7 +82,7 @@ def construct_graph(points, distance_threshold=0.01):
     return adjacency_matrix
 
 
-def get_largest_connected_component(adjacency_matrix):
+def get_largest_connected_component(adjacency_matrix: csr_matrix) -> np.ndarray:
     n_components, labels = connected_components(
         csgraph=adjacency_matrix, directed=False, return_labels=True
     )
@@ -78,13 +91,18 @@ def get_largest_connected_component(adjacency_matrix):
     return largest_cc_indices
 
 
-def process_point_cloud(points, distance_threshold=0.01):
+def process_point_cloud(
+    points: np.ndarray, distance_threshold: float = 0.01
+) -> np.ndarray:
     adjacency_matrix = construct_graph(points, distance_threshold)
     largest_cc_indices = get_largest_connected_component(adjacency_matrix)
     return points[largest_cc_indices]
 
 
-def get_grasp_data(all_config_dict_paths, object_code_and_scale_str_to_idx) -> tuple:
+def get_grasp_data(
+    all_config_dict_paths: List[pathlib.Path],
+    object_code_and_scale_str_to_idx: Dict[str, int],
+) -> tuple:
     # Per grasp
     (
         all_grasps,
@@ -112,35 +130,9 @@ def get_grasp_data(all_config_dict_paths, object_code_and_scale_str_to_idx) -> t
         bps_idx = object_code_and_scale_str_to_idx[object_code_and_scale_str]
 
         # Extract grasp info
-        trans = grasp_config_dict["trans"]
-        rot = grasp_config_dict["rot"]
-        joint_angles = grasp_config_dict["joint_angles"]
-        grasp_orientations = grasp_config_dict["grasp_orientations"]
-
-        # Shape check
-        B = trans.shape[0]
-        assert trans.shape == (B, 3), f"Expected shape ({B}, 3), got {trans.shape}"
-        assert rot.shape == (B, 3, 3), f"Expected shape ({B}, 3, 3), got {rot.shape}"
-        assert joint_angles.shape == (
-            B,
-            16,
-        ), f"Expected shape ({B}, 16), got {joint_angles.shape}"
-        assert grasp_orientations.shape == (
-            B,
-            N_FINGERS,
-            3,
-            3,
-        ), f"Expected shape ({B}, 3, 3), got {grasp_orientations.shape}"
-        grasp_dirs = grasp_orientations[..., 2]
-        grasps = np.concatenate(
-            [
-                trans,
-                rot[..., :2].reshape(B, 6),
-                joint_angles,
-                grasp_dirs.reshape(B, -1),
-            ],
-            axis=1,
-        )
+        grasp_config = AllegroGraspConfig.from_grasp_config_dict(grasp_config_dict)
+        B = len(grasp_config)
+        grasps = grasp_config_to_grasp(grasp_config).detach().cpu().numpy()
         assert grasps.shape == (
             B,
             GRASP_DIM,
@@ -154,7 +146,7 @@ def get_grasp_data(all_config_dict_paths, object_code_and_scale_str_to_idx) -> t
         assert y_PGSs.shape == (B,), f"Expected shape ({B},), got {y_PGSs.shape}"
         assert y_picks.shape == (B,), f"Expected shape ({B},), got {y_picks.shape}"
         assert y_colls.shape == (B,), f"Expected shape ({B},), got {y_colls.shape}"
-        N_NOISY_GRASPS = 6
+        N_NOISY_GRASPS = 6  # 1 for original grasp, 5 for noisy grasps
         assert object_state.shape == (
             B,
             N_NOISY_GRASPS,
@@ -216,28 +208,75 @@ def get_grasp_data(all_config_dict_paths, object_code_and_scale_str_to_idx) -> t
     )
 
 
-def main(args) -> None:
-    cfg = BpsGraspConfig(
-        point_cloud_folder=pathlib.Path(
-            "/home/albert/research/nerf_grasping/rsync_point_clouds/point_clouds"
-        ),
-        config_dict_folder=pathlib.Path(
-            # "/home/albert/research/nerf_grasping/rsync_grasps/grasps/all"
-            # "/home/albert/research/nerf_grasping/rsync_final_labeled_grasps_noise_and_nonoise/evaled_grasp_config_dicts_train",
-            # "/home/albert/research/nerf_grasping/rsync_final_labeled_grasps_noise_and_nonoise/evaled_grasp_config_dicts_val",
-            # "/home/albert/research/nerf_grasping/rsync_final_labeled_grasps_noise_and_nonoise/evaled_grasp_config_dicts_test",
-            args.config_dict_folder,
-        ),
-        output_filepath=pathlib.Path(
-            # "/home/albert/research/nerf_grasping/bps_data/grasp_bps_dataset.hdf5"
-            # "/home/albert/research/nerf_grasping/bps_data/grasp_bps_dataset_final_train.hdf5",
-            # "/home/albert/research/nerf_grasping/bps_data/grasp_bps_dataset_final_val.hdf5",
-            # "/home/albert/research/nerf_grasping/bps_data/grasp_bps_dataset_final_test.hdf5",
-            args.output_filepath,
-        ),
+def get_fixed_basis_points(
+    n_points: int,
+    radius: float,
+) -> np.ndarray:
+    HARDCODED_RANDOM_SEED = 13  # For getting fixed basis points
+    basis_points = bps.generate_random_basis(
+        n_points=n_points, radius=radius, random_seed=HARDCODED_RANDOM_SEED
+    ) + np.array([0.0, radius / 2, 0.0])  # Shift up to get less under the table
+    assert basis_points.shape == (
+        n_points,
+        3,
+    ), f"Expected shape ({n_points}, 3), got {basis_points.shape}"
+    return basis_points
+
+
+def get_bps(
+    all_points: np.ndarray,
+    basis_points: np.ndarray,
+) -> np.ndarray:
+    n_point_clouds, n_points_per_point_cloud = all_points.shape[:2]
+    n_basis_points = basis_points.shape[0]
+    assert (
+        all_points.shape
+        == (
+            n_point_clouds,
+            n_points_per_point_cloud,
+            3,
+        )
+    ), f"Expected shape ({n_point_clouds}, {n_points_per_point_cloud}, 3), got {all_points.shape}"
+    assert basis_points.shape == (
+        n_basis_points,
+        3,
+    ), f"Expected shape ({n_basis_points}, 3), got {basis_points.shape}"
+
+    bps_values = bps.encode(
+        all_points,
+        bps_arrangement="custom",
+        bps_cell_type="dists",
+        custom_basis=basis_points,
+        verbose=0,
     )
-    all_point_cloud_paths = sorted(list(cfg.point_cloud_folder.rglob("*.ply")))
-    all_config_dict_paths = sorted(list(cfg.config_dict_folder.rglob("*.npy")))
+    assert bps_values.shape == (
+        n_point_clouds,
+        n_basis_points,
+    ), f"Expected shape ({n_point_clouds}, {n_basis_points}), got {bps_values.shape}"
+    return bps_values
+
+
+def process_single_point_cloud(pointcloud_path: pathlib.Path) -> np.ndarray:
+    point_cloud = o3d.io.read_point_cloud(str(pointcloud_path))
+    point_cloud, _ = point_cloud.remove_statistical_outlier(
+        nb_neighbors=20, std_ratio=2.0
+    )
+    point_cloud, _ = point_cloud.remove_radius_outlier(nb_points=16, radius=0.05)
+    points = np.asarray(point_cloud.points)
+    inlier_points = process_point_cloud(points, distance_threshold=0.01)
+    return inlier_points
+
+
+def main() -> None:
+    cfg = tyro.cli(BpsGraspDatasetConfig)
+    print("=" * 80)
+    print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
+    print("=" * 80 + "\n")
+
+    all_point_cloud_paths = sorted(list(cfg.input_pointclouds_path.rglob("*.ply")))
+    all_config_dict_paths = sorted(
+        list(cfg.input_evaled_grasp_config_dicts_path.rglob("*.npy"))
+    )
     assert len(all_point_cloud_paths) > 0, "No point cloud paths found"
     assert len(all_config_dict_paths) > 0, "No config dict paths found"
 
@@ -245,60 +284,34 @@ def main(args) -> None:
     print(f"Found {len(all_config_dict_paths)} config dict paths")
 
     # BPS selection (done once)
-    basis_points = bps.generate_random_basis(
-        n_points=cfg.N_BASIS_PTS, radius=cfg.BASIS_RADIUS, random_seed=13
-    ) + np.array(
-        [0.0, cfg.BASIS_RADIUS / 2, 0.0]
-    )  # Shift up to get less under the table
+    basis_points = get_fixed_basis_points(
+        n_points=cfg.N_BASIS_PTS, radius=cfg.BASIS_RADIUS
+    )
     assert basis_points.shape == (
         cfg.N_BASIS_PTS,
         3,
     ), f"Expected shape ({cfg.N_BASIS_PTS}, 3), got {basis_points.shape}"
 
-    # Point cloud per object
-    # all_points = []
-    # for i, data_path in tqdm(
-    #     enumerate(all_point_cloud_paths),
-    #     desc="Getting point clouds",
-    #     total=len(all_point_cloud_paths),
-    # ):
-    #     point_cloud = o3d.io.read_point_cloud(str(data_path))
-    #     point_cloud, _ = point_cloud.remove_statistical_outlier(
-    #         nb_neighbors=20, std_ratio=2.0
-    #     )
-    #     point_cloud, _ = point_cloud.remove_radius_outlier(nb_points=16, radius=0.05)
-    #     points = np.asarray(point_cloud.points)
-
-    #     # inlier_points = process_point_cloud(points)
-    #     # all_points.append(inlier_points)
-    #     all_points.append(points)
-
-    def process_single_point_cloud(data_path):
-        point_cloud = o3d.io.read_point_cloud(str(data_path))
-        point_cloud, _ = point_cloud.remove_statistical_outlier(
-            nb_neighbors=20, std_ratio=2.0
-        )
-        point_cloud, _ = point_cloud.remove_radius_outlier(nb_points=16, radius=0.05)
-        points = np.asarray(point_cloud.points)
-        inlier_points = process_point_cloud(points, distance_threshold=0.01)
-        return inlier_points
-
-    all_points = Parallel(n_jobs=-1)(
+    # Parallel processing of point clouds
+    all_points: np.ndarray = Parallel(n_jobs=-1)(
         delayed(process_single_point_cloud)(data_path)
         for data_path in tqdm(all_point_cloud_paths, desc="Processing point clouds")
     )
 
+    # Ensure all point clouds have the same number of points
     min_n_pts = min([x.shape[0] for x in all_points])
     all_points = np.stack([x[:min_n_pts] for x in all_points])
-    n_point_clouds, n_point_cloud_pts = all_points.shape[:2]
+    n_point_clouds = all_points.shape[0]
+    assert all_points.shape == (
+        n_point_clouds,
+        min_n_pts,
+        3,
+    ), f"Expected shape ({n_point_clouds}, {min_n_pts}, 3), got {all_points.shape}"
 
     # BPS values per object
-    bps_values = bps.encode(
-        all_points,
-        bps_arrangement="custom",
-        bps_cell_type="dists",
-        custom_basis=basis_points,
-        verbose=0,
+    bps_values = get_bps(
+        all_points=all_points,
+        basis_points=basis_points,
     )
     assert bps_values.shape == (
         n_point_clouds,
@@ -425,21 +438,4 @@ def main(args) -> None:
 
 
 if __name__ == "__main__":
-    import argparse
-
-    # [config-dict-folder paths]
-    # "/home/albert/research/nerf_grasping/rsync_final_labeled_grasps_noise_and_nonoise/evaled_grasp_config_dicts_train",
-    # "/home/albert/research/nerf_grasping/rsync_final_labeled_grasps_noise_and_nonoise/evaled_grasp_config_dicts_val",
-    # "/home/albert/research/nerf_grasping/rsync_final_labeled_grasps_noise_and_nonoise/evaled_grasp_config_dicts_test",
-
-    # [output-folder paths]
-    # "/home/albert/research/nerf_grasping/bps_data/grasp_bps_dataset_final_train.hdf5",
-    # "/home/albert/research/nerf_grasping/bps_data/grasp_bps_dataset_final_val.hdf5",
-    # "/home/albert/research/nerf_grasping/bps_data/grasp_bps_dataset_final_test.hdf5",
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config-dict-folder", type=str, required=True)
-    parser.add_argument("--output-filepath", type=str, required=True)
-    args = parser.parse_args()
-
-    main(args)
+    main()

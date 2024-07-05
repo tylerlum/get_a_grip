@@ -14,7 +14,7 @@ Small:
 
 - <download_url>/small/nerfdata.zip
 
-- <download_url>/small/nerfs.zip
+- <download_url>/small/nerfcheckpoints.zip
 
 - <download_url>/small/pointclouds.zip
 
@@ -26,7 +26,7 @@ Large:
 
 - <download_url>/large/nerfdata.zip
 
-- <download_url>/large/nerfs.zip
+- <download_url>/large/nerfcheckpoints.zip
 
 - <download_url>/large/pointclouds.zip
 
@@ -35,16 +35,16 @@ Create a directories `data/small` and `data/large`, then unzip into these folder
 ```
 data
 ├── small
-│   ├── evaled_grasp_config_dicts
+│   ├── final_evaled_grasp_config_dicts
 │   ├── meshes
 │   ├── nerfdata
-│   ├── nerfs
+│   ├── nerfcheckpoints
 │   └── pointclouds
 └── large
-    ├── evaled_grasp_config_dicts
+    ├── final_evaled_grasp_config_dicts
     ├── meshes
     ├── nerfdata
-    ├── nerfs
+    ├── nerfcheckpoints
     └── pointclouds
 ```
 
@@ -55,7 +55,7 @@ data
 Directory structure:
 
 ```
-evaled_grasp_config_dicts
+final_evaled_grasp_config_dicts
 ├── <object_code_and_scale_str>.npy
 ├── <object_code_and_scale_str>.npy
 ├── <object_code_and_scale_str>.npy
@@ -195,12 +195,12 @@ nerfdata
 
 `images` contains a set of images of the object from different angles. `transforms.json` has the camera pose associated with each image.
 
-### nerfs
+### nerfcheckpoints
 
 Directory structure:
 
 ```
-nerfs
+nerfcheckpoints
 ├── <object_code_and_scale_str>
 │   └── nerfacto
 │       └── <datetime_str>

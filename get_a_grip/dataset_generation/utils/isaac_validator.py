@@ -1,3 +1,8 @@
+# gymtorch must be imported before torch
+from isaacgym import gymapi, gymtorch, gymutil, torch_utils
+
+import torch  # isort: skip
+
 import json
 import math
 import os
@@ -12,10 +17,8 @@ from typing import Dict, List, Tuple
 
 import imageio
 import numpy as np
-import torch
 import transforms3d
 import trimesh
-from isaacgym import gymapi, gymtorch, gymutil, torch_utils
 from PIL import Image
 from tqdm import tqdm
 
@@ -1623,7 +1626,7 @@ class IsaacValidator:
         overwrite: bool = False,
         generate_seg: bool = False,
         generate_depth: bool = False,
-        num_cameras: int = 250,
+        num_cameras: int = 100,
     ) -> None:
         assert len(self.envs) == 1
         self._setup_cameras(self.envs[0], num_cameras=num_cameras)

@@ -31,6 +31,9 @@ from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
 from get_a_grip.dataset_generation.utils.pose_conversion import pose_to_hand_config
+from get_a_grip.dataset_generation.utils.process_utils import (
+    get_object_codes_and_scales_to_process,
+)
 from get_a_grip.dataset_generation.utils.seed import set_seed
 
 try:
@@ -47,6 +50,9 @@ np.seterr(all="raise")
 class GenerateHandConfigDictsArgs:
     # experiment settings
     meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    input_object_code_and_scales_txt_path: pathlib.Path = (
+        get_data_folder() / "NEW_DATASET/nerfdata_settled_successes.txt"
+    )
     output_hand_config_dicts_path: pathlib.Path = (
         get_data_folder() / "NEW_DATASET/hand_config_dicts"
     )
@@ -174,10 +180,13 @@ def save_hand_config_dicts(
     output_folder_path: pathlib.Path,
 ) -> None:
     """
-    Save results to output_folder_path
-        * <output_folder_path>/<object_code>_<object_scale>.npy
+    Save results to output_folder_path:
 
-    TODO: update docstring.
+    <output_folder_path>
+    ├── <object_code>_<object_scale>.npy
+    ├── <object_code>_<object_scale>.npy
+    ├── <object_code>_<object_scale>.npy
+    ├── ...
     """
     assert object_model.object_scale_tensor is not None
     num_objects, num_grasps_per_object = object_model.object_scale_tensor.shape
@@ -248,10 +257,19 @@ def generate(
         List[str],
         int,
         List[str],
-        List[float],
     ],
 ) -> None:
-    args, object_codes, id, gpu_list, object_scales = args_tuple
+    args, object_code_and_scale_strs, id, gpu_list = args_tuple
+
+    # Parse object codes and scales
+    object_codes, object_scales = [], []
+    for object_code_and_scale_str in object_code_and_scale_strs:
+        object_code, object_scale = parse_object_code_and_scale(
+            object_code_and_scale_str
+        )
+        object_codes.append(object_code)
+        object_scales.append(object_scale)
+
     try:
         loop_timer = LoopTimer()
 
@@ -480,78 +498,35 @@ def main() -> None:
 
     # check whether arguments are valid and process arguments
     args.output_hand_config_dicts_path.mkdir(parents=True, exist_ok=True)
-
     if not args.meshdata_root_path.exists():
         raise ValueError(f"meshdata_root_path {args.meshdata_root_path} doesn't exist")
 
-    # generate
+    input_object_code_and_scale_strs = get_object_codes_and_scales_to_process(
+        input_object_code_and_scales_txt_path=args.input_object_code_and_scales_txt_path,
+        meshdata_root_path=args.meshdata_root_path,
+        output_folder_path=args.output_hand_config_dicts_path,
+        no_continue=args.no_continue,
+    )
+
     if args.seed is not None:
         set_seed(args.seed)
     else:
         set_seed(datetime.now().microsecond)
 
-    object_codes = [path.name for path in args.meshdata_root_path.iterdir()]
-    random.shuffle(object_codes)
-    print(f"First 10 in object_codes: {object_codes[:10]}")
-    print(f"len(object_codes): {len(object_codes)}")
+    random.shuffle(input_object_code_and_scale_strs)
 
-    # TODO: Use this properly
-    object_scales = np.ones(len(object_codes))
-    print(f"First 10 in object_scales: {object_scales[:10]}")
-    print(f"len(object_scales): {len(object_scales)}")
-
-    existing_object_code_and_scale_strs = (
-        [path.stem for path in list(args.output_hand_config_dicts_path.glob("*.npy"))]
-        if args.output_hand_config_dicts_path.exists()
-        else []
-    )
-    new_object_code_and_scale_strs = [
-        object_code_and_scale_to_str(object_code, object_scale)
-        for object_code, object_scale in zip(object_codes, object_scales)
-    ]
-
-    if args.no_continue:
-        # Compare input and output directories
-        print(
-            f"Found {len(existing_object_code_and_scale_strs)} objects in {args.output_hand_config_dicts_path}"
+    object_code_and_scale_str_groups = [
+        input_object_code_and_scale_strs[i : i + args.n_objects_per_batch]
+        for i in range(
+            0, len(input_object_code_and_scale_strs), args.n_objects_per_batch
         )
-        raise ValueError(
-            f"Output folder {args.output_hand_config_dicts_path} already exists. Please delete it or set --no_continue to False."
-        )
-    elif len(existing_object_code_and_scale_strs) > 0:
-        print(
-            f"Found {len(existing_object_code_and_scale_strs)} objects in {args.output_hand_config_dicts_path}"
-        )
-
-        new_object_code_and_scale_strs = list(
-            set(new_object_code_and_scale_strs)
-            - set(existing_object_code_and_scale_strs)
-        )
-        print(f"Generating remaining {len(object_codes)} hand_config_dicts")
-
-        object_codes, object_scales = [], []
-        for object_code_and_scale_str in new_object_code_and_scale_strs:
-            object_code, object_scale = parse_object_code_and_scale(
-                object_code_and_scale_str
-            )
-            object_codes.append(object_code)
-            object_scales.append(object_scale)
-
-    object_code_groups = [
-        object_codes[i : i + args.n_objects_per_batch]
-        for i in range(0, len(object_codes), args.n_objects_per_batch)
-    ]
-
-    object_scale_groups = [
-        object_scales[i : i + args.n_objects_per_batch]
-        for i in range(0, len(object_scales), args.n_objects_per_batch)
     ]
 
     process_args = []
-    for id, object_code_group in enumerate(object_code_groups):
-        process_args.append(
-            (args, object_code_group, id + 1, gpu_list, object_scale_groups[id])
-        )
+    for id, object_code_and_scale_str_group in enumerate(
+        object_code_and_scale_str_groups
+    ):
+        process_args.append((args, object_code_and_scale_str_group, id + 1, gpu_list))
 
     if args.use_multiprocess:
         with multiprocessing.Pool(len(gpu_list)) as p:

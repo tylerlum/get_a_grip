@@ -4,6 +4,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import Optional
 
+import numpy as np
 import tyro
 from tqdm import tqdm
 
@@ -17,7 +18,7 @@ from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
 class ExportPointcloudsArgs:
     experiment_name: str
     nerf_is_z_up: bool
-    nerfcheckpoints_name: str = "nerfcheckpoints"
+    input_nerfcheckpoints_name: str = "nerfcheckpoints"
     output_pointclouds_name: str = "pointclouds"
     nerf_grasping_data_path: pathlib.Path = get_data_folder()
     randomize_order_seed: Optional[int] = None
@@ -38,6 +39,25 @@ class ExportPointcloudsArgs:
         else:
             return "0.2 0.3 0.2"
 
+    @property
+    def obb_scale(self) -> str:
+        bb_min = np.array([float(x) for x in self.bounding_box_min.split()])
+        bb_max = np.array([float(x) for x in self.bounding_box_max.split()])
+        obb_scale = bb_max - bb_min
+        return " ".join([str(x) for x in obb_scale])
+
+    @property
+    def obb_center(self) -> str:
+        bb_min = np.array([float(x) for x in self.bounding_box_min.split()])
+        bb_max = np.array([float(x) for x in self.bounding_box_max.split()])
+        obb_center = (bb_max + bb_min) / 2
+        return " ".join([str(x) for x in obb_center])
+
+    @property
+    def obb_rotation(self) -> str:
+        obb_rotation = np.array([0.0, 0.0, 0.0])
+        return " ".join([str(x) for x in obb_rotation])
+
 
 def get_latest_nerf_config(nerfcheckpoint_path: pathlib.Path) -> pathlib.Path:
     nerf_configs = list(nerfcheckpoint_path.glob("nerfacto/*/config.yml"))
@@ -53,7 +73,7 @@ def export_pointclouds(args: ExportPointcloudsArgs) -> pathlib.Path:
     experiment_path = args.nerf_grasping_data_path / args.experiment_name
     assert experiment_path.exists(), f"{experiment_path} does not exist"
 
-    nerfcheckpoints_path = experiment_path / args.nerfcheckpoints_name
+    nerfcheckpoints_path = experiment_path / args.input_nerfcheckpoints_name
     assert nerfcheckpoints_path.exists(), f"{nerfcheckpoints_path} does not exist"
 
     output_pointclouds_path = experiment_path / args.output_pointclouds_name
@@ -98,8 +118,9 @@ def export_pointclouds(args: ExportPointcloudsArgs) -> pathlib.Path:
                 f"--load-config {str(nerf_config)}",
                 f"--output-dir {str(output_path_to_be_created)}",
                 "--normal-method open3d",
-                f"--bounding-box-min {args.bounding_box_min}",
-                f"--bounding-box-max {args.bounding_box_max}",
+                f"--obb-scale {args.obb_scale}",
+                f"--obb-center {args.obb_center}",
+                f"--obb-rotation {args.obb_rotation}",
                 f"--num-points {args.num_points}",
             ]
         )
@@ -117,7 +138,7 @@ def export_pointclouds(args: ExportPointcloudsArgs) -> pathlib.Path:
 
             timeout_path = (
                 experiment_path
-                / f"{args.nerfcheckpoints_name}_{args.output_pointclouds_name}_timeout.txt"
+                / f"{args.input_nerfcheckpoints_name}_{args.output_pointclouds_name}_timeout.txt"
             )
             print(f"Writing to {timeout_path}")
             with open(timeout_path, "a") as f:

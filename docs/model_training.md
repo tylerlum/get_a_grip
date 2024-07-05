@@ -1,32 +1,86 @@
 # Model Training
 
-## HDF5 File Generation
-
-BPS dataset:
+Follow these instructions if you want to train models yourself instead of using the given models. To do this, you will still need a dataset like the following:
 
 ```
-python nerf_grasping/dexdiffuser/create_grasp_bps_dataset.py \
---config-dict-folder data/NEW_DATASET/evaled_grasp_config_dicts \
---output-filepath data/NEW_DATASET/bps_dataset/dataset.h5
+data
+└── large
+    ├── final_evaled_grasp_config_dicts
+    ├── meshes
+    ├── nerfdata
+    ├── nerfs
+    └── pointclouds
+```
+
+## Train Val Test Split Across Objects
+
+Create train val test split across objects (creates symlinks to <input*evaled_grasp_config_dicts_path>*_, where _ is train, val, or test):
+
+```
+python get_a_grip/model_training/scripts/create_train_val_test_split.py \
+--input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts \
+--frac_train 0.8 \
+--frac_val 0.1
+```
+
+## HDF5 File Generation
+
+Create BPS dataset:
+
+```
+python get_a_grip/model_training/scripts/create_bps_grasp_dataset.py \
+--input_pointclouds_path data/NEW_DATASET/pointclouds \
+--input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts_train \
+--output_filepath data/NEW_DATASET/bps_grasp_dataset/train_dataset.h5
+```
+
+```
+python get_a_grip/model_training/scripts/create_bps_grasp_dataset.py \
+--input_pointclouds_path data/NEW_DATASET/pointclouds \
+--input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts_val \
+--output_filepath data/NEW_DATASET/bps_grasp_dataset/val_dataset.h5
+```
+
+```
+python get_a_grip/model_training/scripts/create_bps_grasp_dataset.py \
+--input_pointclouds_path data/NEW_DATASET/pointclouds \
+--input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts_test \
+--output_filepath data/NEW_DATASET/bps_grasp_dataset/test_dataset.h5
 ```
 
 <p align="center">
   <img src="https://github.com/tylerlum/get_a_grip_release/assets/26510814/6da75267-280c-4e3a-921b-79b765842ab9" alt="dataset_gen" style="width:50%;">
 </p>
 
-Grid dataset for NeRF inputs:
+Create NeRF dataset:
 
 ```
-python nerf_grasping/dataset/Create_DexGraspNet_NeRF_Grasps_Dataset.py grid \
---evaled-grasp-config-dicts-path data/NEW_DATASET/evaled_grasp_config_dicts \
---nerf-checkpoints-path data/NEW_DATASET/nerfcheckpoints \
---output-filepath data/NEW_DATASET/grid_dataset/dataset.h5
+python get_a_grip/model_training/scripts/create_nerf_grasp_dataset.py \
+--input_nerfcheckpoints_path data/NEW_DATASET/nerfcheckpoints \
+--input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts_train \
+--output_filepath data/NEW_DATASET/nerf_grasp_dataset/train_dataset.h5
+```
+
+```
+python get_a_grip/model_training/scripts/create_nerf_grasp_dataset.py \
+--input_nerfcheckpoints_path data/NEW_DATASET/nerfcheckpoints \
+--input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts_val \
+--output_filepath data/NEW_DATASET/nerf_grasp_dataset/val_dataset.h5
+```
+
+```
+python get_a_grip/model_training/scripts/create_nerf_grasp_dataset.py \
+--input_nerfcheckpoints_path data/NEW_DATASET/nerfcheckpoints \
+--input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts_test \
+--output_filepath data/NEW_DATASET/nerf_grasp_dataset/test_dataset.h5
 ```
 
 ## BPS Evaluator Model Training
 
 ```
-python nerf_grasping/dexdiffuser/train_dexdiffuser_evaluator.py
+python get_a_grip/model_training/scripts/train_bps_grasp_evaluator.py \
+--train_dataset_path data/NEW_DATASET/bps_grasp_dataset/train_dataset.h5 \
+--val_dataset_path data/NEW_DATASET/bps_grasp_dataset/val_dataset.h5
 ```
 
 <p align="center">
@@ -36,11 +90,12 @@ python nerf_grasping/dexdiffuser/train_dexdiffuser_evaluator.py
 ## NeRF Evaluator Model Training
 
 ```
-python nerf_grasping/learned_metric/Train_DexGraspNet_NeRF_Grasp_Metric.py cnn-3d-xyz-global-cnn \
+python get_a_grip/model_training/scripts/train_nerf_grasp_evaluator.py \
+cnn-3d-xyz-global-cnn \
+--train-dataset-filepath data/NEW_DATASET/nerf_grasp_dataset/train_dataset.h5 \
+--val-dataset-filepath data/NEW_DATASET/nerf_grasp_dataset/val_dataset.h5 \
+--test-dataset-filepath data/NEW_DATASET/nerf_grasp_dataset/test_dataset.h5 \
 --task-type Y_PICK_AND_Y_COLL_AND_Y_PGS \
---train-dataset-filepath data/NEW_DATASET/grid_dataset/dataset.h5 \
---val-dataset-filepath data/NEW_DATASET/grid_dataset/dataset.h5 (TODO) \
---test-dataset-filepath data/NEW_DATASET/grid_dataset/dataset.h5 (TODO) \
 --dataloader.batch-size 128 \
 --name MY_NERF_EXPERIMENT_NAME \
 --training.loss_fn l2 \
@@ -54,7 +109,21 @@ python nerf_grasping/learned_metric/Train_DexGraspNet_NeRF_Grasp_Metric.py cnn-3
 ## BPS Sampler Model Training
 
 ```
-python nerf_grasping/dexdiffuser/diffusion.py
+python get_a_grip/model_training/scripts/train_bps_grasp_sampler.py \
+--train_dataset_path data/NEW_DATASET/bps_grasp_dataset/train_dataset.h5 \
+--val_dataset_path data/NEW_DATASET/bps_grasp_dataset/val_dataset.h5
+```
+
+<p align="center">
+  <img src="https://github.com/tylerlum/get_a_grip/assets/26510814/782d7a18-8ac6-462d-b434-513387494fe2" alt="bps_sampler" style="width:30%;">
+</p>
+
+## NeRF Sampler Model Training
+
+```
+python get_a_grip/model_training/scripts/train_nerf_grasp_sampler.py \
+--train_dataset_path data/NEW_DATASET/nerf_grasp_dataset/train_dataset.h5 \
+--val_dataset_path data/NEW_DATASET/nerf_grasp_dataset/val_dataset.h5
 ```
 
 <p align="center">

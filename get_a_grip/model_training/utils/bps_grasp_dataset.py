@@ -101,11 +101,12 @@ class BpsGraspEvalDataset(BpsGraspDataset):
         bps_idx = self.grasp_bps_idxs[grasp_idx]
         labels = torch.concatenate(
             (
-                self.y_picks[grasp_idx],
-                self.y_colls[grasp_idx],
-                self.y_PGSs[grasp_idx],
+                self.y_picks[grasp_idx].reshape(1),
+                self.y_colls[grasp_idx].reshape(1),
+                self.y_PGSs[grasp_idx].reshape(1),
             ),
-        )  # shape=(3,)
+        )
+        assert labels.shape == (3,), f"Expected shape (3,), got {labels.shape}"
         return self.grasps[grasp_idx], self.bpss[bps_idx], labels
 
     ###### Extras ######
@@ -146,11 +147,12 @@ class BpsGraspSampleDataset(BpsGraspDataset):
         bps_idx = self.grasp_bps_idxs[grasp_idx]
         labels = torch.concatenate(
             (
-                self.y_picks[grasp_idx],
-                self.y_colls[grasp_idx],
-                self.y_PGSs[grasp_idx],
+                self.y_picks[grasp_idx].reshape(1),
+                self.y_colls[grasp_idx].reshape(1),
+                self.y_PGSs[grasp_idx].reshape(1),
             ),
-        )  # shape=(3,)
+        )
+        assert labels.shape == (3,), f"Expected shape (3,), got {labels.shape}"
         return self.grasps[grasp_idx], self.bpss[bps_idx], labels
 
     ###### Extras ######
@@ -175,6 +177,7 @@ class BpsGraspSampleDataset(BpsGraspDataset):
 
 
 def main() -> None:
+    # TODO: rewrite this
     import pathlib
 
     import numpy as np

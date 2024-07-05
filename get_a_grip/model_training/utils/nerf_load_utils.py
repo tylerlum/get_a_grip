@@ -22,11 +22,11 @@ def load_nerf_pipeline(
     return pipeline
 
 
-def get_nerf_configs(nerf_checkpoints_path: str) -> List[pathlib.Path]:
+def get_nerf_configs(nerfcheckpoints_path: str) -> List[pathlib.Path]:
     """
     Returns a list of all the NeRF configs in the given directory, searching recursively
     """
-    return list(pathlib.Path(nerf_checkpoints_path).rglob("nerfacto/*/config.yml"))
+    return list(pathlib.Path(nerfcheckpoints_path).rglob("nerfacto/*/config.yml"))
 
 
 def get_latest_nerf_config(nerfcheckpoint_path: pathlib.Path) -> pathlib.Path:
@@ -37,11 +37,11 @@ def get_latest_nerf_config(nerfcheckpoint_path: pathlib.Path) -> pathlib.Path:
 
 
 def get_nerf_configs_through_symlinks(
-    nerf_checkpoints_path: pathlib.Path,
+    nerfcheckpoints_path: pathlib.Path,
 ) -> List[pathlib.Path]:
     """
     Expects following directory structure:
-    <nerf_checkpoints_path>
+    <nerfcheckpoints_path>
     ├── <object_name>
     |   ├── nerfacto
     |   |   ├── <timestamp>
@@ -57,7 +57,7 @@ def get_nerf_configs_through_symlinks(
     object_nerfcheckpoint_paths = sorted(
         [
             object_nerfcheckpoint_path
-            for object_nerfcheckpoint_path in nerf_checkpoints_path.iterdir()
+            for object_nerfcheckpoint_path in nerfcheckpoints_path.iterdir()
         ]
     )
     nerf_configs = []

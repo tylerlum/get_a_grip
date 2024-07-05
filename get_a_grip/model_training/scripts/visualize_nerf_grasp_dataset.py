@@ -1,3 +1,4 @@
+# %%
 """
 Visualization script for nerf_grasp_dataset
 Useful to interactively understand the data
@@ -5,6 +6,7 @@ Percent script can be run like a Jupyter notebook or as a script
 """
 
 # %%
+import os
 import sys
 from dataclasses import dataclass
 from functools import partial
@@ -14,6 +16,7 @@ import numpy as np
 import tyro
 from clean_loop_timer import LoopTimer
 
+from get_a_grip import get_repo_folder
 from get_a_grip.model_training.config.nerfdata_config import (
     GridNerfDataConfig,
 )
@@ -36,6 +39,9 @@ from get_a_grip.model_training.utils.plot_utils import (
 from get_a_grip.model_training.utils.point_utils import (
     transform_points,
 )
+
+# %%
+os.chdir(get_repo_folder())
 
 
 # %%
@@ -71,7 +77,14 @@ tqdm = partial(std_tqdm, dynamic_ncols=True)
 # Setup config
 if is_notebook():
     # Manually insert arguments here
-    arguments = []
+    arguments = [
+        "--input_nerfcheckpoints_path",
+        "data/NEW_DATASET/nerfcheckpoints",
+        "--input_evaled_grasp_config_dicts_path",
+        "data/NEW_DATASET/final_evaled_grasp_config_dicts_train",
+        "--output_filepath",
+        "data/NEW_DATASET/nerf_grasp_dataset/train_dataset.h5",
+    ]
 else:
     arguments = sys.argv[1:]
     print(f"arguments = {arguments}")
@@ -85,26 +98,28 @@ print("=" * 80 + "\n")
 
 # %%
 # Find all nerf configs
-assert cfg.nerf_checkpoints_path.exists(), f"{cfg.nerf_checkpoints_path} does not exist"
+assert (
+    cfg.input_nerfcheckpoints_path.exists()
+), f"{cfg.input_nerfcheckpoints_path} does not exist"
 nerf_configs = get_nerf_configs(
-    nerf_checkpoints_path=str(cfg.nerf_checkpoints_path),
+    nerfcheckpoints_path=str(cfg.input_nerfcheckpoints_path),
 )
 assert (
     len(nerf_configs) > 0
-), f"Did not find any nerf configs in {cfg.nerf_checkpoints_path}"
+), f"Did not find any nerf configs in {cfg.input_nerfcheckpoints_path}"
 print(f"Found {len(nerf_configs)} nerf configs")
 
 # %%
 # Find all evaled grasp config dicts
 assert (
-    cfg.evaled_grasp_config_dicts_path.exists()
-), f"{cfg.evaled_grasp_config_dicts_path} does not exist"
+    cfg.input_evaled_grasp_config_dicts_path.exists()
+), f"{cfg.input_evaled_grasp_config_dicts_path} does not exist"
 evaled_grasp_config_dict_filepaths = sorted(
-    list(cfg.evaled_grasp_config_dicts_path.glob("*.npy"))
+    list(cfg.input_evaled_grasp_config_dicts_path.glob("*.npy"))
 )
 assert (
     len(evaled_grasp_config_dict_filepaths) > 0
-), f"Did not find any evaled grasp config dicts in {cfg.evaled_grasp_config_dicts_path}"
+), f"Did not find any evaled grasp config dicts in {cfg.input_evaled_grasp_config_dicts_path}"
 print(f"Found {len(evaled_grasp_config_dict_filepaths)} evaled grasp config dicts")
 
 # %%
@@ -167,13 +182,14 @@ nerf_alphas = [1 - np.exp(-delta * dd) for dd in nerf_densities]
 
 # %%
 # Plot 1
+query_points = np.stack(
+    [qq.reshape(-1, 3) for qq in query_points_N[cfg.grasp_idx]], axis=0
+)
+query_points_colors = np.stack([x.reshape(-1) for x in nerf_alphas], axis=0)
 fig = plot_mesh_and_query_points(
     mesh=mesh_N,
-    query_points=np.stack(
-        [qq.reshape(-1, 3) for qq in query_points_N[cfg.grasp_idx]],
-        axis=0,
-    ),
-    query_points_colors=np.stack([x.reshape(-1) for x in nerf_alphas], axis=0),
+    all_query_points=query_points,
+    all_query_points_colors=np.stack([x.reshape(-1) for x in nerf_alphas], axis=0),
     num_fingers=cfg.fingertip_config.n_fingers,
     title=f"Mesh and Query Points, Success: {y_PGSs[cfg.grasp_idx]}",
 )
@@ -193,7 +209,7 @@ fig2.show()
 
 # %%
 # Plot 3
-nerf_alphas_global = 1 - np.exp(-delta * nerf_densities_global.detach().cpu().numpy())
+nerf_alphas_global = 1 - np.exp(-delta * nerf_densities_global)
 
 X_Oy_N = np.linalg.inv(X_N_Oy)
 query_points_global_Oy = transform_points(
@@ -201,8 +217,8 @@ query_points_global_Oy = transform_points(
 ).reshape(*query_points_global_N.shape)
 fig3 = plot_mesh_and_high_density_points(
     mesh=mesh_Oy,
-    query_points=query_points_global_Oy.reshape(-1, 3),
-    query_points_colors=nerf_alphas_global[cfg.grasp_idx].reshape(-1),
+    all_query_points=query_points_global_Oy.reshape(-1, 3),
+    all_query_points_colors=nerf_alphas_global.reshape(-1),
     density_threshold=0.01,
 )
 fig3.show()
@@ -262,3 +278,5 @@ for finger_i in range(cfg.fingertip_config.n_fingers):
 fig5.tight_layout()
 fig5.show()
 plt.show(block=True)
+
+# %%

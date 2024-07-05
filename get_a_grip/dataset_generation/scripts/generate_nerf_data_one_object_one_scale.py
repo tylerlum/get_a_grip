@@ -45,7 +45,6 @@ def main() -> None:
 
     loop_timer = LoopTimer()
 
-    # Create sim
     with loop_timer.add_section_timer("create sim"):
         sim = IsaacValidator(
             gpu=args.gpu,
@@ -69,9 +68,17 @@ def main() -> None:
 
     with loop_timer.add_section_timer("run_sim_till_object_settles_upright"):
         is_valid, log_text = sim.run_sim_till_object_settles_upright()
-        if not is_valid:
+
+    with loop_timer.add_section_timer("log success or failure to txt"):
+        if is_valid:
+            log_successes_path = pathlib.Path(
+                str(args.output_nerfdata_path) + "_settled_successes.txt"
+            )
+            with open(log_successes_path, "a") as f:
+                f.write(f"{object_code_and_scale_str}\n")
+        else:
             log_failures_path = pathlib.Path(
-                str(args.output_nerfdata_path) + "_failures.txt"
+                str(args.output_nerfdata_path) + "_settled_failures.txt"
             )
             print(
                 f"Skipping {object_code_and_scale_str} because {log_text}, writing to {log_failures_path}"
@@ -86,8 +93,10 @@ def main() -> None:
             generate_depth=args.generate_depth,
             num_cameras=args.num_cameras,
         )
+
     with loop_timer.add_section_timer("create no split data"):
         sim.create_no_split_data(folder=str(output_nerf_object_path))
+
     with loop_timer.add_section_timer("destroy"):
         sim.reset_simulator()
         sim.destroy()

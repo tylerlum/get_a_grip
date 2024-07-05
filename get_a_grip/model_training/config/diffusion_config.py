@@ -2,6 +2,8 @@ import datetime
 import pathlib
 from dataclasses import dataclass, field
 
+from get_a_grip import get_data_folder
+
 
 @dataclass
 class DataConfig:
@@ -33,10 +35,9 @@ class TrainingConfig:
     n_epochs: int = 20000
     print_freq: int = 10
     snapshot_freq: int = 100
-    log_path: pathlib.Path = pathlib.Path(
-        f"logs/dexdiffuser_sampler/{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+    log_path: pathlib.Path = get_data_folder() / (
+        f"logs/sampler/{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
     )
-    # log_path: pathlib.Path = pathlib.Path(f"logs/dexdiffuser_sampler/stable_jun2")  # [vulcan] first one trained, tylers arch, not converged, no_noisy
 
 
 @dataclass
