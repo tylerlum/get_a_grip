@@ -1,5 +1,5 @@
 import os
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import plotly.graph_objects as go
@@ -22,7 +22,7 @@ class ObjectModel:
         batch_size_each: int,
         num_samples: int = 250,
         num_calc_samples: Optional[int] = None,
-        device: str = "cuda",
+        device: Union[str, torch.device] = "cpu",
     ):
         """
         Create a Object Model

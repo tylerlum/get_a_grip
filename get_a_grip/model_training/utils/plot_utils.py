@@ -115,26 +115,28 @@ def plot_mesh_and_transforms(
 
 def plot_mesh_and_query_points(
     mesh: trimesh.Trimesh,
-    query_points: np.ndarray,
-    query_points_colors: np.ndarray,
+    all_query_points: np.ndarray,
+    all_query_points_colors: np.ndarray,
     num_fingers: int,
     title: str = "Query Points",
 ) -> go.Figure:
-    num_pts = query_points.shape[1]
-    assert query_points.shape == (
+    num_pts = all_query_points.shape[1]
+    print(f"all_query_points.shape = {all_query_points.shape}")
+    print(f"all_query_points_colors.shape = {all_query_points_colors.shape}")
+    assert all_query_points.shape == (
         num_fingers,
         num_pts,
         3,
-    ), f"{query_points.shape}"
-    assert query_points_colors.shape == (
+    ), f"{all_query_points.shape}"
+    assert all_query_points_colors.shape == (
         num_fingers,
         num_pts,
-    ), f"{query_points_colors.shape}"
+    ), f"{all_query_points_colors.shape}"
 
     fig = plot_mesh(mesh)
     for finger_idx in range(num_fingers):
-        query_points = query_points[finger_idx]
-        query_points_colors = query_points_colors[finger_idx]
+        query_points = all_query_points[finger_idx]
+        query_points_colors = all_query_points_colors[finger_idx]
         assert query_points.shape == (num_pts, 3)
         assert query_points_colors.shape == (num_pts,)
 
@@ -168,19 +170,23 @@ def plot_mesh_and_query_points(
 
 def plot_mesh_and_high_density_points(
     mesh: trimesh.Trimesh,
-    query_points: np.ndarray,
-    query_points_colors: np.ndarray,
+    all_query_points: np.ndarray,
+    all_query_points_colors: np.ndarray,
     density_threshold: float,
 ) -> go.Figure:
-    num_pts = query_points.shape[0]
-    assert query_points.shape == (num_pts, 3), f"{query_points.shape}"
-    assert query_points_colors.shape == (num_pts,), f"{query_points_colors.shape}"
+    num_pts = all_query_points.shape[0]
+    assert all_query_points.shape == (num_pts, 3), f"{all_query_points.shape}"
+    assert all_query_points_colors.shape == (
+        num_pts,
+    ), f"{all_query_points_colors.shape}"
 
     fig = plot_mesh(mesh)
 
     # Filter
-    query_points = query_points[query_points_colors > density_threshold]
-    query_points_colors = query_points_colors[query_points_colors > density_threshold]
+    query_points = all_query_points[all_query_points_colors > density_threshold]
+    query_points_colors = all_query_points_colors[
+        all_query_points_colors > density_threshold
+    ]
 
     query_point_plot = go.Scatter3d(
         x=query_points[:, 0],

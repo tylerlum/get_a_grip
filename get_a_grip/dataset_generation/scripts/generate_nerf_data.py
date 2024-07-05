@@ -1,105 +1,34 @@
 import multiprocessing
-import os
 import pathlib
 import subprocess
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import tyro
 from tqdm import tqdm
 
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
-    is_object_code_and_scale_str,
     parse_object_code_and_scale,
+)
+from get_a_grip.dataset_generation.utils.process_utils import (
+    get_object_codes_and_scales_to_process,
 )
 
 
 @dataclass
 class GenerateNerfDataArgs:
     meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    input_object_code_and_scales_txt_path: pathlib.Path = (
+        get_data_folder() / "NEW_DATASET/object_code_and_scales.txt"
+    )
     output_nerfdata_path: pathlib.Path = get_data_folder() / "NEW_DATASET/nerfdata"
     num_cameras: int = 250
     randomize_order_seed: Optional[int] = None
-    only_objects_in_this_path: Optional[pathlib.Path] = None
     gpu: int = 0
     use_multiprocess: bool = True
     num_workers: int = 4
     no_continue: bool = False
-
-
-def get_object_code_and_scale_strs_from_folder(
-    folder_path: pathlib.Path,
-) -> List[str]:
-    if not folder_path.exists():
-        return []
-
-    object_code_and_scale_strs = []
-    for file_path in folder_path.iterdir():
-        object_code_and_scale_str = file_path.stem
-        if not is_object_code_and_scale_str(object_code_and_scale_str):
-            print(f"Skipping {object_code_and_scale_str} because it is not valid.")
-            continue
-        object_code_and_scale_strs.append(object_code_and_scale_str)
-    return object_code_and_scale_strs
-
-
-def get_object_codes_and_scales_to_process(
-    args: GenerateNerfDataArgs,
-) -> Tuple[List[str], List[float]]:
-    # Get input object codes
-    if args.only_objects_in_this_path is None:
-        input_object_codes = [
-            object_code for object_code in os.listdir(args.meshdata_root_path)
-        ]
-        HARDCODED_OBJECT_SCALE = 0.06
-        input_object_scales = [HARDCODED_OBJECT_SCALE] * len(input_object_codes)
-        print(
-            f"Found {len(input_object_codes)} object codes in args.mesh_path ({args.meshdata_root_path})"
-        )
-        print(f"Using hardcoded scale {HARDCODED_OBJECT_SCALE} for all objects")
-        return input_object_codes, input_object_scales
-
-    input_object_code_and_scale_strs = get_object_code_and_scale_strs_from_folder(
-        args.only_objects_in_this_path
-    )
-    print(
-        f"Found {len(input_object_code_and_scale_strs)} object codes in args.only_objects_in_this_path ({args.only_objects_in_this_path})"
-    )
-
-    existing_object_code_and_scale_strs = get_object_code_and_scale_strs_from_folder(
-        args.output_nerfdata_path
-    )
-
-    if args.no_continue and len(existing_object_code_and_scale_strs) > 0:
-        print(
-            f"Found {len(existing_object_code_and_scale_strs)} existing object codes in args.output_nerfdata_path ({args.output_nerfdata_path})."
-        )
-        print("Exiting because --no_continue was specified.")
-        exit()
-    elif len(existing_object_code_and_scale_strs) > 0:
-        print(
-            f"Found {len(existing_object_code_and_scale_strs)} existing object codes in args.output_nerfdata_path ({args.output_nerfdata_path})."
-        )
-        print("Continuing because --no_continue was not specified.")
-
-        input_object_code_and_scale_strs = list(
-            set(input_object_code_and_scale_strs)
-            - set(existing_object_code_and_scale_strs)
-        )
-        print(
-            f"Continuing with {len(input_object_code_and_scale_strs)} object codes after filtering."
-        )
-
-    input_object_codes, input_object_scales = [], []
-    for object_code_and_scale_str in input_object_code_and_scale_strs:
-        object_code, object_scale = parse_object_code_and_scale(
-            object_code_and_scale_str
-        )
-        input_object_codes.append(object_code)
-        input_object_scales.append(object_scale)
-
-    return input_object_codes, input_object_scales
 
 
 def run_command(
@@ -136,9 +65,20 @@ def main() -> None:
     script_to_run = this_folder / "generate_nerf_data_one_object_one_scale.py"
     assert script_to_run.exists(), f"Script {script_to_run} does not exist"
 
-    input_object_codes, input_object_scales = get_object_codes_and_scales_to_process(
-        args
+    input_object_code_and_scale_strs = get_object_codes_and_scales_to_process(
+        input_object_code_and_scales_txt_path=args.input_object_code_and_scales_txt_path,
+        meshdata_root_path=args.meshdata_root_path,
+        output_folder_path=args.output_nerfdata_path,
+        no_continue=args.no_continue,
     )
+    assert len(input_object_code_and_scale_strs) > 0
+    input_object_codes, input_object_scales = [], []
+    for object_code_and_scale_str in input_object_code_and_scale_strs:
+        object_code, object_scale = parse_object_code_and_scale(
+            object_code_and_scale_str
+        )
+        input_object_codes.append(object_code)
+        input_object_scales.append(object_scale)
 
     # Randomize order
     if args.randomize_order_seed is not None:

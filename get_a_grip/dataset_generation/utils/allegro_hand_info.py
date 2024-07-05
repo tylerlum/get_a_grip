@@ -51,8 +51,7 @@ ALLEGRO_HAND_JOINT_ANGLES_MU = torch.tensor(
 )
 
 ALLEGRO_HAND_ROOT_HAND_FILE = (
-    str(get_assets_folder()),
-    "allegro_hand_description/allegro_hand_description_right.urdf",
+    "allegro_hand_description/allegro_hand_description_right.urdf"
 )
 
 ALLEGRO_HAND_ROOT_HAND_FILE_WITH_VIRTUAL_JOINTS = (

@@ -38,6 +38,26 @@ get_a_grip
 
 Installation instructions [here](docs/installation.md).
 
+## Quick Start
+
+TODO: Note that we used 4090
+
+### 1. Dataset Download
+
+TODO
+
+### 2. Dataset Visualization
+
+TODO
+
+### 3. Grasp Planning with BPS Sampler and BPS Evaluator (Floating Hand)
+
+TODO
+
+### 4. Grasp Planning with BPS Sampler and BPS Evaluator (Arm + Hand)
+
+TODO
+
 ## Dataset
 
 Dataset information [here](docs/dataset.md).

@@ -1,3 +1,4 @@
+# %%
 """
 Visualization script for nerf_grasp_evaluator
 Useful to interactively understand the data and model performance
@@ -7,7 +8,9 @@ Percent script can be run like a Jupyter notebook or as a script
 # %%
 from __future__ import annotations
 
+import os
 import sys
+from dataclasses import asdict
 from functools import partial
 
 import matplotlib.pyplot as plt
@@ -15,11 +18,12 @@ import numpy as np
 import plotly.graph_objects as go
 import torch
 import tyro
-import wandb
 from clean_loop_timer import LoopTimer
 from plotly.subplots import make_subplots
 from tqdm import tqdm as std_tqdm
 
+import wandb
+from get_a_grip import get_repo_folder
 from get_a_grip.model_training.config.nerf_evaluator_config import (
     NerfEvaluatorConfig,
 )
@@ -37,7 +41,11 @@ from get_a_grip.model_training.utils.nerf_grasp_evaluator_batch_data import (
     BatchData,
 )
 
+# %%
+os.chdir(get_repo_folder())
 
+
+# %%
 def is_notebook() -> bool:
     try:
         shell = get_ipython().__class__.__name__
@@ -59,11 +67,30 @@ else:
     from tqdm import tqdm as std_tqdm
 tqdm = partial(std_tqdm, dynamic_ncols=True)
 
+
 # %%
 # Setup config
 if is_notebook():
     # Manually insert arguments here
-    arguments = []
+    arguments = [
+        # TODO: Figure out why having this first arg doesn't work
+        # "cnn-3d-xyz-global-cnn",
+        "--train-dataset-filepath",
+        "data/SMALL_DATASET/nerf_grasp_dataset/train_dataset.h5",
+        "--task-type",
+        "Y_PICK_AND_Y_COLL_AND_Y_PGS",
+        "--dataloader.batch-size",
+        "128",
+        "--wandb.name",
+        "probe",
+        # Load checkpoint
+        "--checkpoint-workspace.input_leaf_dir_name",
+        "MY_NERF_EXPERIMENT_NAME_2024-07-05_01-13-06-844447",
+        "--training.loss_fn",
+        "l2",
+        "--training.save_checkpoint_freq",
+        "1",
+    ]
 else:
     arguments = sys.argv[1:]
     print(f"arguments = {arguments}")
@@ -72,6 +99,18 @@ cfg = tyro.cli(NerfEvaluatorConfig, args=arguments)
 print("=" * 80)
 print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
 print("=" * 80 + "\n")
+
+# %%
+wandb.init(
+    entity=cfg.wandb.entity,
+    project=cfg.wandb.project,
+    name=cfg.wandb.name,
+    group=cfg.wandb.group,
+    job_type=cfg.wandb.job_type,
+    config=asdict(cfg),
+    resume=cfg.wandb.resume,
+    reinit=True,
+)
 
 # %%
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -119,9 +158,6 @@ print(f"lr_scheduler = {lr_scheduler}")
 # Loss function
 loss_fns = setup_loss_fns(
     cfg=cfg,
-    device=device,
-    train_dataset=train_dataset,
-    train_dataset_full_path=cfg.actual_train_dataset_filepath,
 )
 
 
@@ -368,3 +404,5 @@ plot_distribution(
 
 # %%
 plot_distribution(data=val_losses_dict["y_pick_loss"], name="y_pick_loss")
+
+# %%

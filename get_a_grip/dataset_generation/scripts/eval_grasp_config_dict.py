@@ -1,3 +1,11 @@
+# gymtorch must be imported before torch
+from get_a_grip.dataset_generation.utils.isaac_validator import (
+    IsaacValidator,
+    ValidationType,
+)
+
+import torch  # isort: skip
+
 import math
 import os
 import pathlib
@@ -5,7 +13,6 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-import torch
 import tyro
 from tqdm import tqdm
 
@@ -14,10 +21,6 @@ from get_a_grip.dataset_generation.utils.allegro_hand_info import (
     ALLEGRO_HAND_JOINT_NAMES,
 )
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
-from get_a_grip.dataset_generation.utils.isaac_validator import (
-    IsaacValidator,
-    ValidationType,
-)
 from get_a_grip.dataset_generation.utils.joint_angle_targets import (
     compute_init_joint_angles_given_grasp_orientations,
     compute_optimized_joint_angle_targets_given_grasp_orientations,
@@ -348,9 +351,9 @@ def main() -> None:
     eval_frac = np.mean(y_PGS)
     print("=" * 80)
     print(
-        f"y_pick: {y_pick_array.sum().item()}/{batch_size} ({100 * sim_frac:.2f}%),"
-        f"y_coll: {y_coll_array.sum().item()}/{batch_size} ({100 * new_pen_frac:.2f}%),"
-        f"y_PGS = y_pick * y_coll: {y_PGS.sum().item()}/{batch_size} ({100 * eval_frac:.2f}%)"
+        f"y_pick: {y_pick_array.sum().item()}/{batch_size} ({100 * sim_frac:.2f}%), "
+        f"y_coll: {y_coll_array.sum().item()}/{batch_size} ({100 * new_pen_frac:.2f}%), "
+        f"y_PGS = y_pick*y_coll: {y_PGS.sum().item()}/{batch_size} ({100 * eval_frac:.2f}%)"
     )
     print("=" * 80)
 

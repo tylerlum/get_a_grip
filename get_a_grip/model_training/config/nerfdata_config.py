@@ -16,11 +16,11 @@ EXPERIMENT_NAME = "DEFAULT_EXPERIMENT_NAME"
 class GridNerfDataConfig:
     """Top-level config for NeRF data generation."""
 
-    evaled_grasp_config_dicts_path: pathlib.Path = (
-        get_data_folder() / EXPERIMENT_NAME / "evaled_grasp_config_dicts"
-    )
-    nerf_checkpoints_path: pathlib.Path = (
+    input_nerfcheckpoints_path: pathlib.Path = (
         get_data_folder() / EXPERIMENT_NAME / "nerfcheckpoints"
+    )
+    input_evaled_grasp_config_dicts_path: pathlib.Path = (
+        get_data_folder() / EXPERIMENT_NAME / "evaled_grasp_config_dicts"
     )
     output_filepath: Optional[pathlib.Path] = None
 
@@ -36,6 +36,7 @@ class GridNerfDataConfig:
 
     @property
     def config_filepath(self) -> pathlib.Path:
+        assert self.output_filepath is not None
         return self.output_filepath.parent / "config.yml"
 
 

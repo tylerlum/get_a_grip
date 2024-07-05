@@ -16,7 +16,7 @@ from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
 class TrainNerfsArgs:
     experiment_name: str
     max_num_iterations: int = 400
-    nerfdata_name: str = "nerfdata"
+    input_nerfdata_name: str = "nerfdata"
     output_nerfcheckpoints_name: str = "nerfcheckpoints"
     root_data_path: pathlib.Path = get_data_folder()
     randomize_order_seed: Optional[int] = None
@@ -32,7 +32,7 @@ def train_nerfs(args: TrainNerfsArgs) -> pathlib.Path:
     experiment_path = args.root_data_path / args.experiment_name
     assert experiment_path.exists(), f"{experiment_path} does not exist"
 
-    nerfdata_path = experiment_path / args.nerfdata_name
+    nerfdata_path = experiment_path / args.input_nerfdata_name
     assert nerfdata_path.exists(), f"{nerfdata_path} does not exist"
 
     output_nerfcheckpoints_path = experiment_path / args.output_nerfcheckpoints_name

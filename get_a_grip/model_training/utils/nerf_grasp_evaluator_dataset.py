@@ -3,7 +3,6 @@ from typing import Optional
 
 import h5py
 import numpy as np
-import pypose as pp
 import torch
 from torch.utils.data import Dataset
 
@@ -114,12 +113,7 @@ class NerfGraspEvalDataset(Dataset):
 
             # This is small enough to fit in RAM
             self.grasp_transforms = (
-                pp.from_matrix(
-                    torch.from_numpy(hdf5_file["/grasp_transforms"][()]).float(),
-                    pp.SE3_type,
-                    atol=PP_MATRIX_ATOL,
-                    rtol=PP_MATRIX_RTOL,
-                )
+                torch.from_numpy(hdf5_file["/grasp_transforms"][()]).float()
                 if load_grasp_transforms_in_ram
                 else None
             )

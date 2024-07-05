@@ -6,7 +6,6 @@ import numpy as np
 import torch
 import trimesh
 from skimage.measure import marching_cubes
-from typing_extensions import Unpack
 
 from get_a_grip.model_training.utils.nerf_load_utils import (
     get_nerf_configs,
@@ -19,7 +18,7 @@ def sdf_to_mesh(
     npts: int = 31,
     lb: np.ndarray = -np.ones(3),
     ub: np.ndarray = np.ones(3),
-) -> Unpack[Tuple[np.ndarray, ...]]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Converts an SDF to a mesh using marching cubes.
 
     Parameters
@@ -101,8 +100,11 @@ def nerf_to_mesh(
     mesh : trimesh.Trimesh
         The mesh.
     """
+
+    def sdf(x: torch.Tensor) -> float:
+        return field.density_fn(x).cpu().detach().numpy() - level
+
     # marching cubes
-    sdf = lambda x: field.density_fn(x).cpu().detach().numpy() - level
     verts, faces, normals = sdf_to_mesh(
         sdf,
         npts=npts,
@@ -158,13 +160,13 @@ def nerf_to_mesh(
 
 
 if __name__ == "__main__":
-    NERF_CHECKPOINTS_PATH = Path("data/2023-09-11_20-52-40/nerfcheckpoints")
+    NERFCHECKPOINTS_PATH = Path("data/2023-09-11_20-52-40/nerfcheckpoints")
     IDX = 0
     RADIUS = 0.1
     LEVEL = 10.0
 
     nerf_configs = get_nerf_configs(
-        nerf_checkpoints_path=str(NERF_CHECKPOINTS_PATH),
+        nerfcheckpoints_path=str(NERFCHECKPOINTS_PATH),
     )
     nerf_config = nerf_configs[IDX]
     field = load_nerf_field(nerf_config)

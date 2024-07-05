@@ -8,19 +8,28 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import tyro
-import wandb
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-from wandb.util import generate_id
 
+import wandb
+from get_a_grip import get_data_folder
 from get_a_grip.model_training.models.dex_evaluator import DexEvaluator
 from get_a_grip.model_training.utils.bps_grasp_dataset import BpsGraspEvalDataset
+from wandb.util import generate_id
 
 
 @dataclass
-class DexEvaluatorTrainingConfig:
+class TrainBpsGraspEvaluatorConfig:
+    # dataset paths
+    train_dataset_path: Path = (
+        get_data_folder() / "large/bps_grasp_dataset/train_dataset.h5"
+    )
+    val_dataset_path: Path = (
+        get_data_folder() / "large/bps_grasp_dataset/val_dataset.h5"
+    )
+
     # training parameters
     batch_size: int = 32768
     learning_rate: float = 1e-4
@@ -30,15 +39,15 @@ class DexEvaluatorTrainingConfig:
 
     # validation, printing, and saving
     snapshot_freq: int = 5
-    log_path: Path = Path(
-        f"logs/dexdiffuser_evaluator/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    log_path: Path = (
+        get_data_folder()
+        / f"logs/bps_grasp_evaluator/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     )
 
     # wandb
-    wandb_project: str = "dexdiffuser-evaluator"
+    wandb_project: str = "bps_grasp_evaluator"
     wandb_log: bool = True
 
-    # whether to train gg-nerf or the dexdiffuser baseline
     train_frac_throw_away: float = 0.0  # Increase for ablation
 
     # whether to use multigpu training
@@ -47,7 +56,7 @@ class DexEvaluatorTrainingConfig:
     num_workers: int = 4
 
 
-def setup(cfg: DexEvaluatorTrainingConfig, rank: int = 0):
+def setup(cfg: TrainBpsGraspEvaluatorConfig, rank: int = 0):
     """Sets up the training loop."""
     # set random seed
     torch.cuda.manual_seed_all(cfg.random_seed)
@@ -67,11 +76,11 @@ def setup(cfg: DexEvaluatorTrainingConfig, rank: int = 0):
 
     # get datasets
     train_dataset = BpsGraspEvalDataset(
-        input_hdf5_filepath=Path("TODO"),
+        input_hdf5_filepath=cfg.train_dataset_path,
         frac_throw_away=cfg.train_frac_throw_away,
     )
     val_dataset = BpsGraspEvalDataset(
-        input_hdf5_filepath=Path("TODO"),
+        input_hdf5_filepath=cfg.val_dataset_path,
         frac_throw_away=0.0,
     )
 
@@ -140,7 +149,7 @@ def setup(cfg: DexEvaluatorTrainingConfig, rank: int = 0):
     )
 
 
-def train(cfg: DexEvaluatorTrainingConfig, rank: int = 0) -> None:
+def train(cfg: TrainBpsGraspEvaluatorConfig, rank: int = 0) -> None:
     """Training function."""
     train_loader, val_loader, model, optimizer, scheduler, train_sampler, wandb_id = (
         setup(cfg, rank=rank)
@@ -249,9 +258,13 @@ def _train_multigpu(rank, cfg):
     train(cfg, rank)
 
 
-if __name__ == "__main__":
-    cfg = tyro.cli(DexEvaluatorTrainingConfig)
+def main() -> None:
+    cfg = tyro.cli(TrainBpsGraspEvaluatorConfig)
     if cfg.multigpu:
         mp.spawn(_train_multigpu, args=(cfg,), nprocs=cfg.num_gpus, join=True)
     else:
         train(cfg, rank=0)
+
+
+if __name__ == "__main__":
+    main()

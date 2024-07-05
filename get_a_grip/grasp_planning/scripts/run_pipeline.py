@@ -1338,11 +1338,11 @@ def main() -> None:
     # Prepare nerf model
     if args.nerfdata_path is not None:
         start_time = time.time()
-        nerf_checkpoints_folder = args.output_folder / "nerfcheckpoints"
+        nerfcheckpoints_folder = args.output_folder / "nerfcheckpoints"
         nerf_trainer = train_nerf_return_trainer.train_nerf(
             args=train_nerf_return_trainer.Args(
                 nerfdata_folder=args.nerfdata_path,
-                nerfcheckpoints_folder=nerf_checkpoints_folder,
+                nerfcheckpoints_folder=nerfcheckpoints_folder,
                 max_num_iterations=args.max_num_iterations,
             )
         )

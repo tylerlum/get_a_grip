@@ -9,6 +9,7 @@ import pytorch_kinematics as pk
 import torch
 from pytorch_kinematics.chain import Chain
 
+from get_a_grip import get_assets_folder
 from get_a_grip.dataset_generation.utils.allegro_hand_info import (
     ALLEGRO_HAND_JOINT_NAMES,
     ALLEGRO_HAND_ROOT_HAND_FILE,
@@ -36,7 +37,7 @@ FINGERTIP_LINK_NAMES = [
 
 
 def load_allegro() -> Chain:
-    allegro_path = str(ALLEGRO_HAND_ROOT_HAND_FILE)
+    allegro_path = str(get_assets_folder() / ALLEGRO_HAND_ROOT_HAND_FILE)
     return pk.build_chain_from_urdf(open(allegro_path).read())
 
 
@@ -374,16 +375,16 @@ class AllegroGraspConfig(torch.nn.Module):
         return grasp_config
 
     def as_dict(self) -> Dict[str, Any]:
-        hand_config_dict = self.hand_config.as_dict()
-        hand_config_dict_batch_size = hand_config_dict["trans"].shape[0]
+        grasp_config_dict = self.hand_config.as_dict()
+        batch_size = grasp_config_dict["trans"].shape[0]
         assert (
-            hand_config_dict_batch_size == self.batch_size
-        ), f"Batch size {self.batch_size} does not match hand_config_dict_batch_size of {hand_config_dict_batch_size}"
+            batch_size == self.batch_size
+        ), f"Batch size {self.batch_size} does not match hand_config_dict batch_size of {batch_size}"
 
-        hand_config_dict["grasp_orientations"] = (
+        grasp_config_dict["grasp_orientations"] = (
             self.grasp_orientations.matrix().detach().cpu().numpy()
         )
-        return hand_config_dict
+        return grasp_config_dict
 
     def as_tensor(self) -> torch.Tensor:
         """

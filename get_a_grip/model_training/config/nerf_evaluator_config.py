@@ -7,6 +7,7 @@ from typing import List, Literal, Optional, Tuple
 
 import tyro
 
+from get_a_grip import get_data_folder
 from get_a_grip.model_training.config.base import CONFIG_DATETIME_STR, WandbConfig
 from get_a_grip.model_training.config.fingertip_config import (
     EvenlySpacedFingertipConfig,
@@ -89,7 +90,7 @@ class DataConfig:
 class DataLoaderConfig:
     """Parameters for dataloader."""
 
-    batch_size: int = 256
+    batch_size: int = 128
 
     num_workers: int = 8
     """Number of workers for the dataloader."""
@@ -155,7 +156,7 @@ class TrainingConfig:
 class CheckpointWorkspaceConfig:
     """Parameters for paths to checkpoints."""
 
-    root_dir: pathlib.Path = pathlib.Path("nerf_grasp_evaluator_workspaces")
+    root_dir: pathlib.Path = get_data_folder() / "logs/nerf_grasp_evaluator"
     """Root directory for checkpoints."""
 
     input_leaf_dir_name: Optional[str] = None
@@ -343,6 +344,16 @@ class CNN_3D_XYZ_Global_CNN_ModelConfig(ModelConfig):
         )
 
 
+DEFAULT_CNN_3D_XYZ_ModelConfig = CNN_3D_XYZ_ModelConfig(
+    conv_channels=[32, 64, 128], mlp_hidden_layers=[256, 256]
+)
+DEFAULT_CNN_3D_XYZ_Global_CNN_ModelConfig = CNN_3D_XYZ_Global_CNN_ModelConfig(
+    conv_channels=[32, 64, 128],
+    mlp_hidden_layers=[256, 256],
+    global_conv_channels=[32, 64, 128],
+)
+
+
 @dataclass
 class PlotConfig:
     """Parameters for plotting."""
@@ -362,8 +373,8 @@ class PlotConfig:
 
 @dataclass
 class NerfEvaluatorConfig:
-    model_config: ModelConfig
-    nerfdata_config: GridNerfDataConfig
+    model_config: ModelConfig = DEFAULT_CNN_3D_XYZ_Global_CNN_ModelConfig
+    nerfdata_config: GridNerfDataConfig = GridNerfDataConfig()
     nerfdata_config_path: Optional[pathlib.Path] = None
     train_dataset_filepath: Optional[pathlib.Path] = None
     val_dataset_filepath: Optional[pathlib.Path] = None
@@ -438,17 +449,11 @@ class NerfEvaluatorConfig:
 
 DEFAULTS_DICT = {
     "cnn-3d-xyz": NerfEvaluatorConfig(
-        model_config=CNN_3D_XYZ_ModelConfig(
-            conv_channels=[32, 64, 128], mlp_hidden_layers=[256, 256]
-        ),
+        model_config=DEFAULT_CNN_3D_XYZ_ModelConfig,
         nerfdata_config=GridNerfDataConfig(),
     ),
     "cnn-3d-xyz-global-cnn": NerfEvaluatorConfig(
-        model_config=CNN_3D_XYZ_Global_CNN_ModelConfig(
-            conv_channels=[32, 64, 128],
-            mlp_hidden_layers=[256, 256],
-            global_conv_channels=[32, 64, 128],
-        ),
+        model_config=DEFAULT_CNN_3D_XYZ_Global_CNN_ModelConfig,
         nerfdata_config=GridNerfDataConfig(),
     ),
 }
