@@ -50,10 +50,6 @@ class GenerateHandConfigDictsArgs:
     output_hand_config_dicts_path: pathlib.Path = (
         get_data_folder() / "NEW_DATASET/hand_config_dicts"
     )
-    rand_object_scale: bool = False
-    object_scale: Optional[float] = 0.075
-    min_object_scale: float = 0.05
-    max_object_scale: float = 0.125
     seed: Optional[int] = None
     batch_size_each_object: int = 250
     n_objects_per_batch: int = (
@@ -77,14 +73,6 @@ class GenerateHandConfigDictsArgs:
     starting_temperature: float = 18
     annealing_period: int = 30
     temperature_decay: float = 0.95
-    # n_contacts_per_finger: int = 15
-    # w_fc: float = 0.75
-    # w_dis: float = 200.0
-    # w_pen: float = 1500.0
-    # w_spen: float = 100.0
-    # w_joints: float = 1.0
-    # w_ff: float = 3.0
-    # w_fp: float = 0.0
     n_contacts_per_finger: int = 5
     w_fc: float = 0.5
     w_dis: float = 500
@@ -93,8 +81,7 @@ class GenerateHandConfigDictsArgs:
     w_joints: float = 1.0
     w_ff: float = 3.0
     w_fp: float = 0.0
-    w_tpen: float = 100.0  # TODO: Tune
-    use_penetration_energy: bool = False
+    w_tpen: float = 100.0
     penetration_iters_frac: float = (
         0.0  # Fraction of iterations to perform penetration energy calculation
     )
@@ -112,12 +99,9 @@ class GenerateHandConfigDictsArgs:
     thres_dis: float = 0.015
     thres_pen: float = 0.015
 
-    # verbose (grasps throughout)
+    # store extra grasps mid optimization
     store_grasps_mid_optimization_freq: Optional[int] = None
     store_grasps_mid_optimization_iters: Optional[List[int]] = None
-    # store_grasps_mid_optimization_iters: Optional[List[int]] = [25] + [
-    # int(ff * 2500) for ff in [0.2, 0.5, 0.95]  # TODO: May add this back
-    # ]
 
     # Continue from previous run
     no_continue: bool = False
@@ -195,6 +179,7 @@ def save_hand_config_dicts(
 
     TODO: update docstring.
     """
+    assert object_model.object_scale_tensor is not None
     num_objects, num_grasps_per_object = object_model.object_scale_tensor.shape
     assert len(object_codes) == num_objects
     assert hand_pose_start.shape[0] == num_objects * num_grasps_per_object
@@ -207,7 +192,7 @@ def save_hand_config_dicts(
 
     # Reshape hand poses and energy terms to be (num_objects, num_grasps_per_object, ...)
     # an aside: it's absolutely ridiculous that we have to do this 🙃
-
+    assert hand_model.hand_pose is not None
     hand_pose = (
         hand_model.hand_pose.detach()
         .cpu()
@@ -321,6 +306,7 @@ def generate(
                 jitter_strength=args.jitter_strength,
                 n_contacts_per_finger=args.n_contacts_per_finger,
             )
+            assert hand_model.hand_pose is not None
             hand_pose_start = hand_model.hand_pose.detach()
 
         with loop_timer.add_section_timer("create optimizer"):
@@ -353,7 +339,6 @@ def generate(
                 hand_model,
                 object_model,
                 energy_name_to_weight_dict=energy_name_to_weight_dict,
-                use_penetration_energy=args.use_penetration_energy,
                 thres_dis=args.thres_dis,
                 thres_pen=args.thres_pen,
             )
@@ -362,41 +347,11 @@ def generate(
             energy.sum().backward(retain_graph=True)
 
         idx_to_visualize = 0
-        step_first_compute_penetration_energy = int(
-            args.n_iter * args.penetration_iters_frac
-        )
         pbar = tqdm(range(args.n_iter), desc="optimizing", dynamic_ncols=True)
         for step in pbar:
             with loop_timer.add_section_timer("wandb and setup"):
                 wandb_log_dict = {}
                 wandb_log_dict["optimization_step"] = step
-
-                use_penetration_energy = (
-                    args.use_penetration_energy
-                    and step >= step_first_compute_penetration_energy
-                )
-
-            # When we start using penetration energy, we must recompute the current energy with penetration energy
-            # Else the current energy will appear artificially better than all new energies
-            # So optimizer will stop accepting new energies
-            if step == step_first_compute_penetration_energy:
-                if args.use_penetration_energy:
-                    assert use_penetration_energy, f"On step {step}, use_penetration_energy is {use_penetration_energy} but should be True"
-                (
-                    updated_energy,
-                    updated_unweighted_energy_matrix,
-                    updated_weighted_energy_matrix,
-                ) = cal_energy(
-                    hand_model,
-                    object_model,
-                    energy_name_to_weight_dict=energy_name_to_weight_dict,
-                    use_penetration_energy=use_penetration_energy,
-                    thres_dis=args.thres_dis,
-                    thres_pen=args.thres_pen,
-                )
-                energy[:] = updated_energy
-                unweighted_energy_matrix[:] = updated_unweighted_energy_matrix
-                weighted_energy_matrix[:] = updated_weighted_energy_matrix
 
             with loop_timer.add_section_timer("optimizer try step zero grad"):
                 _ = optimizer.try_step()
@@ -411,7 +366,6 @@ def generate(
                     hand_model,
                     object_model,
                     energy_name_to_weight_dict=energy_name_to_weight_dict,
-                    use_penetration_energy=use_penetration_energy,
                     thres_dis=args.thres_dis,
                     thres_pen=args.thres_pen,
                 )
@@ -541,15 +495,8 @@ def main() -> None:
     print(f"First 10 in object_codes: {object_codes[:10]}")
     print(f"len(object_codes): {len(object_codes)}")
 
-    if args.rand_object_scale:
-        object_scales = np.random.uniform(
-            low=args.min_object_scale,
-            high=args.max_object_scale,
-            size=(len(object_codes),),
-        )
-    else:
-        assert args.object_scale is not None
-        object_scales = np.ones(len(object_codes)) * args.object_scale
+    # TODO: Use this properly
+    object_scales = np.ones(len(object_codes))
     print(f"First 10 in object_scales: {object_scales[:10]}")
     print(f"len(object_scales): {len(object_scales)}")
 

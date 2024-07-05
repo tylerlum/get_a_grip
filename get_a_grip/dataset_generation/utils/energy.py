@@ -132,7 +132,6 @@ def cal_energy(
     hand_model: HandModel,
     object_model: ObjectModel,
     energy_name_to_weight_dict: Dict[str, float],
-    use_penetration_energy: bool = False,
     thres_dis: float = 0.005,
     thres_pen: float = 0.005,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -160,16 +159,9 @@ def cal_energy(
     energy_dict["Hand Contact Point to Object Distance"] = torch.sum(
         rel_distances, dim=-1, dtype=torch.float
     ).to(device)
-
-    if use_penetration_energy:
-        energy_dict["Hand Object Penetration"] = _cal_hand_object_penetration(
-            hand_model, object_model, thres_pen=thres_pen
-        )
-    else:
-        energy_dict["Hand Object Penetration"] = torch.zeros_like(
-            energy_dict["Force Closure"]
-        )
-
+    energy_dict["Hand Object Penetration"] = _cal_hand_object_penetration(
+        hand_model, object_model, thres_pen=thres_pen
+    )
     energy_dict["Hand Self Penetration"] = hand_model.cal_self_penetration_energy()
     energy_dict["Joint Limits Violation"] = hand_model.cal_joint_limit_energy()
     energy_dict["Finger Finger Distance"] = (
