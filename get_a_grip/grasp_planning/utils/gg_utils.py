@@ -9,10 +9,11 @@ import numpy as np
 import trimesh
 import tyro
 
-from get_a_grip.grasp_planning.config.grasp_metric_config import GraspMetricConfig
+from get_a_grip.grasp_planning.config.nerf_evaluator_wrapper_config import (
+    NerfEvaluatorWrapperConfig,
+)
 from get_a_grip.grasp_planning.config.optimization_config import OptimizationConfig
 from get_a_grip.grasp_planning.config.optimizer_config import (
-    CEMOptimizerConfig,
     RandomSamplingConfig,
     SGDOptimizerConfig,
 )
@@ -22,11 +23,11 @@ from get_a_grip.grasp_planning.scripts.optimizer import (
 from get_a_grip.grasp_planning.utils import (
     train_nerf_return_trainer,
 )
-from get_a_grip.grasp_planning.utils.optimizer_utils import (
-    GraspMetric,
-    load_classifier,
+from get_a_grip.grasp_planning.utils.nerf_evaluator_wrapper import (
+    NerfEvaluatorWrapper,
+    load_nerf_evaluator,
 )
-from get_a_grip.model_training.config.classifier_config import ClassifierConfig
+from get_a_grip.model_training.config.nerf_evaluator_config import NerfEvaluatorConfig
 from get_a_grip.model_training.utils.nerf_load_utils import load_nerf_pipeline
 from get_a_grip.model_training.utils.nerf_utils import (
     compute_centroid_from_nerf,
@@ -46,13 +47,13 @@ class CommandlineArgs:
     overwrite: bool = False
 
     optimize: bool = False
-    classifier_config_path: pathlib.Path = pathlib.Path(
+    nerf_evaluator_config_path: pathlib.Path = pathlib.Path(
         "/juno/u/tylerlum/github_repos/nerf_grasping/Train_DexGraspNet_NeRF_Grasp_Metric_workspaces/2024-06-02_FINAL_LABELED_GRASPS_NOISE_AND_NONOISE_cnn-3d-xyz-global-cnn-cropped_CONTINUE/config.yaml"
     )
     init_grasp_config_dict_path: pathlib.Path = pathlib.Path(
         "/juno/u/tylerlum/github_repos/DexGraspNet/data/2024-06-03_FINAL_INFERENCE_GRASPS/good_nonoise_one_per_object/grasps.npy"
     )
-    optimizer_type: Literal["sgd", "cem", "random-sampling"] = "random-sampling"
+    optimizer_type: Literal["sgd", "random-sampling"] = "random-sampling"
     num_steps: int = 50
     n_random_rotations_per_grasp: int = 0
     eval_batch_size: int = 32
@@ -163,16 +164,18 @@ def run_gg_sim_eval(args: CommandlineArgs) -> None:
     print("\n" + "=" * 80)
     print("Step 5: Load grasp metric")
     print("=" * 80 + "\n")
-    print(f"Loading classifier config from {args.classifier_config_path}")
-    classifier_config = tyro.extras.from_yaml(
-        ClassifierConfig, args.classifier_config_path.open()
+    print(f"Loading nerf_evaluator config from {args.nerf_evaluator_config_path}")
+    nerf_evaluator_config = tyro.extras.from_yaml(
+        NerfEvaluatorConfig, args.nerf_evaluator_config_path.open()
     )
 
-    classifier_model = load_classifier(classifier_config=classifier_config)
-    grasp_metric = GraspMetric(
+    nerf_evaluator_model = load_nerf_evaluator(
+        nerf_evaluator_config=nerf_evaluator_config
+    )
+    nerf_evaluator_wrapper = NerfEvaluatorWrapper(
         nerf_field=nerf_model.field,
-        classifier_model=classifier_model,
-        fingertip_config=classifier_config.nerfdata_config.fingertip_config,
+        nerf_evaluator_model=nerf_evaluator_model,
+        fingertip_config=nerf_evaluator_config.nerfdata_config.fingertip_config,
         X_N_Oy=X_N_Oy,
     )
 
@@ -189,14 +192,6 @@ def run_gg_sim_eval(args: CommandlineArgs) -> None:
             grasp_dir_lr=0,
             wrist_lr=1e-3,
         )
-    elif args.optimizer_type == "cem":
-        optimizer = CEMOptimizerConfig(
-            num_grasps=args.num_grasps,
-            num_steps=args.num_steps,
-            num_samples=args.num_grasps,
-            num_elite=2,
-            min_cov_std=1e-2,
-        )
     elif args.optimizer_type == "random-sampling":
         optimizer = RandomSamplingConfig(
             num_grasps=args.num_grasps,
@@ -209,11 +204,11 @@ def run_gg_sim_eval(args: CommandlineArgs) -> None:
         cfg=OptimizationConfig(
             use_rich=False,  # Not used because causes issues with logging
             init_grasp_config_dict_path=args.init_grasp_config_dict_path,
-            grasp_metric=GraspMetricConfig(
+            nerf_evaluator_wrapper=NerfEvaluatorWrapperConfig(
                 nerf_config=nerf_config,
-                classifier_config_path=args.classifier_config_path,
+                nerf_evaluator_config_path=args.nerf_evaluator_config_path,
                 X_N_Oy=X_N_Oy,
-            ),  # This is not used because we are passing in a grasp_metric
+            ),  # This is not used because we are passing in a nerf_evaluator_wrapper
             optimizer=optimizer,
             output_path=UNUSED_OUTPUT_PATH,
             random_seed=0,
@@ -222,7 +217,7 @@ def run_gg_sim_eval(args: CommandlineArgs) -> None:
             wandb=None,
             filter_less_feasible_grasps=False,  # Do not filter for sim
         ),
-        grasp_metric=grasp_metric,
+        nerf_evaluator_wrapper=nerf_evaluator_wrapper,
     )
 
     grasp_config_dict = optimized_grasp_config_dict

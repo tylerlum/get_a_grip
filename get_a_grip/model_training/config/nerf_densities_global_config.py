@@ -1,6 +1,6 @@
 import numpy as np
 
-# HACK: Just some hardcoded values to reference, make into nice config later
+# Hardcoded values
 (
     NERF_DENSITIES_GLOBAL_NUM_X,
     NERF_DENSITIES_GLOBAL_NUM_Y,

@@ -106,13 +106,13 @@ def get_bounds(fig: go.Figure):
     )
 
 
-def get_title(fig: go.Figure, idx: int, visualization_freq: int):
+def get_title(fig: go.Figure, idx: int, optimization_step: int):
     try:
         original_title = fig.layout.title.text
     except AttributeError:
         original_title = ""
 
-    return f"Grasp Optimization Step {idx * visualization_freq} {original_title}"
+    return f"Grasp Optimization Step {optimization_step} ({idx}) {original_title}"
 
 
 def get_fig_name(idx: int):
@@ -121,7 +121,7 @@ def get_fig_name(idx: int):
 
 def create_figure_with_buttons_and_slider(
     input_figs: List[go.Figure],
-    visualization_freq: int,
+    optimization_steps: List[int],
     frame_duration: int,
     transition_duration: int,
 ) -> go.Figure:
@@ -209,7 +209,7 @@ def create_figure_with_buttons_and_slider(
             title=get_title(
                 fig=input_figs[FIG_TO_SHOW_FIRST],
                 idx=FIG_TO_SHOW_FIRST,
-                visualization_freq=visualization_freq,
+                optimization_step=optimization_steps[FIG_TO_SHOW_FIRST],
             ),
             showlegend=True,
             updatemenus=[
@@ -234,7 +234,9 @@ def create_figure_with_buttons_and_slider(
                 layout=go.Layout(
                     scene=get_scene_dict(bounds),
                     title=get_title(
-                        fig=fig, idx=fig_idx, visualization_freq=visualization_freq
+                        fig=fig,
+                        idx=fig_idx,
+                        optimization_step=optimization_steps[fig_idx],
                     ),
                     showlegend=True,
                     # scene_camera=fig.layout.scene.camera,  # Actually doing this resets the camera every time, so changing frames is jarring, leave empty

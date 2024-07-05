@@ -5,52 +5,42 @@ import pathlib
 import time
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Literal, Optional, Tuple
+from typing import Literal, Optional
 
 import numpy as np
-import plotly.graph_objects as go
-import pypose as pp
 import torch
 import trimesh
 import tyro
 import wandb
 from nerfstudio.pipelines.base_pipeline import Pipeline
 from tqdm import tqdm
-from get_a_grip.grasp_planning.nerf_conversions.nerf_to_bps import nerf_to_bps
 
-from get_a_grip import get_package_folder
-from get_a_grip.dataset_generation.utils.hand_model import HandModel
-from get_a_grip.dataset_generation.utils.joint_angle_targets import (
-    compute_fingertip_dirs,
-    compute_optimized_joint_angle_targets_given_grasp_orientations,
+from get_a_grip.grasp_planning.config.nerf_evaluator_wrapper_config import (
+    NerfEvaluatorWrapperConfig,
 )
-from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_to_pose
-from get_a_grip.grasp_planning.config.grasp_metric_config import GraspMetricConfig
 from get_a_grip.grasp_planning.config.optimization_config import OptimizationConfig
 from get_a_grip.grasp_planning.config.optimizer_config import (
     RandomSamplingConfig,
 )
-from get_a_grip.grasp_planning.scripts.optimizer import (
-    sample_random_rotate_transforms_only_around_y,
-)
+from get_a_grip.grasp_planning.nerf_conversions.nerf_to_bps import nerf_to_bps
 from get_a_grip.grasp_planning.utils import (
     ablation_utils,
     train_nerf_return_trainer,
 )
 from get_a_grip.grasp_planning.utils.ablation_optimizer import RandomSamplingOptimizer
-from get_a_grip.grasp_planning.utils.nerfstudio_point_cloud import ExportPointCloud
-from get_a_grip.grasp_planning.utils.optimizer_utils import (
+from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
     AllegroGraspConfig,
-    AllegroHandConfig,
-    hand_config_to_hand_model,
+)
+from get_a_grip.grasp_planning.utils.grasp_utils import (
+    grasp_to_grasp_config,
+)
+from get_a_grip.grasp_planning.utils.optimizer_utils import (
+    sample_random_rotate_transforms_only_around_y,
 )
 from get_a_grip.model_training.models.dex_evaluator import DexEvaluator
 from get_a_grip.model_training.utils.nerf_load_utils import load_nerf_pipeline
 from get_a_grip.model_training.utils.nerf_utils import (
     compute_centroid_from_nerf,
-)
-from get_a_grip.grasp_planning.utils.grasp_utils import (
-    grasp_to_grasp_config,
 )
 
 
@@ -155,10 +145,7 @@ def get_optimized_grasps(
             for k, v in config_dict.items():
                 new_grasp_config_dicts[k].append(v)
         new_grasp_configs = AllegroGraspConfig.from_grasp_config_dict(
-            {
-                np.concatenate(v, axis=0)
-                for k, v in new_grasp_config_dicts.items()
-            }
+            {np.concatenate(v, axis=0) for k, v in new_grasp_config_dicts.items()}
         )
         assert new_grasp_configs.batch_size == init_grasp_configs.batch_size * N_SAMPLES
 
@@ -322,13 +309,13 @@ class CommandlineArgs:
     overwrite: bool = False
 
     optimize: bool = False
-    classifier_config_path: pathlib.Path = pathlib.Path(
+    nerf_evaluator_config_path: pathlib.Path = pathlib.Path(
         "/juno/u/tylerlum/github_repos/nerf_grasping/Train_DexGraspNet_NeRF_Grasp_Metric_workspaces/2024-06-02_FINAL_LABELED_GRASPS_NOISE_AND_NONOISE_cnn-3d-xyz-global-cnn-cropped_CONTINUE/config.yaml"
     )
     init_grasp_config_dict_path: pathlib.Path = pathlib.Path(
         "/juno/u/tylerlum/github_repos/DexGraspNet/data/2024-06-03_FINAL_INFERENCE_GRASPS/good_nonoise_one_per_object/grasps.npy"
     )
-    optimizer_type: Literal["sgd", "cem", "random-sampling"] = "random-sampling"
+    optimizer_type: Literal["sgd", "random-sampling"] = "random-sampling"
     num_steps: int = 50
     n_random_rotations_per_grasp: int = 0
     eval_batch_size: int = 32
@@ -447,9 +434,9 @@ def run_ablation_sim_eval(args: CommandlineArgs) -> None:
         cfg=OptimizationConfig(
             use_rich=False,  # Not used because causes issues with logging
             init_grasp_config_dict_path=args.init_grasp_config_dict_path,
-            grasp_metric=GraspMetricConfig(
+            nerf_evaluator_wrapper=NerfEvaluatorWrapperConfig(
                 nerf_config=nerf_config,
-                classifier_config_path=args.classifier_config_path,
+                nerf_evaluator_config_path=args.nerf_evaluator_config_path,
                 X_N_Oy=X_N_Oy,
             ),  # This is not used
             optimizer=RandomSamplingConfig(

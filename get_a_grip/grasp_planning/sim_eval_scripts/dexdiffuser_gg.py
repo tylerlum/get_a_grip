@@ -23,10 +23,10 @@ class CommandlineArgs:
     max_num_iterations: int = 400
     overwrite: bool = False
 
-    classifier_config_path: pathlib.Path = pathlib.Path(
+    nerf_evaluator_config_path: pathlib.Path = pathlib.Path(
         "/juno/u/tylerlum/github_repos/nerf_grasping/Train_DexGraspNet_NeRF_Grasp_Metric_workspaces/2024-06-02_FINAL_LABELED_GRASPS_NOISE_AND_NONOISE_cnn-3d-xyz-global-cnn-cropped_CONTINUE/config.yaml"
     )
-    optimizer_type: Literal["sgd", "cem", "random-sampling"] = "random-sampling"
+    optimizer_type: Literal["sgd", "random-sampling"] = "random-sampling"
     num_steps: int = 50
     n_random_rotations_per_grasp: int = 0
     eval_batch_size: int = 32
@@ -61,7 +61,7 @@ def main() -> None:
                     max_num_iterations=args.max_num_iterations,
                     overwrite=args.overwrite,
                     optimize=True,
-                    classifier_config_path=args.classifier_config_path,
+                    nerf_evaluator_config_path=args.nerf_evaluator_config_path,
                     optimizer_type=args.optimizer_type,
                     num_steps=args.num_steps,
                     n_random_rotations_per_grasp=args.n_random_rotations_per_grasp,
@@ -82,7 +82,7 @@ def main() -> None:
                     max_num_iterations=args.max_num_iterations,
                     overwrite=args.overwrite,
                     optimize=True,
-                    classifier_config_path=args.classifier_config_path,
+                    nerf_evaluator_config_path=args.nerf_evaluator_config_path,
                     optimizer_type=args.optimizer_type,
                     num_steps=args.num_steps,
                     n_random_rotations_per_grasp=args.n_random_rotations_per_grasp,

@@ -26,7 +26,7 @@ from curobo.wrap.reacher.motion_gen import (
 from get_a_grip.dataset_generation.utils.torch_quat_utils import (
     matrix_to_quat_wxyz,
 )
-from get_a_grip.grasp_planning.utils.optimizer_utils import (
+from get_a_grip.grasp_planning.utils.joint_limit_utils import (
     is_in_limits,
 )
 from get_a_grip.motion_planning.joint_limit_utils import (

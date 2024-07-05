@@ -58,7 +58,6 @@ DEFAULT_Q_ALGR = np.array(
         -6.50969000e-03,
     ]
 )
-DEFAULT_Q = np.concatenate([DEFAULT_Q_FR3, DEFAULT_Q_ALGR])
 
 c = pb.connect(pb.GUI)
 robot = pb.loadURDF(

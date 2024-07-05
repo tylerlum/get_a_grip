@@ -243,7 +243,7 @@ class Diffusion(object):
         alphas = 1.0 - betas
         alphas_cumprod = alphas.cumprod(dim=0)
         alphas_cumprod_prev = torch.cat(
-            [torch.ones(1).to(device), alphas_cumprod[:-1]], dim=0
+            [torch.ones(1, device=device), alphas_cumprod[:-1]], dim=0
         )
         posterior_variance = (
             betas * (1.0 - alphas_cumprod_prev) / (1.0 - alphas_cumprod)
@@ -259,7 +259,9 @@ class Diffusion(object):
         else:
             self.model = model
 
-    def load_checkpoint(self, config: DiffusionConfig, name: Optional[str] = None) -> None:
+    def load_checkpoint(
+        self, config: DiffusionConfig, name: Optional[str] = None
+    ) -> None:
         if name is None:
             stem = "ckpt"
         else:

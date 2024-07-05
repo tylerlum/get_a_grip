@@ -1,53 +1,16 @@
 from __future__ import annotations
 
-import math
-import pathlib
-import time
-from collections import defaultdict
-from dataclasses import dataclass
-from typing import Literal, Optional, Tuple
-
 import numpy as np
-import plotly.graph_objects as go
 import pypose as pp
 import torch
-import trimesh
-import tyro
-import wandb
-from nerfstudio.pipelines.base_pipeline import Pipeline
-from tqdm import tqdm
-from get_a_grip.grasp_planning.nerf_conversions.nerf_to_bps import nerf_to_bps
 
-from get_a_grip import get_package_folder
-from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.joint_angle_targets import (
-    compute_fingertip_dirs,
-    compute_optimized_joint_angle_targets_given_grasp_orientations,
+    compute_grasp_orientations_from_z_dirs,
 )
-from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_to_pose
-from get_a_grip.grasp_planning.config.grasp_metric_config import GraspMetricConfig
-from get_a_grip.grasp_planning.config.optimization_config import OptimizationConfig
-from get_a_grip.grasp_planning.config.optimizer_config import (
-    RandomSamplingConfig,
-)
-from get_a_grip.grasp_planning.scripts.optimizer import (
-    sample_random_rotate_transforms_only_around_y,
-)
-from get_a_grip.grasp_planning.utils import (
-    ablation_utils,
-    train_nerf_return_trainer,
-)
-from get_a_grip.grasp_planning.utils.ablation_optimizer import RandomSamplingOptimizer
-from get_a_grip.grasp_planning.utils.nerfstudio_point_cloud import ExportPointCloud
-from get_a_grip.grasp_planning.utils.optimizer_utils import (
+from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
     AllegroGraspConfig,
     AllegroHandConfig,
     hand_config_to_hand_model,
-)
-from get_a_grip.model_training.models.dex_evaluator import DexEvaluator
-from get_a_grip.model_training.utils.nerf_load_utils import load_nerf_pipeline
-from get_a_grip.model_training.utils.nerf_utils import (
-    compute_centroid_from_nerf,
 )
 
 
@@ -135,42 +98,11 @@ def compute_grasp_orientations(
         hand_config=hand_config,
     )
 
-    # Math to get x_dirs, y_dirs
-    (center_to_right_dirs, center_to_tip_dirs) = compute_fingertip_dirs(
-        joint_angles=joint_angles,
+    grasp_orientations = compute_grasp_orientations_from_z_dirs(
+        joint_angles_start=joint_angles,
         hand_model=hand_model,
+        z_dirs=z_dirs,
     )
-    option_1_ok = (
-        torch.cross(center_to_tip_dirs, z_dirs).norm(dim=-1, keepdim=True) > 1e-4
-    )
-
-    y_dirs = torch.where(
-        option_1_ok,
-        center_to_tip_dirs
-        - (center_to_tip_dirs * z_dirs).sum(dim=-1, keepdim=True) * z_dirs,
-        center_to_right_dirs
-        - (center_to_right_dirs * z_dirs).sum(dim=-1, keepdim=True) * z_dirs,
-    )
-
-    assert (y_dirs.norm(dim=-1).min() > 0).all()
-    y_dirs = y_dirs / y_dirs.norm(dim=-1, keepdim=True)
-
-    x_dirs = torch.cross(y_dirs, z_dirs)
-    assert (x_dirs.norm(dim=-1).min() > 0).all()
-    x_dirs = x_dirs / x_dirs.norm(dim=-1, keepdim=True)
-    grasp_orientations = torch.stack([x_dirs, y_dirs, z_dirs], dim=-1)
-    # Make sure y and z are orthogonal
-    assert (torch.einsum("...l,...l->...", y_dirs, z_dirs).abs().max() < 1e-3).all(), (
-        f"y_dirs = {y_dirs}",
-        f"z_dirs = {z_dirs}",
-        f"torch.einsum('...l,...l->...', y_dirs, z_dirs).abs().max() = {torch.einsum('...l,...l->...', y_dirs, z_dirs).abs().max()}",
-    )
-    assert grasp_orientations.shape == (
-        B,
-        N_FINGERS,
-        3,
-        3,
-    ), f"Expected shape ({B}, {N_FINGERS}, 3, 3), got {grasp_orientations.shape}"
     grasp_orientations = pp.from_matrix(
         grasp_orientations,
         pp.SO3_type,
@@ -206,22 +138,12 @@ def grasp_to_grasp_config(grasp: torch.Tensor) -> AllegroGraspConfig:
     wrist_pose_matrix[:, :3, :3] = torch.from_numpy(rot).float().to(device)
     wrist_pose_matrix[:, :3, 3] = torch.from_numpy(trans).float().to(device)
 
-    try:
-        wrist_pose = pp.from_matrix(
-            wrist_pose_matrix,
-            pp.SE3_type,
-        ).to(device)
-    except ValueError as e:
-        print("Error in pp.from_matrix")
-        print(e)
-        print("rot = ", rot)
-        print("Orthogonalization did not work, running with looser tolerances")
-        wrist_pose = pp.from_matrix(
-            wrist_pose_matrix,
-            pp.SE3_type,
-            atol=1e-3,
-            rtol=1e-3,
-        ).to(device)
+    wrist_pose = pp.from_matrix(
+        wrist_pose_matrix.to(device),
+        pp.SE3_type,
+        atol=1e-3,
+        rtol=1e-3,
+    )
 
     assert wrist_pose.lshape == (B,)
 

@@ -1617,22 +1617,6 @@ class IsaacValidator:
         print(log_text)
         return False, log_text
 
-    def save_images(
-        self, folder: str, overwrite: bool = False, num_cameras: int = 250
-    ) -> None:
-        assert len(self.envs) == 1
-        self._setup_cameras(self.envs[0], num_cameras=num_cameras)
-
-        gym.step_graphics(self.sim)
-        gym.render_all_camera_sensors(self.sim)
-        path = self._setup_save_dir(folder, overwrite)
-
-        for ii, camera_handle in enumerate(self.camera_handles):
-            self._save_single_image(path, ii, camera_handle)
-
-        # Avoid segfault if run multiple times by destroying camera sensors
-        self._destroy_cameras(self.envs[0])
-
     def save_images_lightweight(
         self,
         folder: str,
@@ -1698,48 +1682,6 @@ class IsaacValidator:
         path.mkdir()
         return path
 
-    def _save_single_image(
-        self, path, ii, camera_handle, numpy_depth=False, debug=False
-    ):
-        if debug:
-            print(f"saving camera {ii}")
-        env_idx = 0
-        env = self.envs[env_idx]
-
-        color_image: np.ndarray = gym.get_camera_image(
-            self.sim, env, camera_handle, gymapi.IMAGE_COLOR
-        )
-        color_image = color_image.reshape(CAMERA_IMG_HEIGHT, CAMERA_IMG_WIDTH, -1)
-        Image.fromarray(color_image).save(path / f"col_{ii}.png")
-
-        segmentation_image: np.ndarray = gym.get_camera_image(
-            self.sim, env, camera_handle, gymapi.IMAGE_SEGMENTATION
-        )
-        segmentation_image = segmentation_image == OBJ_SEGMENTATION_ID
-        segmentation_image = (
-            segmentation_image.reshape(CAMERA_IMG_HEIGHT, CAMERA_IMG_WIDTH) * 255
-        ).astype(np.uint8)
-        Image.fromarray(segmentation_image).convert("L").save(path / f"seg_{ii}.png")
-
-        # get_camera_image has -inf values, which can't be cast to int, should fix this for depth supervision
-        # Clamp values to 0-2m
-        depth_image: np.ndarray = gym.get_camera_image(
-            self.sim, env, camera_handle, gymapi.IMAGE_DEPTH
-        )
-        depth_image = np.clip(depth_image, 0, 2)
-        depth_image = -1000 * depth_image.reshape(CAMERA_IMG_HEIGHT, CAMERA_IMG_WIDTH)
-        if numpy_depth:
-            np.save(path / f"dep_{ii}.npy", depth_image)
-        else:
-            depth_image = (depth_image).astype(np.uint8)
-            Image.fromarray(depth_image).convert("L").save(path / f"dep_{ii}.png")
-
-        pos, quat = get_fixed_camera_transform(gym, self.sim, env, camera_handle)
-
-        with open(path / f"pos_xyz_quat_xyzw_{ii}.txt", "w+") as f:
-            data = [*pos.tolist(), *quat.q[1:].tolist(), quat.q[0].tolist()]
-            json.dump(data, f)
-
     def _save_single_image_lightweight(
         self,
         path,
@@ -1778,9 +1720,12 @@ class IsaacValidator:
 
         # DEPTH IMAGE
         if generate_depth:
+            # get_camera_image has -inf values, which can't be cast to int, should fix this for depth supervision
+            # Clamp values to 0-2m
             depth_image: np.ndarray = gym.get_camera_image(
                 self.sim, env, camera_handle, gymapi.IMAGE_DEPTH
             )
+            depth_image = np.clip(depth_image, 0, 2)
             depth_image = -1000 * depth_image.reshape(
                 CAMERA_IMG_HEIGHT, CAMERA_IMG_WIDTH
             )

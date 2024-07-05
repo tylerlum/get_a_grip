@@ -18,8 +18,8 @@ def main() -> None:
     ffh_evaluator = FFHEvaluator(n_pts=4096, grasp_dim=3 + 6 + 16).to(device)
 
     batch_size = 2
-    f_O = torch.rand(batch_size, 4096).to(device)
-    g_0 = torch.rand(batch_size, 3 + 6 + 16).to(device)
+    f_O = torch.rand(batch_size, 4096, device=device)
+    g_0 = torch.rand(batch_size, 3 + 6 + 16, device=device)
 
     output = ffh_evaluator(f_O=f_O, g_0=g_0)
 

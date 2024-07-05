@@ -11,7 +11,9 @@ import torch
 import trimesh
 from nerfstudio.cameras.rays import RayBundle, RaySamples
 
-from get_a_grip.model_training.config.fingertip_config import BaseFingertipConfig
+from get_a_grip.model_training.config.fingertip_config import (
+    EvenlySpacedFingertipConfig,
+)
 
 
 def get_ray_origins_finger_frame_helper(
@@ -50,7 +52,9 @@ def get_ray_origins_finger_frame_helper(
     return ray_origins
 
 
-def get_ray_origins_finger_frame(fingertip_config: BaseFingertipConfig) -> torch.Tensor:
+def get_ray_origins_finger_frame(
+    fingertip_config: EvenlySpacedFingertipConfig,
+) -> torch.Tensor:
     ray_origins_finger_frame = get_ray_origins_finger_frame_helper(
         num_pts_x=fingertip_config.num_pts_x,
         num_pts_y=fingertip_config.num_pts_y,
@@ -115,7 +119,7 @@ def get_ray_bundles(
 def get_ray_samples(
     ray_origins_finger_frame: torch.Tensor,
     transform: pp.LieTensor,
-    fingertip_config: BaseFingertipConfig,
+    fingertip_config: EvenlySpacedFingertipConfig,
 ) -> RaySamples:
     return get_ray_samples_helper(
         ray_origins_finger_frame=ray_origins_finger_frame,

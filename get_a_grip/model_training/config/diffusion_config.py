@@ -59,4 +59,3 @@ class DiffusionConfig:
     optim: OptimConfig = field(default_factory=OptimConfig)
     wandb_log: bool = True
     multigpu: bool = True
-    use_nerf_sampler: bool = True  # DexSampler or NeRFSampler

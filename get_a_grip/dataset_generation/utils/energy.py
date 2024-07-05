@@ -195,12 +195,3 @@ def cal_energy(
     weighted_energy_matrix = unweighted_energy_matrix * energy_weights[None, ...]
     energy = weighted_energy_matrix.sum(dim=-1)
     return energy, unweighted_energy_matrix, weighted_energy_matrix
-
-
-def batch_cov(points):
-    B, N, D = points.shape
-    mean = points.mean(dim=1).unsqueeze(1)
-    diffs = (points - mean).reshape(B * N, D)
-    prods = torch.bmm(diffs.unsqueeze(2), diffs.unsqueeze(1)).reshape(B, N, D, D)
-    bcov = prods.sum(dim=1) / (N - 1)  # Unbiased estimate
-    return bcov  # (B, D, D)

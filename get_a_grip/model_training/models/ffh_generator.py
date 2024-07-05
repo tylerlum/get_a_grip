@@ -153,8 +153,8 @@ def main() -> None:
     ).to(device)
 
     batch_size = 2
-    f_O = torch.rand(batch_size, 4096).to(device)
-    g = torch.rand(batch_size, 3 + 6 + 16).to(device)
+    f_O = torch.rand(batch_size, 4096, device=device)
+    g = torch.rand(batch_size, 3 + 6 + 16, device=device)
 
     mu, sigma, z, g_hat = ffh_generator(f_O=f_O, g=g)
 

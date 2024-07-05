@@ -1,16 +1,8 @@
 from enum import Enum, auto
-from typing import Any, Dict, Tuple
+from typing import Tuple
 
 import torch
 import torch.nn as nn
-
-
-def dataclass_to_kwargs(dataclass_instance: Any) -> Dict[str, Any]:
-    return (
-        {key: value for key, value in dataclass_instance.__dict__["_content"].items()}
-        if dataclass_instance is not None
-        else {}
-    )
 
 
 ### ENUMS ###
@@ -20,7 +12,6 @@ class ConvOutputTo1D(Enum):
     AVG_POOL_CHANNEL = auto()  # (N, C, H, W) -> (N, 1, H, W) -> (N, H*W)
     MAX_POOL_SPATIAL = auto()  # (N, C, H, W) -> (N, C, 1, 1) -> (N, C)
     MAX_POOL_CHANNEL = auto()  # (N, C, H, W) -> (N, 1, H, W) -> (N, H*W)
-    SPATIAL_SOFTMAX = auto()  # (N, C, H, W) -> (N, C, H, W) -> (N, 2*C)
 
 
 class PoolType(Enum):
@@ -184,7 +175,7 @@ def main() -> None:
 
     # Create MLP model
     mlp_model = mlp(input_dim_mlp, output_dim_mlp, hidden_layers_mlp).to(device)
-    mlp_input = torch.randn(batch_size, input_dim_mlp).to(device)
+    mlp_input = torch.randn(batch_size, input_dim_mlp, device=device)
     mlp_output = mlp_model(mlp_input)
 
     # Check and print MLP shapes
@@ -198,7 +189,7 @@ def main() -> None:
     conv_model = conv_encoder(
         input_shape_conv, conv_channels, conv_output_to_1d=ConvOutputTo1D.FLATTEN
     ).to(device)
-    conv_input = torch.randn(batch_size, *input_shape_conv).to(device)
+    conv_input = torch.randn(batch_size, *input_shape_conv, device=device)
     conv_output = conv_model(conv_input)
 
     # Check and print Conv Encoder shapes
