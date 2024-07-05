@@ -13,16 +13,13 @@ from get_a_grip.model_training.models.components.layers import (
 
 
 class NerfSampler(nn.Module):
-    """ """
-
     def __init__(
         self,
         global_grid_shape: Tuple[int, int, int, int],
         grasp_dim: int,
-        d_model: int,
-        virtual_seq_len: int,
-        conv_channels: Tuple[int, ...],
-        HACK_MODE_FOR_PERFORMANCE: bool = False,
+        d_model: int = 128,
+        virtual_seq_len: int = 4,
+        conv_channels: Tuple[int, ...] = (32, 64, 128),
     ) -> None:
         super().__init__()
         self.global_grid_shape = global_grid_shape
@@ -32,7 +29,6 @@ class NerfSampler(nn.Module):
         self.grasp_dim = grasp_dim
         self.d_model = d_model
         self.virtual_seq_len = virtual_seq_len
-        self.HACK_MODE_FOR_PERFORMANCE = HACK_MODE_FOR_PERFORMANCE
         S = virtual_seq_len
 
         # Grasp self attention
@@ -68,6 +64,9 @@ class NerfSampler(nn.Module):
 
         self.fc_out = nn.Linear(d_model * S, grasp_dim)
 
+        # HACK: For performance, we can store the conv output and reuse it if we can assume that the conv input is the same
+        self._HACK_MODE_FOR_PERFORMANCE: bool = False
+
     def forward(
         self, f_O: torch.Tensor, g_t: torch.Tensor, t: torch.Tensor
     ) -> torch.Tensor:
@@ -100,21 +99,21 @@ class NerfSampler(nn.Module):
         ), f"Expected shape ({S}, {B}, {self.d_model}), got {ca_query.shape}"
 
         # Grasp-BPS cross attention
-        if self.HACK_MODE_FOR_PERFORMANCE:
-            if not hasattr(self, "HACK_STORED_f_O"):
+        if self._HACK_MODE_FOR_PERFORMANCE:
+            if not hasattr(self, "_HACK_STORED_f_O"):
                 f_O = self.conv(f_O)
-                self.HACK_STORED_f_O = f_O
+                self._HACK_STORED_f_O = f_O
             else:
-                f_O = self.HACK_STORED_f_O
+                f_O = self._HACK_STORED_f_O
                 assert f_O.shape[0] <= B, f"Expected batch size <= {B}, got {f_O}"
                 f_O = f_O[:B]
 
             # Print only a max of 10 times
-            if not hasattr(self, "HACK_PRINT_COUNT"):
-                self.HACK_PRINT_COUNT = 0
-            if self.HACK_PRINT_COUNT < 10:
-                print("HACK_MODE_FOR_PERFORMANCE")
-                self.HACK_PRINT_COUNT += 1
+            if not hasattr(self, "_HACK_PRINT_COUNT"):
+                self._HACK_PRINT_COUNT = 0
+            if self._HACK_PRINT_COUNT < 10:
+                print("_HACK_MODE_FOR_PERFORMANCE")
+                self._HACK_PRINT_COUNT += 1
         else:
             f_O = self.conv(f_O)
 

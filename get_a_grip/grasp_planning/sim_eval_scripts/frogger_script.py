@@ -10,7 +10,7 @@ from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
 from get_a_grip.grasp_planning.nerf_conversions.nerf_to_urdf_all import (
-    Args as nerf_to_urdf_all_Args,
+    NerfToUrdfAllArgs as nerf_to_urdf_all_Args,
 )
 from get_a_grip.grasp_planning.nerf_conversions.nerf_to_urdf_all import (
     nerf_to_urdf_all,

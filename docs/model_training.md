@@ -9,7 +9,7 @@ data
     ├── meshes
     ├── nerfdata
     ├── nerfs
-    └── pointclouds
+    └── point_clouds
 ```
 
 ## Train Val Test Split Across Objects
@@ -23,27 +23,27 @@ python get_a_grip/model_training/scripts/create_train_val_test_split.py \
 --frac_val 0.1
 ```
 
-## HDF5 File Generation
+## BPS HDF5 File Generation
 
 Create BPS dataset:
 
 ```
 python get_a_grip/model_training/scripts/create_bps_grasp_dataset.py \
---input_pointclouds_path data/NEW_DATASET/pointclouds \
+--input_point_clouds_path data/NEW_DATASET/point_clouds \
 --input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts_train \
 --output_filepath data/NEW_DATASET/bps_grasp_dataset/train_dataset.h5
 ```
 
 ```
 python get_a_grip/model_training/scripts/create_bps_grasp_dataset.py \
---input_pointclouds_path data/NEW_DATASET/pointclouds \
+--input_point_clouds_path data/NEW_DATASET/point_clouds \
 --input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts_val \
 --output_filepath data/NEW_DATASET/bps_grasp_dataset/val_dataset.h5
 ```
 
 ```
 python get_a_grip/model_training/scripts/create_bps_grasp_dataset.py \
---input_pointclouds_path data/NEW_DATASET/pointclouds \
+--input_point_clouds_path data/NEW_DATASET/point_clouds \
 --input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts_test \
 --output_filepath data/NEW_DATASET/bps_grasp_dataset/test_dataset.h5
 ```
@@ -51,6 +51,8 @@ python get_a_grip/model_training/scripts/create_bps_grasp_dataset.py \
 <p align="center">
   <img src="https://github.com/tylerlum/get_a_grip_release/assets/26510814/6da75267-280c-4e3a-921b-79b765842ab9" alt="dataset_gen" style="width:50%;">
 </p>
+
+## NeRF HDF5 File Generation
 
 Create NeRF dataset:
 
@@ -92,9 +94,9 @@ python get_a_grip/model_training/scripts/train_bps_grasp_evaluator.py \
 ```
 python get_a_grip/model_training/scripts/train_nerf_grasp_evaluator.py \
 cnn-3d-xyz-global-cnn \
---train-dataset-filepath data/NEW_DATASET/nerf_grasp_dataset/train_dataset.h5 \
---val-dataset-filepath data/NEW_DATASET/nerf_grasp_dataset/val_dataset.h5 \
---test-dataset-filepath data/NEW_DATASET/nerf_grasp_dataset/test_dataset.h5 \
+--train-dataset-path data/NEW_DATASET/nerf_grasp_dataset/train_dataset.h5 \
+--val-dataset-path data/NEW_DATASET/nerf_grasp_dataset/val_dataset.h5 \
+--test-dataset-path data/NEW_DATASET/nerf_grasp_dataset/test_dataset.h5 \
 --task-type Y_PICK_AND_Y_COLL_AND_Y_PGS \
 --dataloader.batch-size 128 \
 --name MY_NERF_EXPERIMENT_NAME \

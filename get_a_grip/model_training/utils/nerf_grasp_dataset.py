@@ -2,11 +2,12 @@ import pathlib
 from typing import Tuple
 
 import h5py
-import numpy as np
-import pypose as pp
 import torch
 from torch.utils import data
 
+from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
+    AllegroGraspConfig,
+)
 from get_a_grip.model_training.config.nerf_densities_global_config import (
     NERF_DENSITIES_GLOBAL_NUM_X,
     NERF_DENSITIES_GLOBAL_NUM_Y,
@@ -17,75 +18,6 @@ from get_a_grip.model_training.config.nerf_densities_global_config import (
 from get_a_grip.model_training.utils.point_utils import (
     get_points_in_grid,
 )
-
-
-def grasp_config_to_grasp(grasp_config: torch.Tensor) -> torch.Tensor:
-    B = grasp_config.shape[0]
-    N_FINGERS = 4
-    assert grasp_config.shape == (
-        B,
-        N_FINGERS,
-        27,
-    ), f"Expected shape (B, 4, 27), got {grasp_config.shape}"
-
-    # Extract data from grasp_config
-    xyz = grasp_config[:, 0, :3]
-    quat_xyzw = grasp_config[:, 0, 3:7]
-    joint_angles = grasp_config[:, 0, 7:23]
-    grasp_quat_orientations = grasp_config[:, :, 23:]
-    assert xyz.shape == (
-        B,
-        3,
-    ), f"Expected shape (3), got {xyz.shape}"
-    assert quat_xyzw.shape == (
-        B,
-        4,
-    ), f"Expected shape (4), got {quat_xyzw.shape}"
-    assert joint_angles.shape == (
-        B,
-        16,
-    ), f"Expected shape (16), got {joint_angles.shape}"
-    assert grasp_quat_orientations.shape == (
-        B,
-        N_FINGERS,
-        4,
-    ), f"Expected shape (B, 4, 4), got {grasp_quat_orientations.shape}"
-
-    # Convert rot to matrix
-    rot = pp.SO3(quat_xyzw).matrix()
-    assert rot.shape == (B, 3, 3), f"Expected shape (3, 3), got {rot.shape}"
-
-    # Convert grasp_quat_orientations to matrix
-    grasp_orientations = pp.SO3(grasp_quat_orientations).matrix()
-    assert grasp_orientations.shape == (
-        B,
-        N_FINGERS,
-        3,
-        3,
-    ), f"Expected shape (B, 4, 3, 3), got {grasp_orientations.shape}"
-
-    # Get grasp_dirs from grasp_orientations
-    grasp_dirs = grasp_orientations[..., 2]
-    assert grasp_dirs.shape == (
-        B,
-        N_FINGERS,
-        3,
-    ), f"Expected shape (B, 4, 3), got {grasp_dirs.shape}"
-
-    grasps = torch.cat(
-        [
-            xyz,
-            rot[..., :2].reshape(B, 6),
-            joint_angles,
-            grasp_dirs.reshape(B, 4 * 3),
-        ],
-        dim=1,
-    )
-    assert grasps.shape == (
-        B,
-        3 + 6 + 16 + 4 * 3,
-    ), f"Expected shape (B, 3 + 6 + 16 + 4 * 3), got {grasps.shape}"
-    return grasps
 
 
 def get_coords_global(
@@ -174,8 +106,12 @@ class NerfGraspDataset(data.Dataset):
         with h5py.File(self.input_hdf5_filepath, "r") as hdf5_file:
             # Essentials
             self.num_grasps = hdf5_file.attrs["num_data_points"]
-            grasp_configs = torch.from_numpy(hdf5_file["/grasp_configs"][()]).float()
-            self.grasps = grasp_config_to_grasp(grasp_configs).float()
+            grasp_configs_tensor = torch.from_numpy(
+                hdf5_file["/grasp_configs"][()]
+            ).float()
+            self.grasps = AllegroGraspConfig.from_tensor(
+                grasp_configs_tensor
+            ).as_grasp()
             if self.grasps.shape[0] != self.num_grasps:
                 print(
                     f"WARNING: Expected {self.num_grasps} grasps, got {self.grasps.shape[0]}! Truncating data..."
@@ -327,177 +263,3 @@ class NerfGraspSampleDataset(NerfGraspDataset):
     def get_object_state(self, successful_grasp_idx: int) -> torch.Tensor:
         grasp_idx = self.successful_grasp_idxs[successful_grasp_idx]
         return self.object_states[grasp_idx]
-
-
-def main() -> None:
-    # TODO: Rewrite this
-    import pathlib
-
-    import plotly.graph_objects as go
-    import transforms3d
-    import trimesh
-
-    from get_a_grip import get_data_folder
-    from get_a_grip.dataset_generation.utils.hand_model import HandModel
-    from get_a_grip.dataset_generation.utils.joint_angle_targets import (
-        compute_optimized_joint_angle_targets_given_grasp_orientations,
-    )
-    from get_a_grip.dataset_generation.utils.pose_conversion import (
-        hand_config_to_pose,
-    )
-
-    INPUT_HDF5_FILEPATH = (
-        "/home/albert/research/nerf_grasping/bps_data/grasp_bps_dataset_final_test.hdf5"
-    )
-    GRASP_IDX = 2000  # [DEBUG] change this guy for different viz
-    MESHDATA_ROOT = get_data_folder() / "large/meshes"
-    USE_EVAL_DATASET = True
-
-    print("\n" + "=" * 79)
-    print(f"Reading dataset from {INPUT_HDF5_FILEPATH}")
-    if USE_EVAL_DATASET:
-        dataset = NerfGraspEvalDataset(input_hdf5_filepath=INPUT_HDF5_FILEPATH)
-    else:
-        dataset = NerfGraspSampleDataset(input_hdf5_filepath=INPUT_HDF5_FILEPATH)
-    print("=" * 79)
-    print(f"len(dataset): {len(dataset)}")
-
-    print("\n" + "=" * 79)
-    print(f"Getting grasp and bps for grasp_idx {GRASP_IDX}")
-    print("=" * 79)
-    grasp, nerf_global_grid_with_coords, y_PGS = dataset[GRASP_IDX]
-    print(f"grasp.shape: {grasp.shape}")
-    print(f"nerf_global_grid_with_coords.shape: {nerf_global_grid_with_coords.shape}")
-    print(f"y_PGS.shape: {y_PGS.shape}")
-
-    assert nerf_global_grid_with_coords.shape == (
-        3 + 1,
-        NERF_DENSITIES_GLOBAL_NUM_X,
-        NERF_DENSITIES_GLOBAL_NUM_Y,
-        NERF_DENSITIES_GLOBAL_NUM_Z,
-    )
-    nerf_densities_flattened = nerf_global_grid_with_coords[3, ...].reshape(-1)
-    coords = nerf_global_grid_with_coords[:3, ...].reshape(3, -1).T
-
-    print("\n" + "=" * 79)
-    print("Getting debugging extras")
-    print("=" * 79)
-    object_code = dataset.get_object_code(GRASP_IDX)
-    object_scale = dataset.get_object_scale(GRASP_IDX)
-    object_state = dataset.get_object_state(GRASP_IDX)
-
-    # Mesh
-    mesh_path = pathlib.Path(f"{MESHDATA_ROOT}/{object_code}/coacd/decomposed.obj")
-    assert mesh_path.exists(), f"{mesh_path} does not exist"
-    print(f"Reading mesh from {mesh_path}")
-    mesh = trimesh.load(mesh_path)
-
-    xyz, quat_xyzw = object_state[:3], object_state[3:7]
-    quat_wxyz = quat_xyzw[[3, 0, 1, 2]]
-    transform = np.eye(4)  # X_W_Oy
-    transform[:3, :3] = transforms3d.quaternions.quat2mat(quat_wxyz)
-    transform[:3, 3] = xyz
-    mesh.apply_scale(object_scale)
-    mesh.apply_transform(transform)
-
-    # Grasp
-    assert grasp.shape == (
-        3 + 6 + 16 + 4 * 3,
-    ), f"Expected shape (3 + 6 + 16 + 4 * 3), got {grasp.shape}"
-    grasp = grasp.detach().cpu().numpy()
-    grasp_trans, grasp_rot6d, grasp_joints, grasp_dirs = (
-        grasp[:3],
-        grasp[3:9],
-        grasp[9:25],
-        grasp[25:].reshape(4, 3),
-    )
-    grasp_rot = np.zeros((3, 3))
-    grasp_rot[:3, :2] = grasp_rot6d.reshape(3, 2)
-    assert (
-        np.dot(grasp_rot[:3, 0], grasp_rot[:3, 1]) < 1e-3
-    ), f"Expected dot product < 1e-3, got {np.dot(grasp_rot[:3, 0], grasp_rot[:3, 1])}"
-    grasp_rot[:3, 2] = np.cross(grasp_rot[:3, 0], grasp_rot[:3, 1])
-    grasp_transform = np.eye(4)  # X_Oy_H
-    grasp_transform[:3, :3] = grasp_rot
-    grasp_transform[:3, 3] = grasp_trans
-    grasp_transform = transform @ grasp_transform  # X_W_H = X_W_Oy @ X_Oy_H
-    grasp_trans = grasp_transform[:3, 3]
-    grasp_rot = grasp_transform[:3, :3]
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    hand_pose = hand_config_to_pose(
-        grasp_trans[None], grasp_rot[None], grasp_joints[None]
-    ).to(device)
-    grasp_orientations = np.zeros(
-        (4, 3, 3)
-    )  # NOTE: should have applied transform with this, but didn't because we only have z-dir, hopefully transforms[:3, :3] ~= np.eye(3)
-    grasp_orientations[:, :, 2] = (
-        grasp_dirs  # Leave the x-axis and y-axis as zeros, hacky but works
-    )
-    hand_model = HandModel(device=device)
-    hand_model.set_parameters(hand_pose)
-    assert hand_model.hand_pose is not None
-
-    hand_plotly = hand_model.get_plotly_data(i=0, opacity=0.8)
-
-    (
-        optimized_joint_angle_targets,
-        _,
-    ) = compute_optimized_joint_angle_targets_given_grasp_orientations(
-        joint_angles_start=hand_model.hand_pose[:, 9:],
-        hand_model=hand_model,
-        grasp_orientations=torch.from_numpy(grasp_orientations[None]).to(device),
-    )
-    new_hand_pose = hand_config_to_pose(
-        grasp_trans[None],
-        grasp_rot[None],
-        optimized_joint_angle_targets.detach().cpu().numpy(),
-    ).to(device)
-    hand_model.set_parameters(new_hand_pose)
-    assert hand_model.hand_pose is not None
-    hand_plotly_optimized = hand_model.get_plotly_data(
-        i=0, opacity=0.3, color="lightgreen"
-    )
-
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter3d(
-            x=coords[:, 0],
-            y=coords[:, 1],
-            z=coords[:, 2],
-            mode="markers",
-            marker=dict(
-                size=1,
-                color=nerf_densities_flattened,
-                colorscale="rainbow",
-                colorbar=dict(title="NeRF densities", orientation="h"),
-            ),
-            name="Basis points",
-        )
-    )
-    fig.add_trace(
-        go.Mesh3d(
-            x=mesh.vertices[:, 0],
-            y=mesh.vertices[:, 1],
-            z=mesh.vertices[:, 2],
-            i=mesh.faces[:, 0],
-            j=mesh.faces[:, 1],
-            k=mesh.faces[:, 2],
-            name="Object",
-        )
-    )
-    fig.update_layout(
-        title=dict(
-            text=f"Grasp idx: {GRASP_IDX}, Object: {object_code}, y_PGS: {y_PGS}"
-        ),
-    )
-    for trace in hand_plotly:
-        fig.add_trace(trace)
-    for trace in hand_plotly_optimized:
-        fig.add_trace(trace)
-    fig.write_html("/home/albert/research/nerf_grasping/bps_debug.html")  # headless
-    # fig.show()
-
-
-if __name__ == "__main__":
-    main()

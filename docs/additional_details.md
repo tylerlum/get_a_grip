@@ -37,6 +37,7 @@ Note that in some intermediate computation, we first compute the camera transfor
   <img src="https://github.com/tylerlum/get_a_grip/assets/26510814/b2bf5405-a5b4-4c44-824e-ffe591e6c1d4" alt="intermediate_frames" style="width:27%;">
 </p>
 
+
 ## Robot
 
 This codebase currently only supports the Allegro hand, which has four fingers.

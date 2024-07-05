@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import pathlib
 from typing import Any, Dict, Optional
 
@@ -16,6 +17,7 @@ from get_a_grip.dataset_generation.utils.allegro_hand_info import (
 )
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.joint_angle_targets import (
+    compute_grasp_orientations_from_z_dirs,
     compute_init_joint_angles_given_grasp_orientations,
     compute_optimized_joint_angle_targets_given_grasp_orientations,
 )
@@ -23,7 +25,7 @@ from get_a_grip.dataset_generation.utils.pose_conversion import (
     hand_config_to_pose,
 )
 from get_a_grip.grasp_planning.utils.joint_limit_utils import (
-    get_joint_limits,
+    get_joint_limits_np,
 )
 
 Z_AXIS = torch.tensor([0, 0, 1], dtype=torch.float32)
@@ -49,7 +51,7 @@ class AllegroHandConfig(torch.nn.Module):
 
     def __init__(
         self,
-        batch_size: int = 1,  # TODO(pculbert): refactor for arbitrary batch sizes.
+        batch_size: int = 1,
         chain: Chain = load_allegro(),
         requires_grad: bool = True,
     ) -> None:
@@ -63,9 +65,6 @@ class AllegroHandConfig(torch.nn.Module):
             torch.zeros(batch_size, 16), requires_grad=requires_grad
         )
         self.batch_size = batch_size
-
-    def __len__(self) -> int:
-        return self.batch_size
 
     @classmethod
     def from_values(
@@ -116,6 +115,26 @@ class AllegroHandConfig(torch.nn.Module):
 
         return cls.from_values(wrist_pose=wrist_pose, joint_angles=joint_angles)
 
+    @classmethod
+    def from_tensor(cls, hand_config_tensor: torch.Tensor) -> AllegroHandConfig:
+        """
+        Expects a tensor of shape [batch_size, 23]
+        with all config parameters.
+        """
+        B = hand_config_tensor.shape[0]
+        assert hand_config_tensor.shape == (
+            B,
+            23,
+        ), f"Expected shape ({B}, 23), got {hand_config_tensor.shape}"
+        wrist_pose = pp.SE3(hand_config_tensor[:, :7]).to(
+            device=hand_config_tensor.device
+        )
+        joint_angles = hand_config_tensor[:, 7:]
+        return cls.from_values(
+            wrist_pose=wrist_pose,
+            joint_angles=joint_angles,
+        )
+
     def set_wrist_pose(self, wrist_pose: pp.LieTensor) -> None:
         assert (
             wrist_pose.shape == self.wrist_pose.shape
@@ -129,10 +148,10 @@ class AllegroHandConfig(torch.nn.Module):
         self.joint_angles.data = joint_angles
 
         # Clamp
-        joint_lower_limits, joint_upper_limits = get_joint_limits()
+        joint_lower_limits, joint_upper_limits = get_joint_limits_np()
         self.joint_lower_limits, self.joint_upper_limits = (
-            torch.from_numpy(joint_lower_limits).float().to(self.wrist_pose.device),
-            torch.from_numpy(joint_upper_limits).float().to(self.wrist_pose.device),
+            torch.from_numpy(joint_lower_limits).float().to(self.device),
+            torch.from_numpy(joint_upper_limits).float().to(self.device),
         )
 
         assert self.joint_lower_limits.shape == (16,)
@@ -146,7 +165,7 @@ class AllegroHandConfig(torch.nn.Module):
 
     def get_fingertip_transforms(self) -> pp.LieTensor:
         # Pretty hacky -- need to cast chain to the same device as the wrist pose.
-        self.chain = self.chain.to(device=self.wrist_pose.device)
+        self.chain = self.chain.to(device=self.device)
 
         # Run batched FK from current hand config.
         link_poses_hand_frame = self.chain.forward_kinematics(self.joint_angles)
@@ -182,20 +201,26 @@ class AllegroHandConfig(torch.nn.Module):
         """
         return torch.cat((self.wrist_pose.tensor(), self.joint_angles), dim=-1)
 
-    def mean(self) -> AllegroHandConfig:
+    def as_hand_model(
+        self,
+        n_surface_points: int = 0,
+    ) -> HandModel:
         """
-        Returns the mean of the batch of hand configs.
-        A bit hacky -- just works in the Lie algebra, which
-        is hopefully ok.
+        Convert an AllegroHandConfig to a HandModel.
         """
-        mean_joint_angles = self.joint_angles.mean(dim=0, keepdim=True)
-        mean_wrist_pose = pp.se3(self.wrist_pose.Log().mean(dim=0, keepdim=True)).Exp()
-
-        return AllegroHandConfig.from_values(
-            wrist_pose=mean_wrist_pose,
-            joint_angles=mean_joint_angles,
-            chain=self.chain,
+        device = self.device
+        translation = self.wrist_pose.translation()
+        rotation = self.wrist_pose.rotation().matrix()
+        joint_angles = self.joint_angles
+        hand_model = HandModel(
+            device=device,
+            n_surface_points=n_surface_points,
         )
+        hand_pose = hand_config_to_pose(
+            trans=translation, rot=rotation, joint_angles=joint_angles
+        ).to(device)
+        hand_model.set_parameters(hand_pose)
+        return hand_model
 
     def __repr__(self) -> str:
         wrist_pose_repr = np.array2string(
@@ -216,6 +241,13 @@ class AllegroHandConfig(torch.nn.Module):
             ")",
         ]
         return "\n".join(repr_parts)
+
+    def __len__(self) -> int:
+        return self.batch_size
+
+    @property
+    def device(self) -> torch.device:
+        return self.wrist_pose.device
 
 
 class AllegroGraspConfig(torch.nn.Module):
@@ -246,9 +278,6 @@ class AllegroGraspConfig(torch.nn.Module):
         )
         self.num_fingers = num_fingers
 
-    def __len__(self) -> int:
-        return self.batch_size
-
     @classmethod
     def from_path(cls, path: pathlib.Path) -> AllegroGraspConfig:
         """
@@ -273,7 +302,6 @@ class AllegroGraspConfig(torch.nn.Module):
         for the wrist pose, joint angles, and grasp orientations.
         """
         batch_size = wrist_pose.shape[0]
-        # TODO (pculbert): refactor for arbitrary batch sizes via lshape.
 
         # Check shapes.
         assert joint_angles.shape == (batch_size, 16)
@@ -287,53 +315,6 @@ class AllegroGraspConfig(torch.nn.Module):
         grasp_config.hand_config.set_joint_angles(joint_angles)
         grasp_config.set_grasp_orientations(grasp_orientations)
         return grasp_config
-
-    @classmethod
-    def randn(
-        cls,
-        batch_size: int = 1,
-        std_orientation: float = 0.1,
-        std_wrist_pose: float = 0.1,
-        std_joint_angles: float = 0.1,
-        num_fingers: int = 4,
-    ) -> AllegroGraspConfig:
-        """
-        Factory method to create a random AllegroGraspConfig.
-        """
-        grasp_config = cls(batch_size)
-
-        # TODO(pculbert): think about setting a mean pose that's
-        # reasonable, tune the default stds.
-
-        grasp_orientations = pp.so3(
-            std_orientation
-            * torch.randn(
-                batch_size,
-                num_fingers,
-                3,
-                device=grasp_config.grasp_orientations.device,
-                dtype=grasp_config.grasp_orientations.dtype,
-            )
-        ).Exp()
-
-        wrist_pose = pp.se3(
-            std_wrist_pose
-            * torch.randn(
-                batch_size,
-                6,
-                dtype=grasp_config.grasp_orientations.dtype,
-                device=grasp_config.grasp_orientations.device,
-            )
-        ).Exp()
-
-        joint_angles = std_joint_angles * torch.randn(
-            batch_size,
-            16,
-            dtype=grasp_config.grasp_orientations.dtype,
-            device=grasp_config.grasp_orientations.device,
-        )
-
-        return grasp_config.from_values(wrist_pose, joint_angles, grasp_orientations)
 
     @classmethod
     def from_grasp_config_dict(
@@ -374,6 +355,84 @@ class AllegroGraspConfig(torch.nn.Module):
 
         return grasp_config
 
+    @classmethod
+    def from_tensor(cls, grasp_config_tensor: torch.Tensor) -> AllegroGraspConfig:
+        """
+        Expects a tensor of shape [batch_size, num_fingers, 7 + 16 + 4]
+        with all config parameters.
+        """
+        B = grasp_config_tensor.shape[0]
+        N_FINGERS = 4
+        assert (
+            grasp_config_tensor.shape == (B, N_FINGERS, 7 + 16 + 4)
+        ), f"Expected shape ({B}, {N_FINGERS}, 7 + 16 + 4), got {grasp_config_tensor.shape}"
+
+        hand_config_tensor = grasp_config_tensor[:, 0, :23]
+        hand_config = AllegroHandConfig.from_tensor(hand_config_tensor)
+
+        grasp_orientations = grasp_config_tensor[:, :, 23:]
+        assert grasp_orientations.shape == (
+            B,
+            N_FINGERS,
+            4,
+        ), f"Expected shape ({B}, {N_FINGERS}, 4), got {grasp_orientations.shape}"
+        grasp_orientations = pp.SO3(grasp_orientations).to(grasp_config_tensor.device)
+
+        grasp_configs = AllegroGraspConfig.from_values(
+            wrist_pose=hand_config.wrist_pose,
+            joint_angles=hand_config.joint_angles,
+            grasp_orientations=grasp_orientations,
+        )
+        return grasp_configs
+
+    @classmethod
+    def from_grasp(cls, grasp: torch.Tensor) -> AllegroGraspConfig:
+        device = grasp.device
+
+        N_FINGERS = 4
+        GRASP_DIM = 3 + 6 + 16 + 4 * 3
+        x = grasp
+        B = x.shape[0]
+
+        assert x.shape == (
+            B,
+            GRASP_DIM,
+        ), f"Expected shape ({B}, {GRASP_DIM}), got {x.shape}"
+        trans = x[:, :3]
+        rot6d = x[:, 3:9]
+        joint_angles = x[:, 9:25]
+        grasp_dirs = x[:, 25:37].reshape(B, N_FINGERS, 3)
+        rot = rot6d_to_matrix(rot6d)
+
+        wrist_pose_matrix = (
+            torch.eye(4, device=device).unsqueeze(0).repeat(B, 1, 1).float()
+        )
+        wrist_pose_matrix[:, :3, :3] = rot
+        wrist_pose_matrix[:, :3, 3] = trans
+
+        wrist_pose = pp.from_matrix(
+            wrist_pose_matrix.to(device),
+            pp.SE3_type,
+            atol=1e-3,
+            rtol=1e-3,
+        )
+
+        assert wrist_pose.lshape == (B,)
+
+        grasp_orientations = compute_grasp_orientations(
+            grasp_dirs=grasp_dirs,
+            wrist_pose=wrist_pose,
+            joint_angles=joint_angles,
+        )
+
+        # Convert to AllegroGraspConfig
+        grasp_configs = AllegroGraspConfig.from_values(
+            wrist_pose=wrist_pose,
+            joint_angles=joint_angles,
+            grasp_orientations=grasp_orientations,
+        )
+        return grasp_configs
+
     def as_dict(self) -> Dict[str, Any]:
         grasp_config_dict = self.hand_config.as_dict()
         batch_size = grasp_config_dict["trans"].shape[0]
@@ -401,20 +460,45 @@ class AllegroGraspConfig(torch.nn.Module):
             dim=-1,
         )
 
-    def mean(self) -> AllegroGraspConfig:
-        """
-        Returns the mean of the batch of grasp configs.
-        """
-        mean_hand_config = self.hand_config.mean()
-        mean_grasp_orientations = pp.so3(
-            self.grasp_orientations.Log().mean(dim=0, keepdim=True)
-        ).Exp()
+    def as_grasp(self) -> torch.Tensor:
+        B = self.wrist_pose.lshape[0]
+        N_FINGERS = 4
+        GRASP_DIM = 3 + 6 + 16 + N_FINGERS * 3
 
-        return AllegroGraspConfig.from_values(
-            wrist_pose=mean_hand_config.wrist_pose,
-            joint_angles=mean_hand_config.joint_angles,
-            grasp_orientations=mean_grasp_orientations,
+        trans = self.wrist_pose.translation()
+        rot = self.wrist_pose.rotation().matrix()
+        joint_angles = self.joint_angles
+        grasp_orientations = self.grasp_orientations.matrix()
+
+        # Shape check
+        B = trans.shape[0]
+        assert trans.shape == (B, 3), f"Expected shape ({B}, 3), got {trans.shape}"
+        assert rot.shape == (B, 3, 3), f"Expected shape ({B}, 3, 3), got {rot.shape}"
+        assert joint_angles.shape == (
+            B,
+            16,
+        ), f"Expected shape ({B}, 16), got {joint_angles.shape}"
+        assert grasp_orientations.shape == (
+            B,
+            N_FINGERS,
+            3,
+            3,
+        ), f"Expected shape ({B}, 3, 3), got {grasp_orientations.shape}"
+        grasp_dirs = grasp_orientations[..., 2]
+        grasps = torch.cat(
+            [
+                trans,
+                rot[..., :2].reshape(B, 6),
+                joint_angles,
+                grasp_dirs.reshape(B, -1),
+            ],
+            dim=1,
         )
+        assert grasps.shape == (
+            B,
+            GRASP_DIM,
+        ), f"Expected shape ({B}, {GRASP_DIM}), got {grasps.shape}"
+        return grasps
 
     def set_grasp_orientations(self, grasp_orientations: pp.LieTensor) -> None:
         assert (
@@ -477,33 +561,92 @@ class AllegroGraspConfig(torch.nn.Module):
             device=self.grasp_orientations.device, dtype=self.grasp_orientations.dtype
         ).unsqueeze(0).unsqueeze(0)
 
+    def filter_less_feasible(
+        self, fingers_forward_theta_deg: float, palm_upwards_theta_deg: float
+    ) -> AllegroGraspConfig:
+        wrist_pose_matrix = self.wrist_pose.matrix()
+        x_dirs = wrist_pose_matrix[:, :, 0]
+        z_dirs = wrist_pose_matrix[:, :, 2]
+
+        fingers_forward_cos_theta = math.cos(math.radians(fingers_forward_theta_deg))
+        palm_upwards_cos_theta = math.cos(math.radians(palm_upwards_theta_deg))
+        fingers_forward = z_dirs[:, 0] >= fingers_forward_cos_theta
+        palm_upwards = x_dirs[:, 1] >= palm_upwards_cos_theta
+
+        before_batch_size = len(self)
+        grasp_configs = self[fingers_forward & ~palm_upwards]
+        after_batch_size = len(grasp_configs)
+        print(
+            f"Filtered less feasible grasps. {before_batch_size} -> {after_batch_size}"
+        )
+        return grasp_configs
+
     def target_joint_angles(
         self, dist_move_finger: Optional[float] = None
     ) -> torch.Tensor:
-        device = self.wrist_pose.device
-        target_joint_angles = compute_joint_angle_targets(
-            trans=self.wrist_pose.translation().detach().cpu().numpy(),
-            rot=self.wrist_pose.rotation().matrix().detach().cpu().numpy(),
-            joint_angles=self.joint_angles.detach().cpu().numpy(),
-            grasp_orientations=self.grasp_orientations.matrix(),
-            device=device,
+        device = self.device
+
+        hand_model = self.hand_config.as_hand_model()
+        assert hand_model.hand_pose is not None
+        grasp_orientations = self.grasp_orientations.matrix().to(device)
+        (
+            optimized_joint_angle_targets,
+            _,
+        ) = compute_optimized_joint_angle_targets_given_grasp_orientations(
+            joint_angles_start=hand_model.hand_pose[:, 9:],
+            hand_model=hand_model,
+            grasp_orientations=grasp_orientations,
             dist_move_finger=dist_move_finger,
         )
-        return torch.from_numpy(target_joint_angles).to(device)
+
+        num_joints = len(ALLEGRO_HAND_JOINT_NAMES)
+        assert optimized_joint_angle_targets.shape == (
+            hand_model.batch_size,
+            num_joints,
+        )
+        return optimized_joint_angle_targets.to(device)
 
     def pre_joint_angles(
-        self, dist_move_finger_backward: Optional[float] = None
+        self, dist_move_finger_backwards: Optional[float] = None
     ) -> torch.Tensor:
-        device = self.wrist_pose.device
-        pre_joint_angles = compute_joint_angle_pre(
-            trans=self.wrist_pose.translation().detach().cpu().numpy(),
-            rot=self.wrist_pose.rotation().matrix().detach().cpu().numpy(),
-            joint_angles=self.joint_angles.detach().cpu().numpy(),
-            grasp_orientations=self.grasp_orientations.matrix(),
-            device=device,
-            dist_move_finger_backwards=dist_move_finger_backward,
+        device = self.device
+
+        hand_model = self.hand_config.as_hand_model()
+        assert hand_model.hand_pose is not None
+        grasp_orientations = self.grasp_orientations.matrix().to(device)
+        (
+            pre_joint_angle_targets,
+            _,
+        ) = compute_init_joint_angles_given_grasp_orientations(
+            joint_angles_start=hand_model.hand_pose[:, 9:],
+            hand_model=hand_model,
+            grasp_orientations=grasp_orientations,
+            dist_move_finger_backwards=dist_move_finger_backwards,
         )
-        return torch.from_numpy(pre_joint_angles).to(device)
+
+        num_joints = len(ALLEGRO_HAND_JOINT_NAMES)
+        assert pre_joint_angle_targets.shape == (hand_model.batch_size, num_joints)
+        return pre_joint_angle_targets.to(device)
+
+    def get_target_hand_config(
+        self, dist_move_finger: Optional[float] = None
+    ) -> AllegroHandConfig:
+        target_joint_angles = self.target_joint_angles(dist_move_finger)
+        target_hand_config = AllegroHandConfig.from_values(
+            wrist_pose=self.wrist_pose,
+            joint_angles=target_joint_angles,
+        )
+        return target_hand_config
+
+    def get_pre_hand_config(
+        self, dist_move_finger_backwards: Optional[float] = None
+    ) -> AllegroHandConfig:
+        pre_joint_angles = self.pre_joint_angles(dist_move_finger_backwards)
+        pre_hand_config = AllegroHandConfig.from_values(
+            wrist_pose=self.wrist_pose,
+            joint_angles=pre_joint_angles,
+        )
+        return pre_hand_config
 
     def __repr__(self) -> str:
         hand_config_repr = self.hand_config.__repr__()
@@ -522,88 +665,138 @@ class AllegroGraspConfig(torch.nn.Module):
         ]
         return "\n".join(repr_parts)
 
+    def __len__(self) -> int:
+        return self.batch_size
 
-def hand_config_to_hand_model(
-    hand_config: AllegroHandConfig,
-    n_surface_points: int = 0,
-) -> HandModel:
+    @property
+    def device(self) -> torch.device:
+        return self.hand_config.device
+
+
+def normalize_with_warning(v: torch.Tensor, atol: float = 1e-6) -> torch.Tensor:
+    B = v.shape[0]
+    assert v.shape == (B, 3), f"Expected shape ({B}, 3), got {v.shape}"
+    norm = torch.norm(v, dim=1, keepdim=True)
+    if torch.any(norm < atol):
+        print("^" * 80)
+        print(
+            f"Warning: Found {torch.sum(norm < atol)} vectors with norm less than {atol}"
+        )
+        print("^" * 80)
+    return v / (norm + atol)
+
+
+def validate_rotation_matrices(
+    rotation_matrices: torch.Tensor, atol: float = 1e-3
+) -> None:
     """
-    Convert an AllegroHandConfig to a HandModel.
+    Validate that a batch of rotation matrices are orthogonal and have determinant 1.
+
+    Args:
+        rotation_matrices (torch.Tensor): A tensor of shape (B, 3, 3) containing B rotation matrices.
+        atol (float): Absolute tolerance for the checks. Default is 1e-3.
+
+    Raises:
+        AssertionError: If any of the matrices fail the orthogonality or determinant check.
     """
-    device = hand_config.wrist_pose.device
-    translation = hand_config.wrist_pose.translation().detach().cpu().numpy()
-    rotation = hand_config.wrist_pose.rotation().matrix().detach().cpu().numpy()
-    joint_angles = hand_config.joint_angles.detach().cpu().numpy()
-    hand_model = HandModel(
-        device=device,
-        n_surface_points=n_surface_points,
+    B = rotation_matrices.shape[0]
+    assert rotation_matrices.shape == (
+        B,
+        3,
+        3,
+    ), f"Expected shape ({B}, 3, 3), got {rotation_matrices.shape}"
+
+    # Check orthogonality: mat.T @ mat should be close to identity
+    identity_matrices: torch.Tensor = torch.eye(3).unsqueeze(0).repeat(B, 1, 1)
+    orthogonality_check: bool = torch.allclose(
+        torch.einsum(
+            "bij,bjk->bik", rotation_matrices.transpose(1, 2), rotation_matrices
+        ),
+        identity_matrices,
+        atol=atol,
     )
-    hand_pose = hand_config_to_pose(translation, rotation, joint_angles).to(device)
-    hand_model.set_parameters(hand_pose)
-    return hand_model
+
+    # Check determinant: det(mat) should be close to 1
+    determinants: torch.Tensor = torch.linalg.det(rotation_matrices)
+    determinant_check: bool = torch.allclose(determinants, torch.ones(B), atol=atol)
+
+    assert orthogonality_check, "One or more matrices are not orthogonal."
+    assert determinant_check, "One or more matrices do not have determinant 1."
 
 
-def compute_joint_angle_targets(
-    trans: np.ndarray,
-    rot: np.ndarray,
-    joint_angles: np.ndarray,
-    grasp_orientations: torch.Tensor,
-    device: torch.device,
-    dist_move_finger: Optional[float] = None,
-) -> np.ndarray:
-    hand_pose = hand_config_to_pose(trans, rot, joint_angles).to(device)
-    grasp_orientations = grasp_orientations.to(device)
+def rot6d_to_matrix(rot6d: torch.Tensor, check: bool = True) -> torch.Tensor:
+    B = rot6d.shape[0]
+    assert rot6d.shape == (B, 6), f"Expected shape ({B}, 6), got {rot6d.shape}"
 
-    # hand model
-    hand_model = HandModel(device=device)
-    hand_model.set_parameters(hand_pose)
-    assert hand_model.hand_pose is not None
+    # Step 1: Reshape to (B, 3, 2)
+    rot3x2 = rot6d.reshape(B, 3, 2)
 
-    # Optimization
-    (
-        optimized_joint_angle_targets,
-        _,
-    ) = compute_optimized_joint_angle_targets_given_grasp_orientations(
-        joint_angles_start=hand_model.hand_pose[:, 9:],
+    # Step 2: Normalize the first column
+    col1 = rot3x2[:, :, 0]
+    col1_normalized = normalize_with_warning(col1)
+
+    # Step 3: Orthogonalize the second column with respect to the first column
+    col2 = rot3x2[:, :, 1]
+    dot_product = torch.sum(col1_normalized * col2, dim=1, keepdim=True)
+    col2_orthogonal = col2 - dot_product * col1_normalized
+
+    # Step 4: Normalize the second column
+    col2_normalized = normalize_with_warning(col2_orthogonal)
+
+    # Step 5: Compute the cross product to obtain the third column
+    col3 = torch.cross(col1_normalized, col2_normalized)
+
+    # Combine the columns to form the rotation matrix
+    rotation_matrices = torch.stack((col1_normalized, col2_normalized, col3), dim=-1)
+
+    # Step 6: Check orthogonality and determinant
+    if check:
+        validate_rotation_matrices(rotation_matrices=rotation_matrices, atol=1e-3)
+
+    assert rotation_matrices.shape == (
+        B,
+        3,
+        3,
+    ), f"Expected shape ({B}, 3, 3), got {rotation_matrices.shape}"
+    return rotation_matrices
+
+
+def compute_grasp_orientations(
+    grasp_dirs: torch.Tensor,
+    wrist_pose: pp.LieTensor,
+    joint_angles: torch.Tensor,
+) -> pp.LieTensor:
+    B = grasp_dirs.shape[0]
+    N_FINGERS = 4
+    assert grasp_dirs.shape == (
+        B,
+        N_FINGERS,
+        3,
+    ), f"Expected shape ({B}, {N_FINGERS}, 3), got {grasp_dirs.shape}"
+    assert wrist_pose.lshape == (B,), f"Expected shape ({B},), got {wrist_pose.lshape}"
+
+    # Normalize
+    z_dirs = grasp_dirs
+    z_dirs = z_dirs / z_dirs.norm(dim=-1, keepdim=True)
+
+    # Get hand model
+    hand_model = AllegroHandConfig.from_values(
+        wrist_pose=wrist_pose,
+        joint_angles=joint_angles,
+    ).as_hand_model()
+
+    grasp_orientations = compute_grasp_orientations_from_z_dirs(
+        joint_angles_start=joint_angles,
         hand_model=hand_model,
-        grasp_orientations=grasp_orientations,
-        dist_move_finger=dist_move_finger,
+        z_dirs=z_dirs,
     )
-
-    num_joints = len(ALLEGRO_HAND_JOINT_NAMES)
-    assert optimized_joint_angle_targets.shape == (hand_model.batch_size, num_joints)
-
-    return optimized_joint_angle_targets.detach().cpu().numpy()
-
-
-def compute_joint_angle_pre(
-    trans: np.ndarray,
-    rot: np.ndarray,
-    joint_angles: np.ndarray,
-    grasp_orientations: torch.Tensor,
-    device: torch.device,
-    dist_move_finger_backwards: Optional[float] = None,
-) -> np.ndarray:
-    hand_pose = hand_config_to_pose(trans, rot, joint_angles).to(device)
-    grasp_orientations = grasp_orientations.to(device)
-
-    # hand model
-    hand_model = HandModel(device=device)
-    hand_model.set_parameters(hand_pose)
-    assert hand_model.hand_pose is not None
-
-    # Optimization
-    (
-        pre_joint_angle_targets,
-        _,
-    ) = compute_init_joint_angles_given_grasp_orientations(
-        joint_angles_start=hand_model.hand_pose[:, 9:],
-        hand_model=hand_model,
-        grasp_orientations=grasp_orientations,
-        dist_move_finger_backwards=dist_move_finger_backwards,
+    grasp_orientations = pp.from_matrix(
+        grasp_orientations,
+        pp.SO3_type,
     )
+    assert grasp_orientations.lshape == (
+        B,
+        N_FINGERS,
+    ), f"Expected shape ({B}, {N_FINGERS}), got {grasp_orientations.lshape}"
 
-    num_joints = len(ALLEGRO_HAND_JOINT_NAMES)
-    assert pre_joint_angle_targets.shape == (hand_model.batch_size, num_joints)
-
-    return pre_joint_angle_targets.detach().cpu().numpy()
+    return grasp_orientations

@@ -452,16 +452,16 @@ def get_data(
     y_colls = evaled_grasp_config_dict["y_coll"]
     object_state = evaled_grasp_config_dict["object_states_before_grasp"]
 
-    print(f"grasp_configs.batch_size = {grasp_configs.batch_size}")
+    print(f"len(grasp_configs) = {len(grasp_configs)}")
     if (
         max_num_data_points_per_file is not None
-        and grasp_configs.batch_size > max_num_data_points_per_file
+        and len(grasp_configs) > max_num_data_points_per_file
     ):
         print(
             "WARNING: Too many grasp configs, dropping some datapoints from NeRF dataset."
         )
         print(
-            f"batch_size = {grasp_configs.batch_size}, max_num_data_points_per_file = {max_num_data_points_per_file}"
+            f"batch_size = {len(grasp_configs)}, max_num_data_points_per_file = {max_num_data_points_per_file}"
         )
 
         grasp_configs = grasp_configs[:max_num_data_points_per_file]
@@ -474,20 +474,20 @@ def get_data(
     grasp_frame_transforms = grasp_configs.grasp_frame_transforms
     grasp_config_tensors = grasp_configs.as_tensor().detach().cpu().numpy()
 
-    assert_equals(y_PGSs.shape, (grasp_configs.batch_size,))
-    assert_equals(y_picks.shape, (grasp_configs.batch_size,))
-    assert_equals(y_colls.shape, (grasp_configs.batch_size,))
+    assert_equals(y_PGSs.shape, (len(grasp_configs),))
+    assert_equals(y_picks.shape, (len(grasp_configs),))
+    assert_equals(y_colls.shape, (len(grasp_configs),))
     assert_equals(
         grasp_frame_transforms.lshape,
         (
-            grasp_configs.batch_size,
+            len(grasp_configs),
             fingertip_config.n_fingers,
         ),
     )
     assert_equals(
         grasp_config_tensors.shape,
         (
-            grasp_configs.batch_size,
+            len(grasp_configs),
             fingertip_config.n_fingers,
             7 + 16 + 4,  # wrist pose, joint angles, grasp orientations (as quats)
         ),
@@ -495,7 +495,7 @@ def get_data(
     # Annoying hack because I stored all the object states for multiple noise runs, only need 1
     assert len(object_state.shape) == 3
     n_runs = object_state.shape[1]
-    assert_equals(object_state.shape, (grasp_configs.batch_size, n_runs, 13))
+    assert_equals(object_state.shape, (len(grasp_configs), n_runs, 13))
     object_state = object_state[:, 0]
 
     X_N_Oy = compute_X_N_Oy(mesh_Oy)

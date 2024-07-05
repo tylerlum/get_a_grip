@@ -7,14 +7,14 @@ import trimesh
 import tyro
 from plotly.subplots import make_subplots
 
+from get_a_grip import get_data_folder
+
 
 @dataclass
-class Args:
+class VisualizeMeshCompareToOriginalArgs:
     obj_filepath: pathlib.Path
     opacity: float = 1.0
-    original_meshdata_dir_path: pathlib.Path = (
-        pathlib.Path("~/github_repos/DexGraspNet/data/meshdata").expanduser().resolve()
-    )  # TODO: change this per workstation
+    original_meshdata_dir_path: pathlib.Path = get_data_folder() / "large/meshes"
 
 
 def create_mesh_3d(
@@ -32,7 +32,7 @@ def create_mesh_3d(
 
 
 def main() -> None:
-    args = tyro.cli(Args)
+    args = tyro.cli(VisualizeMeshCompareToOriginalArgs)
     assert args.obj_filepath.exists(), f"{args.obj_filepath} does not exist"
     assert (
         args.original_meshdata_dir_path.exists()

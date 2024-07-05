@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import math
 import pathlib
 import time
 from dataclasses import dataclass
 from typing import Literal, Optional
 
 import numpy as np
-import pypose as pp
 import torch
 import trimesh
 import tyro
@@ -32,27 +30,23 @@ from get_a_grip.grasp_planning.utils import (
 from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
     AllegroGraspConfig,
 )
-from get_a_grip.grasp_planning.utils.grasp_utils import (
-    compute_grasp_orientations,
-    rot6d_to_matrix,
-)
 from get_a_grip.grasp_planning.utils.nerf_evaluator_wrapper import (
     NerfEvaluatorWrapper,
     load_nerf_evaluator,
-)
-from get_a_grip.grasp_planning.utils.visualize_utils import (
-    plot_point_cloud_and_bps_and_mesh_and_grasp,
 )
 from get_a_grip.model_training.config.diffusion_config import (
     DiffusionConfig,
     TrainingConfig,
 )
 from get_a_grip.model_training.config.nerf_evaluator_config import NerfEvaluatorConfig
-from get_a_grip.model_training.models.dex_sampler import DexSampler
+from get_a_grip.model_training.models.bps_sampler import BpsSampler
 from get_a_grip.model_training.utils.diffusion import Diffusion
 from get_a_grip.model_training.utils.nerf_load_utils import load_nerf_pipeline
 from get_a_grip.model_training.utils.nerf_utils import (
     compute_centroid_from_nerf,
+)
+from get_a_grip.model_training.utils.plot_utils import (
+    plot_grasp_and_mesh_and_more,
 )
 
 
@@ -75,14 +69,12 @@ def get_optimized_grasps(
             log_path=ckpt_path.parent,
         )
     )
-    model = DexSampler(
+    model = BpsSampler(
         n_pts=config.data.n_pts,
         grasp_dim=config.data.grasp_dim,
-        d_model=128,
-        virtual_seq_len=4,
     )
     runner = Diffusion(config=config, model=model, load_multigpu_ckpt=True)
-    runner.load_checkpoint(config, name=ckpt_path.stem)
+    runner.load_checkpoint(config, filename=ckpt_path.name)
     device = runner.device
 
     # Get BPS
@@ -123,17 +115,15 @@ def get_optimized_grasps(
 
         IDX = 0
         while True:
-            plot_point_cloud_and_bps_and_mesh_and_grasp(
+            fig = plot_grasp_and_mesh_and_more(
                 grasp=x[IDX],
-                X_W_Oy=X_By_Oy,
+                X_N_Oy=X_By_Oy,
                 basis_points=basis_points_By,
                 bps=bps_values_repeated[IDX].detach().cpu().numpy(),
                 mesh=mesh_By,
-                point_cloud_points=point_cloud_points_By,
-                GRASP_IDX="?",
-                object_code="?",
-                y_PGS="?",
+                processed_point_cloud_points=point_cloud_points_By,
             )
+            fig.show()
             user_input = input("Next action?")
             if user_input == "q":
                 break
@@ -149,62 +139,19 @@ def get_optimized_grasps(
 
     # grasp to AllegroGraspConfig
     # TODO: make the numpy torch conversions less bad
-    N_FINGERS = 4
     assert x.shape == (
         NUM_GRASP_SAMPLES,
         config.data.grasp_dim,
     ), f"Expected shape ({NUM_GRASP_SAMPLES}, {config.data.grasp_dim}), got {x.shape}"
-    trans = x[:, :3].detach().cpu().numpy()
-    rot6d = x[:, 3:9].detach().cpu().numpy()
-    joint_angles = x[:, 9:25].detach().cpu().numpy()
-    grasp_dirs = (
-        x[:, 25:37].reshape(NUM_GRASP_SAMPLES, N_FINGERS, 3).detach().cpu().numpy()
-    )
 
-    rot = rot6d_to_matrix(rot6d)
-
-    wrist_pose_matrix = (
-        torch.eye(4, device=device).unsqueeze(0).repeat(NUM_GRASP_SAMPLES, 1, 1).float()
-    )
-    wrist_pose_matrix[:, :3, :3] = torch.from_numpy(rot).float().to(device)
-    wrist_pose_matrix[:, :3, 3] = torch.from_numpy(trans).float().to(device)
-
-    wrist_pose = pp.from_matrix(
-        wrist_pose_matrix.to(device),
-        pp.SE3_type,
-        atol=1e-3,
-        rtol=1e-3,
-    )
-
-    assert wrist_pose.lshape == (NUM_GRASP_SAMPLES,)
-
-    grasp_orientations = compute_grasp_orientations(
-        grasp_dirs=torch.from_numpy(grasp_dirs).float().to(device),
-        wrist_pose=wrist_pose,
-        joint_angles=torch.from_numpy(joint_angles).float().to(device),
-    )
-
-    # Convert to AllegroGraspConfig to dict
-    grasp_configs = AllegroGraspConfig.from_values(
-        wrist_pose=wrist_pose,
-        joint_angles=torch.from_numpy(joint_angles).float().to(device),
-        grasp_orientations=grasp_orientations,
+    grasp_configs = AllegroGraspConfig.from_grasp(
+        grasp=x,
     )
 
     if cfg.filter_less_feasible_grasps:
-        wrist_pose_matrix = grasp_configs.wrist_pose.matrix()
-        x_dirs = wrist_pose_matrix[:, :, 0]
-        z_dirs = wrist_pose_matrix[:, :, 2]
-
-        fingers_forward_cos_theta = math.cos(
-            math.radians(cfg.fingers_forward_theta_deg)
-        )
-        palm_upwards_cos_theta = math.cos(math.radians(cfg.palm_upwards_theta_deg))
-        fingers_forward = z_dirs[:, 0] >= fingers_forward_cos_theta
-        palm_upwards = x_dirs[:, 1] >= palm_upwards_cos_theta
-        grasp_configs = grasp_configs[fingers_forward & ~palm_upwards]
-        print(
-            f"Filtered less feasible grasps. New batch size: {grasp_configs.batch_size}"
+        grasp_configs = grasp_configs.filter_less_feasible(
+            fingers_forward_theta_deg=cfg.fingers_forward_theta_deg,
+            palm_upwards_theta_deg=cfg.palm_upwards_theta_deg,
         )
 
     if len(grasp_configs) < NUM_GRASPS:
@@ -214,7 +161,7 @@ def get_optimized_grasps(
 
     if return_exactly_requested_num_grasps:
         grasp_configs = grasp_configs[:NUM_GRASPS]
-    print(f"Returning {grasp_configs.batch_size} grasps")
+    print(f"Returning {len(grasp_configs)} grasps")
 
     grasp_config_dicts = grasp_configs.as_dict()
     grasp_config_dicts["loss"] = np.linspace(
@@ -301,7 +248,7 @@ def run_dexdiffuser_sim_eval(args: CommandlineArgs) -> None:
         start_time = time.time()
         nerfcheckpoints_folder = args.output_folder / "nerfcheckpoints"
         nerf_trainer = train_nerf_return_trainer.train_nerf(
-            args=train_nerf_return_trainer.Args(
+            args=train_nerf_return_trainer.TrainNerfReturnTrainerArgs(
                 nerfdata_folder=args.nerfdata_path,
                 nerfcheckpoints_folder=nerfcheckpoints_folder,
                 max_num_iterations=args.max_num_iterations,

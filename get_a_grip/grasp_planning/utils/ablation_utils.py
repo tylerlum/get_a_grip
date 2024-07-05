@@ -31,13 +31,10 @@ from get_a_grip.grasp_planning.utils.ablation_optimizer import RandomSamplingOpt
 from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
     AllegroGraspConfig,
 )
-from get_a_grip.grasp_planning.utils.grasp_utils import (
-    grasp_to_grasp_config,
-)
 from get_a_grip.grasp_planning.utils.optimizer_utils import (
     sample_random_rotate_transforms_only_around_y,
 )
-from get_a_grip.model_training.models.dex_evaluator import DexEvaluator
+from get_a_grip.model_training.models.bps_evaluator import BpsEvaluator
 from get_a_grip.model_training.utils.nerf_load_utils import load_nerf_pipeline
 from get_a_grip.model_training.utils.nerf_utils import (
     compute_centroid_from_nerf,
@@ -57,7 +54,7 @@ def get_optimized_grasps(
 
     N_BASIS_PTS = 4096
     device = torch.device("cuda")
-    dex_evaluator = DexEvaluator(in_grasp=3 + 6 + 16 + 12, in_bps=N_BASIS_PTS).to(
+    dex_evaluator = BpsEvaluator(in_grasp=3 + 6 + 16 + 12, in_bps=N_BASIS_PTS).to(
         device
     )
     dex_evaluator.eval()
@@ -113,7 +110,7 @@ def get_optimized_grasps(
     init_grasp_configs = AllegroGraspConfig.from_grasp_config_dict(
         init_grasp_config_dict
     )
-    print(f"Loaded {init_grasp_configs.batch_size} initial grasp configs.")
+    print(f"Loaded {len(init_grasp_configs)} initial grasp configs.")
 
     # Put this here to ensure that the random seed is set before sampling random rotations.
     if cfg.random_seed is not None:
@@ -131,7 +128,7 @@ def get_optimized_grasps(
             if i != 0:
                 random_rotate_transforms = (
                     sample_random_rotate_transforms_only_around_y(
-                        new_grasp_configs.batch_size
+                        len(new_grasp_configs)
                     )
                 )
                 new_grasp_configs.hand_config.set_wrist_pose(
@@ -147,27 +144,17 @@ def get_optimized_grasps(
         new_grasp_configs = AllegroGraspConfig.from_grasp_config_dict(
             {np.concatenate(v, axis=0) for k, v in new_grasp_config_dicts.items()}
         )
-        assert new_grasp_configs.batch_size == init_grasp_configs.batch_size * N_SAMPLES
+        assert len(new_grasp_configs) == len(init_grasp_configs) * N_SAMPLES
 
         # Filter grasps that are less IK feasible
         if cfg.filter_less_feasible_grasps:
-            wrist_pose_matrix = new_grasp_configs.wrist_pose.matrix()
-            x_dirs = wrist_pose_matrix[:, :, 0]
-            z_dirs = wrist_pose_matrix[:, :, 2]
-
-            fingers_forward_cos_theta = math.cos(
-                math.radians(cfg.fingers_forward_theta_deg)
-            )
-            palm_upwards_cos_theta = math.cos(math.radians(cfg.palm_upwards_theta_deg))
-            fingers_forward = z_dirs[:, 0] >= fingers_forward_cos_theta
-            palm_upwards = x_dirs[:, 1] >= palm_upwards_cos_theta
-            new_grasp_configs = new_grasp_configs[fingers_forward & ~palm_upwards]
-            print(
-                f"Filtered less feasible grasps. New batch size: {new_grasp_configs.batch_size}"
+            new_grasp_configs = new_grasp_configs.filter_less_feasible(
+                fingers_forward_theta_deg=cfg.fingers_forward_theta_deg,
+                palm_upwards_theta_deg=cfg.palm_upwards_theta_deg,
             )
 
         # Evaluate grasp metric and collisions
-        n_batches = math.ceil(new_grasp_configs.batch_size / BATCH_SIZE)
+        n_batches = math.ceil(len(new_grasp_configs) / BATCH_SIZE)
         for batch_i in tqdm(
             range(n_batches), desc=f"Evaling grasp metric with batch_size={BATCH_SIZE}"
         ):
@@ -175,7 +162,7 @@ def get_optimized_grasps(
             end_idx = np.clip(
                 (batch_i + 1) * BATCH_SIZE,
                 a_min=None,
-                a_max=new_grasp_configs.batch_size,
+                a_max=len(new_grasp_configs),
             )
             this_batch_size = end_idx - start_idx
 
@@ -213,7 +200,7 @@ def get_optimized_grasps(
 
         # Aggregate
         all_success_preds = np.concatenate(all_success_preds)
-        assert all_success_preds.shape == (new_grasp_configs.batch_size,)
+        assert all_success_preds.shape == (len(new_grasp_configs),)
 
         # Sort by success_preds
         new_all_success_preds = all_success_preds
@@ -279,7 +266,9 @@ def get_optimized_grasps(
             f"Diff Losses:  {[f'{x:.4f}' for x in diff_losses.tolist()]}",
             file=sys.stderr,
         )
-        grasp_config = grasp_to_grasp_config(grasp=random_sampling_optimizer.grasps)
+        grasp_config = AllegroGraspConfig.from_grasp(
+            grasp=random_sampling_optimizer.grasps
+        )
         grasp_config_dict = grasp_config.as_dict()
         grasp_config_dict["loss"] = losses_np
     else:
@@ -371,7 +360,7 @@ def run_ablation_sim_eval(args: CommandlineArgs) -> None:
         start_time = time.time()
         nerfcheckpoints_folder = args.output_folder / "nerfcheckpoints"
         nerf_trainer = train_nerf_return_trainer.train_nerf(
-            args=train_nerf_return_trainer.Args(
+            args=train_nerf_return_trainer.TrainNerfReturnTrainerArgs(
                 nerfdata_folder=args.nerfdata_path,
                 nerfcheckpoints_folder=nerfcheckpoints_folder,
                 max_num_iterations=args.max_num_iterations,

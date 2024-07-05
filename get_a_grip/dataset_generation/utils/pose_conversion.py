@@ -27,13 +27,24 @@ def pose_to_hand_config(
     return trans, rot, joint_angles
 
 
-def hand_config_to_pose(
+def hand_config_np_to_pose(
     trans: np.ndarray,
     rot: np.ndarray,
     joint_angles: np.ndarray,
 ) -> torch.Tensor:
-    # Unsqueeze if no batch dim.
+    return hand_config_to_pose(
+        trans=torch.from_numpy(trans),
+        rot=torch.from_numpy(rot),
+        joint_angles=torch.from_numpy(joint_angles),
+    )
 
+
+def hand_config_to_pose(
+    trans: torch.Tensor,
+    rot: torch.Tensor,
+    joint_angles: torch.Tensor,
+) -> torch.Tensor:
+    # Unsqueeze if no batch dim.
     if len(trans.shape) == 1:
         assert rot.shape == (3, 3)
         assert joint_angles.shape == (16,)
@@ -48,17 +59,11 @@ def hand_config_to_pose(
     assert joint_angles.shape == (batch_size, 16)
 
     # Convert rotation matrix batch to rot6d tensors.
-    rot6d_torch = (
-        torch.from_numpy(rot[:, :, :2]).transpose(2, 1).reshape(batch_size, -1)
-    )
-    assert rot6d_torch.shape == (batch_size, 6)
+    rot6d = rot[:, :, :2].transpose(2, 1).reshape(batch_size, -1)
+    assert rot6d.shape == (batch_size, 6)
 
     # Convert trans and joint angles to tensors.
-    trans_torch = torch.from_numpy(trans)
-    joint_angles_torch = torch.from_numpy(joint_angles)
-
-    hand_pose = torch.cat([trans_torch, rot6d_torch, joint_angles_torch], dim=1).float()
-
+    hand_pose = torch.cat([trans, rot6d, joint_angles], dim=1).float()
     assert hand_pose.shape == (batch_size, 25)
 
     return hand_pose

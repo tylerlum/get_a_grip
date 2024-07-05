@@ -20,7 +20,7 @@ from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
 from get_a_grip.dataset_generation.utils.pose_conversion import (
-    hand_config_to_pose,
+    hand_config_np_to_pose,
 )
 from get_a_grip.dataset_generation.utils.seed import set_seed
 
@@ -48,10 +48,10 @@ def compute_grasp_orientations(
 ) -> torch.Tensor:
     device = torch.device(f"cuda:{args.gpu}") if torch.cuda.is_available() else "cpu"
 
-    hand_pose = hand_config_to_pose(
-        hand_config_dict["trans"],
-        hand_config_dict["rot"],
-        hand_config_dict["joint_angles"],
+    hand_pose = hand_config_np_to_pose(
+        trans=hand_config_dict["trans"],
+        rot=hand_config_dict["rot"],
+        joint_angles=hand_config_dict["joint_angles"],
     ).to(device)
     batch_size = hand_pose.shape[0]
 

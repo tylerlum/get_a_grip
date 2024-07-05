@@ -154,10 +154,10 @@ def create_train_val_test_dataset(
 ]:
     if cfg.create_val_test_from_train:
         print(
-            f"Creating val and test datasets from train dataset: {cfg.actual_train_dataset_filepath}"
+            f"Creating val and test datasets from train dataset: {cfg.actual_train_dataset_path}"
         )
         full_dataset = create_grid_dataset(
-            input_hdf5_filepath=cfg.actual_train_dataset_filepath, cfg=cfg
+            input_hdf5_filepath=cfg.actual_train_dataset_path, cfg=cfg
         )
 
         train_dataset, val_dataset, test_dataset = random_split(
@@ -181,16 +181,16 @@ def create_train_val_test_dataset(
         )
     else:
         print(
-            f"Using actual val and test datasets: cfg.actual_train_dataset_filepath = {cfg.actual_train_dataset_filepath}, cfg.actual_val_dataset_filepath = {cfg.actual_val_dataset_filepath}, cfg.actual_test_dataset_filepath = {cfg.actual_test_dataset_filepath}"
+            f"Using actual val and test datasets: cfg.actual_train_dataset_filepath = {cfg.actual_train_dataset_path}, cfg.actual_val_dataset_filepath = {cfg.actual_val_dataset_path}, cfg.actual_test_dataset_filepath = {cfg.actual_test_dataset_path}"
         )
         train_dataset = create_grid_dataset(
-            input_hdf5_filepath=cfg.actual_train_dataset_filepath, cfg=cfg
+            input_hdf5_filepath=cfg.actual_train_dataset_path, cfg=cfg
         )
         val_dataset = create_grid_dataset(
-            input_hdf5_filepath=cfg.actual_val_dataset_filepath, cfg=cfg
+            input_hdf5_filepath=cfg.actual_val_dataset_path, cfg=cfg
         )
         test_dataset = create_grid_dataset(
-            input_hdf5_filepath=cfg.actual_test_dataset_filepath, cfg=cfg
+            input_hdf5_filepath=cfg.actual_test_dataset_path, cfg=cfg
         )
     return train_dataset, val_dataset, test_dataset
 

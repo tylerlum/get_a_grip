@@ -109,7 +109,7 @@ def run_gg_sim_eval(args: CommandlineArgs) -> None:
         start_time = time.time()
         nerfcheckpoints_folder = args.output_folder / "nerfcheckpoints"
         nerf_trainer = train_nerf_return_trainer.train_nerf(
-            args=train_nerf_return_trainer.Args(
+            args=train_nerf_return_trainer.TrainNerfReturnTrainerArgs(
                 nerfdata_folder=args.nerfdata_path,
                 nerfcheckpoints_folder=nerfcheckpoints_folder,
                 max_num_iterations=args.max_num_iterations,

@@ -6,8 +6,8 @@ import torch.nn as nn
 from get_a_grip.model_training.models.components.fc_resblock import FCResBlock
 
 
-class DexEvaluator(nn.Module):
-    """The DexDiffuser evaluator module.
+class BpsEvaluator(nn.Module):
+    """Motivated by the DexDiffuser evaluator module.
 
     Adapted for use in our repo.
 
@@ -79,18 +79,18 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     print("\n" + "-" * 80)
-    print("Testing DexEvaluator...")
+    print("Testing BpsEvaluator...")
     print("-" * 80)
-    dex_evaluator = DexEvaluator(in_grasp=3 + 6 + 16 + 12, in_bps=4096).to(device)
+    bps_evaluator = BpsEvaluator(in_grasp=3 + 6 + 16 + 12, in_bps=4096).to(device)
 
     batch_size = 2
     f_O = torch.rand(batch_size, 4096, device=device)
     g_O = torch.rand(batch_size, 3 + 6 + 16 + 12, device=device)
 
-    labels = dex_evaluator(f_O=f_O, g_O=g_O)
+    labels = bps_evaluator(f_O=f_O, g_O=g_O)
     PGS_0 = labels[..., -1]
-    g_new = dex_evaluator.refine(f_O=f_O, g_O=g_O, num_steps=100, stage="all")
-    PGS_new = dex_evaluator(f_O=f_O, g_O=g_new)[..., -1]
+    g_new = bps_evaluator.refine(f_O=f_O, g_O=g_O, num_steps=100, stage="all")
+    PGS_new = bps_evaluator(f_O=f_O, g_O=g_new)[..., -1]
     print(f"PGS_0: {PGS_0}")
     print(f"PGS_new: {PGS_new}")
     breakpoint()

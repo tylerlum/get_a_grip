@@ -12,12 +12,12 @@ import numpy as np
 import pypose as pp
 import torch
 import tyro
-import wandb
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 from tqdm import tqdm as std_tqdm
 
+import wandb
 from get_a_grip.grasp_planning.config.optimization_config import OptimizationConfig
 from get_a_grip.grasp_planning.config.optimizer_config import (
     RandomSamplingConfig,
@@ -137,14 +137,8 @@ class SGDOptimizer(Optimizer):
                 )
             )
 
-        joint_lower_limits, joint_upper_limits = get_joint_limits()
-        self.joint_lower_limits, self.joint_upper_limits = (
-            torch.from_numpy(joint_lower_limits)
-            .float()
-            .to(self.grasp_config.wrist_pose.device),
-            torch.from_numpy(joint_upper_limits)
-            .float()
-            .to(self.grasp_config.wrist_pose.device),
+        self.joint_lower_limits, self.joint_upper_limits = get_joint_limits(
+            device=self.grasp_config.device
         )
 
         assert self.joint_lower_limits.shape == (16,)
@@ -165,7 +159,7 @@ class SGDOptimizer(Optimizer):
             self.grasp_dir_optimizer.zero_grad()
 
         losses = self.compute_grasp_losses()
-        assert losses.shape == (self.grasp_config.batch_size,)
+        assert losses.shape == (len(self.grasp_config),)
 
         losses.sum().backward()  # Should be sum so gradient magnitude per parameter is invariant to batch size.
 
@@ -202,14 +196,8 @@ class RandomSamplingOptimizer(Optimizer):
         super().__init__(init_grasp_config, nerf_evaluator_wrapper)
         self.optimizer_config = optimizer_config
 
-        joint_lower_limits, joint_upper_limits = get_joint_limits()
-        self.joint_lower_limits, self.joint_upper_limits = (
-            torch.from_numpy(joint_lower_limits)
-            .float()
-            .to(self.grasp_config.wrist_pose.device),
-            torch.from_numpy(joint_upper_limits)
-            .float()
-            .to(self.grasp_config.wrist_pose.device),
+        self.joint_lower_limits, self.joint_upper_limits = get_joint_limits(
+            device=self.grasp_config.device
         )
 
         assert self.joint_lower_limits.shape == (16,)
@@ -476,7 +464,7 @@ def get_optimized_grasps(
         init_grasp_configs = AllegroGraspConfig.from_grasp_config_dict(
             init_grasp_config_dict
         )
-        print(f"Loaded {init_grasp_configs.batch_size} initial grasp configs.")
+        print(f"Loaded {len(init_grasp_configs)} initial grasp configs.")
 
         # HACK: For now, just take the first num_grasps.
         # init_grasp_configs = init_grasp_configs[: cfg.optimizer.num_grasps]
@@ -515,7 +503,7 @@ def get_optimized_grasps(
             if i != 0:
                 random_rotate_transforms = (
                     sample_random_rotate_transforms_only_around_y(
-                        new_grasp_configs.batch_size
+                        len(new_grasp_configs)
                     )
                 )
                 new_grasp_configs.hand_config.set_wrist_pose(
@@ -533,27 +521,17 @@ def get_optimized_grasps(
         new_grasp_configs = AllegroGraspConfig.from_grasp_config_dict(
             new_grasp_config_dicts
         )
-        assert new_grasp_configs.batch_size == init_grasp_configs.batch_size * N_SAMPLES
+        assert len(new_grasp_configs) == len(init_grasp_configs) * N_SAMPLES
 
         # Filter grasps that are less IK feasible
         if cfg.filter_less_feasible_grasps:
-            wrist_pose_matrix = new_grasp_configs.wrist_pose.matrix()
-            x_dirs = wrist_pose_matrix[:, :, 0]
-            z_dirs = wrist_pose_matrix[:, :, 2]
-
-            fingers_forward_cos_theta = math.cos(
-                math.radians(cfg.fingers_forward_theta_deg)
-            )
-            palm_upwards_cos_theta = math.cos(math.radians(cfg.palm_upwards_theta_deg))
-            fingers_forward = z_dirs[:, 0] >= fingers_forward_cos_theta
-            palm_upwards = x_dirs[:, 1] >= palm_upwards_cos_theta
-            new_grasp_configs = new_grasp_configs[fingers_forward & ~palm_upwards]
-            print(
-                f"Filtered less feasible grasps. New batch size: {new_grasp_configs.batch_size}"
+            new_grasp_configs = new_grasp_configs.filter_less_feasible(
+                fingers_forward_theta_deg=cfg.fingers_forward_theta_deg,
+                palm_upwards_theta_deg=cfg.palm_upwards_theta_deg,
             )
 
         # Evaluate grasp metric and collisions
-        n_batches = math.ceil(new_grasp_configs.batch_size / BATCH_SIZE)
+        n_batches = math.ceil(len(new_grasp_configs) / BATCH_SIZE)
         for batch_i in tqdm(
             range(n_batches), desc=f"Evaling grasp metric with batch_size={BATCH_SIZE}"
         ):
@@ -561,7 +539,7 @@ def get_optimized_grasps(
             end_idx = np.clip(
                 (batch_i + 1) * BATCH_SIZE,
                 a_min=None,
-                a_max=new_grasp_configs.batch_size,
+                a_max=len(new_grasp_configs),
             )
 
             temp_grasp_configs = new_grasp_configs[start_idx:end_idx].to(device=device)
@@ -577,7 +555,7 @@ def get_optimized_grasps(
 
         # Aggregate
         all_success_preds = np.concatenate(all_success_preds)
-        assert all_success_preds.shape == (new_grasp_configs.batch_size,)
+        assert all_success_preds.shape == (len(new_grasp_configs),)
 
         ordered_idxs_best_first = np.argsort(all_success_preds)[::-1].copy()
         print(
@@ -631,9 +609,9 @@ def get_optimized_grasps(
         console=console,
     )
 
-    assert (
-        final_losses.shape[0] == final_grasp_configs.batch_size
-    ), f"{final_losses.shape[0]} != {final_grasp_configs.batch_size}"
+    assert final_losses.shape[0] == len(
+        final_grasp_configs
+    ), f"{final_losses.shape[0]} != {len(final_grasp_configs)}"
 
     print(f"Initial grasp loss: {np.round(init_losses.tolist(), decimals=3)}")
     print(f"Final grasp loss: {np.round(final_losses.tolist(), decimals=3)}")

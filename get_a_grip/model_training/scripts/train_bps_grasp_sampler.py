@@ -12,8 +12,8 @@ from get_a_grip.model_training.config.diffusion_config import (
     DiffusionConfig,
     TrainingConfig,
 )
-from get_a_grip.model_training.models.dex_sampler import (
-    DexSampler,
+from get_a_grip.model_training.models.bps_sampler import (
+    BpsSampler,
 )
 from get_a_grip.model_training.utils.bps_grasp_dataset import (
     BpsGraspSampleDataset,
@@ -65,11 +65,9 @@ def main() -> None:
     val_dataset = BpsGraspSampleDataset(
         input_hdf5_filepath=config.val_dataset_path,
     )
-    model = DexSampler(
+    model = BpsSampler(
         n_pts=config.diffusion.data.n_pts,
         grasp_dim=config.diffusion.data.grasp_dim,
-        d_model=128,
-        virtual_seq_len=4,
     )
 
     if config.diffusion.multigpu:

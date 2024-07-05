@@ -1,11 +1,11 @@
 import pathlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
 import tyro
 
-from get_a_grip import get_data_folder, get_repo_folder
+from get_a_grip import get_data_folder
 from get_a_grip.model_training.config.nerf_evaluator_config import (
     DEFAULTS_DICT as NERF_EVALUATOR_DEFAULTS_DICT,
 )
@@ -18,24 +18,18 @@ from get_a_grip.model_training.config.nerf_evaluator_config import (
 class NerfEvaluatorWrapperConfig:
     """Top-level config for creating a grasp metric."""
 
-    nerf_evaluator_config: NerfEvaluatorConfig = NERF_EVALUATOR_DEFAULTS_DICT[
-        "grasp-cond-simple-cnn-2d-1d"
-    ]
-    nerf_evaluator_config_path: Optional[pathlib.Path] = (
-        get_repo_folder()
-        / "nerf_grasp_evaluator_workspaces"
-        / "mugs_grid_grasp-cond-simple-cnn-2d-1d"
-        / "config.yaml"
+    nerf_evaluator_config: NerfEvaluatorConfig = field(
+        default_factory=lambda: NERF_EVALUATOR_DEFAULTS_DICT["cnn-3d-xyz-global-cnn"]
     )
+    nerf_evaluator_config_path: Optional[pathlib.Path] = (
+        get_data_folder()
+        / "logs/nerf_grasp_evaluator/MY_NERF_EXPERIMENT_NAME_2024-07-05_17-47-28-051229/config.yaml"
+    )
+
     nerf_evaluator_checkpoint: int = -1  # Load latest checkpoint if -1.
     nerf_config: pathlib.Path = (
         get_data_folder()
-        / "2023-01-03_mugs_smaller0-075_noise_lightshake_mid_opt"
-        / "nerfcheckpoints"
-        / "core-mug-10f6e09036350e92b3f21f1137c3c347_0_0750"
-        / "nerfacto"
-        / "2024-01-03_235839"
-        / "config.yml"
+        / "NEW_DATASET/nerfcheckpoints/core-bottle-11fc9827d6b467467d3aa3bae1f7b494_0_0726/nerfacto/2024-07-04_210957/config.yml"
     )
     X_N_Oy: Optional[np.ndarray] = None
 

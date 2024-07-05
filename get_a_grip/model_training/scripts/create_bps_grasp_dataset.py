@@ -1,7 +1,7 @@
 import pathlib
 import time
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import h5py
 import numpy as np
@@ -21,9 +21,6 @@ from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
 from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
     AllegroGraspConfig,
 )
-from get_a_grip.grasp_planning.utils.grasp_utils import (
-    grasp_config_to_grasp,
-)
 
 N_FINGERS = 4
 GRASP_DIM = 3 + 6 + 16 + N_FINGERS * 3
@@ -31,21 +28,19 @@ GRASP_DIM = 3 + 6 + 16 + N_FINGERS * 3
 
 @dataclass
 class BpsGraspDatasetConfig:
-    input_pointclouds_path: pathlib.Path = get_data_folder() / "large/pointclouds"
+    input_point_clouds_path: pathlib.Path = get_data_folder() / "large/point_clouds"
     input_evaled_grasp_config_dicts_path: pathlib.Path = (
         get_data_folder() / "large/final_evaled_grasp_config_dicts_train"
     )
     output_filepath: pathlib.Path = (
         get_data_folder() / "large/bps_grasp_dataset/train_dataset.h5"
     )
-    N_BASIS_PTS: int = 4096
-    BASIS_RADIUS: float = 0.3
     overwrite: bool = False
 
     def __post_init__(self):
         assert (
-            self.input_pointclouds_path.exists()
-        ), f"Path {self.input_pointclouds_path} does not exist"
+            self.input_point_clouds_path.exists()
+        ), f"Path {self.input_point_clouds_path} does not exist"
         assert (
             self.input_evaled_grasp_config_dicts_path.exists()
         ), f"Path {self.input_evaled_grasp_config_dicts_path} does not exist"
@@ -91,7 +86,7 @@ def get_largest_connected_component(adjacency_matrix: csr_matrix) -> np.ndarray:
     return largest_cc_indices
 
 
-def process_point_cloud(
+def get_point_cloud_largest_connected_component(
     points: np.ndarray, distance_threshold: float = 0.01
 ) -> np.ndarray:
     adjacency_matrix = construct_graph(points, distance_threshold)
@@ -132,7 +127,7 @@ def get_grasp_data(
         # Extract grasp info
         grasp_config = AllegroGraspConfig.from_grasp_config_dict(grasp_config_dict)
         B = len(grasp_config)
-        grasps = grasp_config_to_grasp(grasp_config).detach().cpu().numpy()
+        grasps = grasp_config.as_grasp().detach().cpu().numpy()
         assert grasps.shape == (
             B,
             GRASP_DIM,
@@ -208,18 +203,22 @@ def get_grasp_data(
     )
 
 
-def get_fixed_basis_points(
-    n_points: int,
-    radius: float,
-) -> np.ndarray:
-    HARDCODED_RANDOM_SEED = 13  # For getting fixed basis points
+def get_fixed_basis_points() -> np.ndarray:
+    # Intentionally hardcoded for getting fixed basis points every time
+    HARDCODED_N_PTS = 4096
+    HARDCODED_RADIUS = 0.3
+    HARDCODED_RANDOM_SEED = 13
     basis_points = bps.generate_random_basis(
-        n_points=n_points, radius=radius, random_seed=HARDCODED_RANDOM_SEED
-    ) + np.array([0.0, radius / 2, 0.0])  # Shift up to get less under the table
+        n_points=HARDCODED_N_PTS,
+        radius=HARDCODED_RADIUS,
+        random_seed=HARDCODED_RANDOM_SEED,
+    ) + np.array(
+        [0.0, HARDCODED_RADIUS / 2, 0.0]
+    )  # Shift up to get less under the table
     assert basis_points.shape == (
-        n_points,
+        HARDCODED_N_PTS,
         3,
-    ), f"Expected shape ({n_points}, 3), got {basis_points.shape}"
+    ), f"Expected shape ({HARDCODED_N_PTS}, 3), got {basis_points.shape}"
     return basis_points
 
 
@@ -256,15 +255,42 @@ def get_bps(
     return bps_values
 
 
-def process_single_point_cloud(pointcloud_path: pathlib.Path) -> np.ndarray:
-    point_cloud = o3d.io.read_point_cloud(str(pointcloud_path))
+def read_raw_single_point_cloud(point_cloud_path: pathlib.Path) -> np.ndarray:
+    point_cloud = o3d.io.read_point_cloud(str(point_cloud_path))
+    return np.asarray(point_cloud.points)
+
+
+def read_and_process_single_point_cloud(point_cloud_path: pathlib.Path) -> np.ndarray:
+    point_cloud = o3d.io.read_point_cloud(str(point_cloud_path))
+    return process_single_point_cloud(point_cloud)
+
+
+def process_single_point_cloud(point_cloud: o3d.geometry.PointCloud) -> np.ndarray:
     point_cloud, _ = point_cloud.remove_statistical_outlier(
         nb_neighbors=20, std_ratio=2.0
     )
     point_cloud, _ = point_cloud.remove_radius_outlier(nb_points=16, radius=0.05)
     points = np.asarray(point_cloud.points)
-    inlier_points = process_point_cloud(points, distance_threshold=0.01)
+    inlier_points = get_point_cloud_largest_connected_component(
+        points, distance_threshold=0.01
+    )
     return inlier_points
+
+
+def crop_single_point_cloud(
+    points: np.ndarray, n_pts: int = 3000
+) -> Optional[np.ndarray]:
+    input_n_pts = points.shape[0]
+    assert points.shape == (
+        input_n_pts,
+        3,
+    ), f"Expected shape ({input_n_pts}, 3), got {points.shape}"
+
+    if input_n_pts < n_pts:
+        print(f"WARNING: {input_n_pts} points is less than {n_pts}")
+        return None
+
+    return points[:n_pts]
 
 
 def main() -> None:
@@ -273,7 +299,7 @@ def main() -> None:
     print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
     print("=" * 80 + "\n")
 
-    all_point_cloud_paths = sorted(list(cfg.input_pointclouds_path.rglob("*.ply")))
+    all_point_cloud_paths = sorted(list(cfg.input_point_clouds_path.rglob("*.ply")))
     all_config_dict_paths = sorted(
         list(cfg.input_evaled_grasp_config_dicts_path.rglob("*.npy"))
     )
@@ -284,29 +310,29 @@ def main() -> None:
     print(f"Found {len(all_config_dict_paths)} config dict paths")
 
     # BPS selection (done once)
-    basis_points = get_fixed_basis_points(
-        n_points=cfg.N_BASIS_PTS, radius=cfg.BASIS_RADIUS
-    )
+    basis_points = get_fixed_basis_points()
     assert basis_points.shape == (
-        cfg.N_BASIS_PTS,
+        4096,
         3,
-    ), f"Expected shape ({cfg.N_BASIS_PTS}, 3), got {basis_points.shape}"
+    ), f"Expected shape (4096, 3), got {basis_points.shape}"
 
     # Parallel processing of point clouds
-    all_points: np.ndarray = Parallel(n_jobs=-1)(
-        delayed(process_single_point_cloud)(data_path)
+    all_points_uncropped: List[np.ndarray] = Parallel(n_jobs=-1)(
+        delayed(read_and_process_single_point_cloud)(data_path)
         for data_path in tqdm(all_point_cloud_paths, desc="Processing point clouds")
     )
 
     # Ensure all point clouds have the same number of points
-    min_n_pts = min([x.shape[0] for x in all_points])
-    all_points = np.stack([x[:min_n_pts] for x in all_points])
+    all_points_cropped = [crop_single_point_cloud(x) for x in all_points_uncropped]
+
+    all_points = np.stack([x for x in all_points_cropped if x is not None], axis=0)
     n_point_clouds = all_points.shape[0]
+    n_pts = all_points.shape[1]
     assert all_points.shape == (
         n_point_clouds,
-        min_n_pts,
+        n_pts,
         3,
-    ), f"Expected shape ({n_point_clouds}, {min_n_pts}, 3), got {all_points.shape}"
+    ), f"Expected shape ({n_point_clouds}, {n_pts}, 3), got {all_points.shape}"
 
     # BPS values per object
     bps_values = get_bps(
@@ -315,8 +341,8 @@ def main() -> None:
     )
     assert bps_values.shape == (
         n_point_clouds,
-        cfg.N_BASIS_PTS,
-    ), f"Expected shape ({n_point_clouds}, {cfg.N_BASIS_PTS}), got {bps_values.shape}"
+        4096,
+    ), f"Expected shape ({n_point_clouds}, 4096), got {bps_values.shape}"
 
     # Extract the object_code_and_scale_strs we want
     object_code_and_scale_strs = [x.parent.name for x in all_point_cloud_paths]
@@ -357,7 +383,7 @@ def main() -> None:
     with h5py.File(cfg.output_filepath, "w") as hdf5_file:
         # Just one
         basis_points_dataset = hdf5_file.create_dataset(
-            "/basis_points", shape=(cfg.N_BASIS_PTS, 3), dtype="f"
+            "/basis_points", shape=(4096, 3), dtype="f"
         )
 
         # Per object
@@ -365,7 +391,7 @@ def main() -> None:
             "/bpss",
             shape=(
                 MAX_NUM_POINT_CLOUDS,
-                cfg.N_BASIS_PTS,
+                4096,
             ),
             dtype="f",
         )

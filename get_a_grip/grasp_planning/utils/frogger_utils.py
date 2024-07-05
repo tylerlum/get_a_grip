@@ -19,6 +19,8 @@ from frogger.solvers import FroggerConfig
 from pydrake.math import RigidTransform, RotationMatrix
 from tqdm import tqdm
 
+from get_a_grip.model_training.utils.point_utils import transform_points
+
 
 @dataclass
 class FroggerArgs:
@@ -251,18 +253,6 @@ def add_transform_traces(
             name=f"{name}_z",
         )
     )
-
-
-def transform_points(points: np.ndarray, T: np.ndarray) -> np.ndarray:
-    B = points.shape[0]
-    assert points.shape == (B, 3)
-    assert T.shape == (4, 4)
-
-    points = np.hstack((points, np.ones((B, 1))))
-    assert points.shape == (B, 4)
-    points = T @ points.T
-    points = points.T[:, :3]
-    return points
 
 
 def get_kinematic_chain(model_path: pathlib.Path) -> pk.Chain:

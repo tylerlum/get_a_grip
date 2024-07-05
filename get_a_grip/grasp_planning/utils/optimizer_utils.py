@@ -98,7 +98,7 @@ def get_sorted_grasps_from_dict(
     grasp_configs = AllegroGraspConfig.from_grasp_config_dict(
         optimized_grasp_config_dict, check=check
     )
-    B = grasp_configs.batch_size
+    B = len(grasp_configs)
 
     # Look for loss or y_PGS
     if "loss" not in optimized_grasp_config_dict:
@@ -152,7 +152,7 @@ def get_sorted_grasps_from_dict(
     )
     pre_joint_angles_array = (
         sorted_grasp_configs.pre_joint_angles(
-            dist_move_finger_backward=dist_move_finger_backward
+            dist_move_finger_backwards=dist_move_finger_backward
         )
         .detach()
         .cpu()
