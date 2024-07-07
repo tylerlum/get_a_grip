@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import pathlib
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pypose as pp
@@ -433,6 +433,18 @@ class AllegroGraspConfig(torch.nn.Module):
         )
         return grasp_configs
 
+    @classmethod
+    def from_multiple_grasp_configs(
+        cls, grasp_configs: List[AllegroGraspConfig]
+    ) -> AllegroGraspConfig:
+        return cls.from_values(
+            wrist_pose=torch.cat([gc.wrist_pose for gc in grasp_configs], dim=0),
+            joint_angles=torch.cat([gc.joint_angles for gc in grasp_configs], dim=0),
+            grasp_orientations=torch.cat(
+                [gc.grasp_orientations for gc in grasp_configs], dim=0
+            ),
+        )
+
     def as_dict(self) -> Dict[str, Any]:
         grasp_config_dict = self.hand_config.as_dict()
         batch_size = grasp_config_dict["trans"].shape[0]
@@ -580,6 +592,16 @@ class AllegroGraspConfig(torch.nn.Module):
             f"Filtered less feasible grasps. {before_batch_size} -> {after_batch_size}"
         )
         return grasp_configs
+
+    def sample_random_rotations_only_around_y(self) -> AllegroGraspConfig:
+        new_grasp_configs = AllegroGraspConfig.from_grasp_config_dict(self.as_dict())
+        random_rotate_transforms = sample_random_rotate_transforms_only_around_y(
+            len(new_grasp_configs)
+        )
+        new_grasp_configs.hand_config.set_wrist_pose(
+            random_rotate_transforms @ new_grasp_configs.hand_config.wrist_pose
+        )
+        return new_grasp_configs
 
     def target_joint_angles(
         self, dist_move_finger: Optional[float] = None
@@ -800,3 +822,28 @@ def compute_grasp_orientations(
     ), f"Expected shape ({B}, {N_FINGERS}), got {grasp_orientations.lshape}"
 
     return grasp_orientations
+
+
+def sample_random_rotate_transforms_only_around_y(N: int) -> pp.LieTensor:
+    PP_MATRIX_ATOL, PP_MATRIX_RTOL = 1e-4, 1e-4
+    # Sample big rotations in tangent space of SO(3).
+    # Choose 4 * \pi as a heuristic to get pretty evenly spaced rotations.
+    # TODO: Figure out better uniform sampling on SO(3).
+    x_rotations = torch.zeros(N)
+    y_rotations = 4 * torch.pi * (2 * torch.rand(N) - 1)
+    z_rotations = torch.zeros(N)
+    xyz_rotations = torch.stack([x_rotations, y_rotations, z_rotations], dim=-1)
+    log_random_rotations = pp.so3(xyz_rotations)
+
+    # Return exponentiated rotations.
+    random_SO3_rotations = log_random_rotations.Exp()
+
+    # A bit annoying -- need to cast SO(3) -> SE(3).
+    random_rotate_transforms = pp.from_matrix(
+        random_SO3_rotations.matrix(),
+        pp.SE3_type,
+        atol=PP_MATRIX_ATOL,
+        rtol=PP_MATRIX_RTOL,
+    )
+
+    return random_rotate_transforms

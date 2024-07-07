@@ -345,8 +345,8 @@ def train(
 
     config = config
     wandb_id = generate_id()
-    if config.wandb_log and rank == 0:
-        wandb.init(project="dexdiffuser-sampler", id=wandb_id, resume="allow")
+    if config.wandb.log and rank == 0:
+        wandb.init(project=config.wandb.project, id=wandb_id, resume="allow")
 
     # datasets and dataloader
     if config.multigpu:
@@ -501,7 +501,7 @@ def train(
                 data_time=data_time,
                 train_time=train_time,
             )
-            if runner.config.wandb_log and rank == 0:
+            if runner.config.wandb.log and rank == 0:
                 wandb.log({"train_loss": train_loss, "val_loss": val_loss})
 
             if runner.config.model.ema:

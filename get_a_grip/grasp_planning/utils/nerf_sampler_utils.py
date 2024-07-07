@@ -28,7 +28,7 @@ from get_a_grip.model_training.config.nerf_densities_global_config import (
     lb_Oy,
     ub_Oy,
 )
-from get_a_grip.model_training.models.nerf_sampler import NerfSampler
+from get_a_grip.model_training.models.nerf_sampler_model import NerfSamplerModel
 from get_a_grip.model_training.utils.diffusion import Diffusion
 from get_a_grip.model_training.utils.nerf_utils import (
     get_density,
@@ -57,7 +57,7 @@ def get_optimized_grasps(
             log_path=ckpt_path.parent,
         ),
     )
-    model = NerfSampler(
+    model = NerfSamplerModel(
         global_grid_shape=(
             4,
             NERF_DENSITIES_GLOBAL_NUM_X,

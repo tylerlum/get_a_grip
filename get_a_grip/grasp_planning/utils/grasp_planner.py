@@ -1,35 +1,26 @@
 from __future__ import annotations
 
 import pathlib
+from abc import ABC, abstractmethod
 from contextlib import nullcontext
-from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
-import matplotlib.pyplot as plt
 import numpy as np
-import plotly.graph_objects as go
 import pypose as pp
 import torch
-import tyro
+from nerfstudio.cameras.rays import RaySamples
 from nerfstudio.fields.base_field import Field
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
-from tqdm import tqdm
 
-from get_a_grip import get_data_folder
-from get_a_grip.dataset_generation.utils.hand_model import HandModel
-from get_a_grip.dataset_generation.utils.pose_conversion import (
-    hand_config_np_to_pose,
-)
 from get_a_grip.grasp_planning.config.nerf_evaluator_wrapper_config import (
     NerfEvaluatorWrapperConfig,
 )
-from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
-    AllegroGraspConfig,
-)
-from get_a_grip.grasp_planning.utils.plot_utils import (
-    plot_mesh,
-    plot_nerf_densities,
+from get_a_grip.grasp_planning.utils.allegro_grasp_config import AllegroGraspConfig
+from get_a_grip.model_training.config.diffusion_config import (
+    DiffusionConfig,
+    TrainingConfig,
 )
 from get_a_grip.model_training.config.fingertip_config import (
     EvenlySpacedFingertipConfig,
@@ -44,9 +35,13 @@ from get_a_grip.model_training.config.nerf_densities_global_config import (
 from get_a_grip.model_training.config.nerf_evaluator_model_config import (
     NerfEvaluatorModelConfig,
 )
+from get_a_grip.model_training.models.bps_evaluator_model import BpsEvaluatorModel
+from get_a_grip.model_training.models.bps_sampler_model import BpsSamplerModel
 from get_a_grip.model_training.models.nerf_evaluator_model import (
     NerfEvaluatorModel,
 )
+from get_a_grip.model_training.models.nerf_sampler_model import NerfSamplerModel
+from get_a_grip.model_training.utils.diffusion import Diffusion
 from get_a_grip.model_training.utils.nerf_grasp_evaluator_batch_data import (
     BatchDataInput,
 )
@@ -63,14 +58,266 @@ from get_a_grip.model_training.utils.nerf_utils import (
 from get_a_grip.model_training.utils.point_utils import (
     transform_point,
 )
+import torch.nn as nn
 
 
-class NerfEvaluatorWrapper(torch.nn.Module):
-    """
-    Wrapper for NeRF + grasp nerf_evaluator to evaluate
-    a particular AllegroGraspConfig.
-    """
+class Sampler(ABC):
+    @abstractmethod
+    def sample(self) -> AllegroGraspConfig:
+        raise NotImplementedError
 
+    @property
+    @abstractmethod
+    def n_sample(self) -> int:
+        raise NotImplementedError
+
+
+class Evaluator(ABC):
+    @abstractmethod
+    def evaluate(self, grasp_config: AllegroGraspConfig) -> torch.Tensor:
+        """Returns losses where lower is better"""
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def top_K(self) -> int:
+        raise NotImplementedError
+
+    def get_top_K(self, grasp_config: AllegroGraspConfig) -> AllegroGraspConfig:
+        B = len(grasp_config)
+        losses = self.evaluate(grasp_config)
+
+        assert losses.shape == (
+            B,
+        ), f"Expected losses.shape == ({B},), got {losses.shape}"
+
+        sorted_idxs = torch.argsort(losses)
+        _sorted_losses = losses[sorted_idxs]
+        sorted_grasp_config = grasp_config[sorted_idxs]
+        top_K_grasp_configs = sorted_grasp_config[: self.top_K]
+        return top_K_grasp_configs
+
+
+class EvaluatorOptimizer(ABC):
+    @abstractmethod
+    def optimize(self, grasp_config: AllegroGraspConfig) -> AllegroGraspConfig:
+        raise NotImplementedError
+
+
+class GraspPlanner:
+    def __init__(
+        self,
+        sampler: Sampler,
+        evaluator: Evaluator,
+        evaluator_optimizer: EvaluatorOptimizer,
+    ) -> None:
+        self.sampler = sampler
+        self.evaluator = evaluator
+        self.evaluator_optimizer = evaluator_optimizer
+
+    def plan(self) -> AllegroGraspConfig:
+        # Sample
+        sampled_grasp_configs = self.sampler.sample()
+
+        # Sample random rotations around y
+        new_grasp_configs = AllegroGraspConfig.from_multiple_grasp_configs(
+            [sampled_grasp_configs]
+            + [
+                sampled_grasp_configs.sample_random_rotations_only_around_y()
+                for _ in range(cfg.n_random_rotations_per_grasp)
+            ]
+        )
+        assert len(new_grasp_configs) == len(sampled_grasp_configs) * (
+            1 + cfg.n_random_rotations_per_grasp
+        )
+
+        # Filter
+        if True:
+            filtered_grasp_configs = sampled_grasp_configs.filter_less_feasible(
+                fingers_forward_theta_deg=TODO,
+                palm_upwards_theta_deg=TODO,
+            )
+        else:
+            filtered_grasp_configs = sampled_grasp_configs
+
+        # Evaluate and rank
+        top_K_grasp_configs = self.evaluator.get_top_K(filtered_grasp_configs)
+
+        # Optimize
+        optimized_grasp_configs = self.evaluator_optimizer.optimize(top_K_grasp_configs)
+
+        return optimized_grasp_configs
+
+
+class BpsSampler(Sampler):
+    def __init__(self, bps_values: torch.Tensor, ckpt_path: Path) -> None:
+        # Save BPS values
+        assert bps_values.shape == (
+            4096,
+        ), f"Expected shape (4096,), got {bps_values.shape}"
+        self.bps_values = bps_values
+
+        # Load model
+        config = DiffusionConfig(
+            training=TrainingConfig(
+                log_path=ckpt_path.parent,
+            )
+        )
+        self.model = BpsSamplerModel(
+            n_pts=config.data.n_pts,
+            grasp_dim=config.data.grasp_dim,
+        )
+        self.runner = Diffusion(
+            config=config, model=self.model, load_multigpu_ckpt=True
+        )
+        self.runner.load_checkpoint(config, filename=ckpt_path.name)
+
+    @property
+    def n_sample(self) -> int:
+        return 10
+
+    def sample(self) -> AllegroGraspConfig:
+        # Repeat BPS values
+        bps_values_repeated = self.bps_values.unsqueeze(dim=0).repeat_interleave(
+            self.n_sample, dim=0
+        )
+        assert bps_values_repeated.shape == (
+            self.n_sample,
+            4096,
+        ), f"bps_values_repeated.shape = {bps_values_repeated.shape}"
+
+        # Sample
+        xT = torch.randn(self.n_sample, self.model.grasp_dim, device=self.runner.device)
+        x = self.runner.sample(xT=xT, cond=bps_values_repeated)
+        grasp_configs = AllegroGraspConfig.from_grasp(grasp=x)
+        return grasp_configs
+
+
+class NerfSampler(Sampler):
+    def __init__(
+        self, nerf_densities_global_with_coords: torch.Tensor, ckpt_path: Path
+    ) -> None:
+        assert (
+            nerf_densities_global_with_coords.shape
+            == (
+                4,
+                NERF_DENSITIES_GLOBAL_NUM_X,
+                NERF_DENSITIES_GLOBAL_NUM_Y,
+                NERF_DENSITIES_GLOBAL_NUM_Z,
+            )
+        ), f"Expected shape (4, {NERF_DENSITIES_GLOBAL_NUM_X}, {NERF_DENSITIES_GLOBAL_NUM_Y}, {NERF_DENSITIES_GLOBAL_NUM_Z}), got {nerf_densities_global_with_coords.shape}"
+        self.nerf_densities_global_with_coords = nerf_densities_global_with_coords
+
+        # Load model
+        config = DiffusionConfig(
+            training=TrainingConfig(
+                log_path=ckpt_path.parent,
+            ),
+        )
+        self.model = NerfSamplerModel(
+            global_grid_shape=(
+                4,
+                NERF_DENSITIES_GLOBAL_NUM_X,
+                NERF_DENSITIES_GLOBAL_NUM_Y,
+                NERF_DENSITIES_GLOBAL_NUM_Z,
+            ),
+            grasp_dim=config.data.grasp_dim,
+        )
+        self.model._HACK_MODE_FOR_PERFORMANCE = True  # Big hack to speed up from sampling wasting dumb compute since it has the same cnn each time
+
+        self.runner = Diffusion(
+            config=config, model=self.model, load_multigpu_ckpt=True
+        )
+        self.runner.load_checkpoint(config, filename=ckpt_path.name)
+
+    @property
+    def n_sample(self) -> int:
+        return 10
+
+    def sample(self) -> AllegroGraspConfig:
+        # Repeat NeRF values
+        nerf_densities_global_with_coords_repeated = (
+            self.nerf_densities_global_with_coords.unsqueeze(0).repeat(
+                self.n_sample, 1, 1, 1, 1
+            )
+        )
+
+        assert (
+            nerf_densities_global_with_coords_repeated.shape
+            == (
+                self.n_sample,
+                4,
+                NERF_DENSITIES_GLOBAL_NUM_X,
+                NERF_DENSITIES_GLOBAL_NUM_Y,
+                NERF_DENSITIES_GLOBAL_NUM_Z,
+            )
+        ), f"Expected shape ({self.n_sample}, 4, {NERF_DENSITIES_GLOBAL_NUM_X}, {NERF_DENSITIES_GLOBAL_NUM_Y}, {NERF_DENSITIES_GLOBAL_NUM_Z}), got {nerf_densities_global_with_coords_repeated.shape}"
+
+        # Sample
+        xT = torch.randn(self.n_sample, self.model.grasp_dim, device=self.runner.device)
+        x = self.runner.sample(xT=xT, cond=nerf_densities_global_with_coords_repeated)
+        grasp_configs = AllegroGraspConfig.from_grasp(grasp=x)
+        return grasp_configs
+
+
+class NoEvaluator(Evaluator):
+    def evaluate(self, grasp_config: AllegroGraspConfig) -> torch.Tensor:
+        return torch.linspace(0, 0.001, len(grasp_config))
+
+    @property
+    def top_K(self) -> int:
+        return 5
+
+
+class BpsEvaluator(Evaluator):
+    def __init__(self, bps_values: torch.Tensor, ckpt_path: Path) -> None:
+        # Save BPS values
+        assert bps_values.shape == (
+            4096,
+        ), f"Expected shape (4096,), got {bps_values.shape}"
+        self.bps_values = bps_values
+
+        self.bps_evaluator = BpsEvaluatorModel(
+            in_grasp=3 + 6 + 16 + 4 * 3, in_bps=4096
+        ).to(bps_values.device)
+        self.bps_evaluator.eval()
+        self.bps_evaluator.load_state_dict(
+            torch.load(ckpt_path, map_location=bps_values.device)
+        )
+
+    def evaluate(self, grasp_config: AllegroGraspConfig) -> torch.Tensor:
+        B = len(grasp_config)
+
+        # Repeat BPS values
+        bps_values_repeated = self.bps_values.unsqueeze(dim=0).repeat_interleave(
+            B, dim=0
+        )
+        assert bps_values_repeated.shape == (
+            B,
+            4096,
+        ), f"bps_values_repeated.shape = {bps_values_repeated.shape}"
+
+        # Evaluate
+        g_O = grasp_config.as_grasp()
+        assert g_O.shape == (B, 3 + 6 + 16 + 4 * 3)
+
+        f_O = bps_values_repeated[:B]
+        assert f_O.shape == (B, 4096)
+
+        success_preds = self.bps_evaluator(f_O=f_O, g_O=g_O)[:, -1]
+        assert success_preds.shape == (
+            B,
+        ), f"success_preds.shape = {success_preds.shape}, expected ({B},)"
+
+        losses = 1 - success_preds
+        return losses
+
+    @property
+    def top_K(self) -> int:
+        return 5
+
+
+class NerfEvaluator(nn.Module, Evaluator):
     def __init__(
         self,
         nerf_field: Field,
@@ -85,10 +332,7 @@ class NerfEvaluatorWrapper(torch.nn.Module):
         self.X_N_Oy = X_N_Oy
         self.ray_origins_finger_frame = get_ray_origins_finger_frame(fingertip_config)
 
-    def forward(
-        self,
-        grasp_config: AllegroGraspConfig,
-    ) -> torch.Tensor:
+    def forward(self, grasp_config: AllegroGraspConfig) -> torch.Tensor:
         ray_samples = self.compute_ray_samples(grasp_config)
 
         # Query NeRF at RaySamples.
@@ -140,10 +384,13 @@ class NerfEvaluatorWrapper(torch.nn.Module):
         # Pass grasp transforms, densities into nerf_evaluator.
         return self.nerf_evaluator_model.get_failure_probability(batch_data_input)
 
+    def evaluate(self, grasp_config: AllegroGraspConfig) -> torch.Tensor:
+        return self(grasp_config)
+
     def compute_ray_samples(
         self,
         grasp_config: AllegroGraspConfig,
-    ) -> torch.Tensor:
+    ) -> RaySamples:
         # Let Oy be object yup frame (centroid of object)
         # Let N be nerf frame (where the nerf is defined)
         # For NeRFs trained from sim data, Oy and N are the same.
@@ -200,151 +447,12 @@ class NerfEvaluatorWrapper(torch.nn.Module):
         ]  # Shape [B, 4, n_x, n_y, n_z]
         return densities
 
-    def get_failure_probability(
-        self,
-        grasp_config: AllegroGraspConfig,
-    ) -> torch.Tensor:
-        return self(grasp_config)
-
-    def DEBUG_PLOT(
-        self,
-        grasp_config: AllegroGraspConfig,
-    ) -> None:
-        # TODO: Clean this up a lot
-        # DEBUG PLOT
-        ray_samples = self.compute_ray_samples(grasp_config)
-
-        # Query NeRF at RaySamples.
-        densities = self.compute_nerf_densities(
-            ray_samples,
-        )
-        assert densities.shape == (
-            len(grasp_config),
-            4,
-            self.fingertip_config.num_pts_x,
-            self.fingertip_config.num_pts_y,
-            self.fingertip_config.num_pts_z,
-        )
-
-        # Query NeRF in grid
-        # BRITTLE: Require that the nerf_evaluator_model has the word "Global" in it if needed
-        need_to_query_global = (
-            "global" in self.nerf_evaluator_model.__class__.__name__.lower()
-        )
-        if need_to_query_global:
-            lb_N = transform_point(T=self.X_N_Oy, point=lb_Oy)
-            ub_N = transform_point(T=self.X_N_Oy, point=ub_Oy)
-            nerf_densities_global, query_points_global_N = get_densities_in_grid(
-                field=self.nerf_field,
-                lb=lb_N,
-                ub=ub_N,
-                num_pts_x=NERF_DENSITIES_GLOBAL_NUM_X,
-                num_pts_y=NERF_DENSITIES_GLOBAL_NUM_Y,
-                num_pts_z=NERF_DENSITIES_GLOBAL_NUM_Z,
-            )
-            nerf_densities_global = (
-                torch.from_numpy(nerf_densities_global)
-                .float()[None, ...]
-                .repeat_interleave(len(grasp_config), dim=0)
-            )
-        else:
-            nerf_densities_global, query_points_global_N = None, None
-
-        from pathlib import Path
-
-        import trimesh
-
-        if Path("/tmp/mesh_viz_object.obj").exists():
-            mesh = trimesh.load("/tmp/mesh_viz_object.obj")
-        else:
-            mesh = None
-
-        # Do not need this, just for debugging
-        query_points_global_N = (
-            torch.from_numpy(query_points_global_N)
-            .float()[None, ...]
-            .repeat_interleave(len(grasp_config), dim=0)
-        )
-        all_query_points = ray_samples.frustums.get_positions()
-
-        for batch_idx in range(2):
-            fig = go.Figure()
-            N_FINGERS = 4
-            for i in range(N_FINGERS):
-                plot_nerf_densities(
-                    fig=fig,
-                    densities=densities[batch_idx, i].reshape(-1),
-                    query_points=all_query_points[batch_idx, i].reshape(-1, 3),
-                    name=f"finger_{i}",
-                    opacity=0.2,
-                )
-            if need_to_query_global and nerf_densities_global is not None:
-                nerf_densities_global_flattened = nerf_densities_global[
-                    batch_idx
-                ].reshape(-1)
-                query_points_global_N_flattened = query_points_global_N[
-                    batch_idx
-                ].reshape(-1, 3)
-                plot_nerf_densities(
-                    fig=fig,
-                    densities=nerf_densities_global_flattened[
-                        nerf_densities_global_flattened > 15
-                    ],
-                    query_points=query_points_global_N_flattened[
-                        nerf_densities_global_flattened > 15
-                    ],
-                    name="global",
-                )
-
-            if mesh is not None:
-                plot_mesh(fig=fig, mesh=mesh)
-
-            wrist_trans_array = (
-                grasp_config.wrist_pose.translation().detach().cpu().numpy()
-            )
-            wrist_rot_array = (
-                grasp_config.wrist_pose.rotation().matrix().detach().cpu().numpy()
-            )
-            joint_angles_array = grasp_config.joint_angles.detach().cpu().numpy()
-
-            # Put into transforms X_Oy_H_array
-            B = len(grasp_config)
-            X_Oy_H_array = np.repeat(np.eye(4)[None, ...], B, axis=0)
-            assert X_Oy_H_array.shape == (B, 4, 4)
-            X_Oy_H_array[:, :3, :3] = wrist_rot_array
-            X_Oy_H_array[:, :3, 3] = wrist_trans_array
-
-            X_N_H_array = np.repeat(np.eye(4)[None, ...], B, axis=0)
-            for i in range(B):
-                X_N_H_array[i] = self.X_N_Oy @ X_Oy_H_array[i]
-
-            device = "cuda"
-            hand_model = HandModel(device=device)
-
-            # Compute pregrasp and target hand poses
-            trans_array = X_N_H_array[:, :3, 3]
-            rot_array = X_N_H_array[:, :3, :3]
-
-            pregrasp_hand_pose = hand_config_np_to_pose(
-                trans_array, rot_array, joint_angles_array
-            ).to(device)
-
-            # Get plotly data
-            hand_model.set_parameters(pregrasp_hand_pose)
-            pregrasp_plot_data = hand_model.get_plotly_data(i=batch_idx, opacity=1.0)
-
-            for x in pregrasp_plot_data:
-                fig.add_trace(x)
-            # Add title with idx
-            fig.update_layout(title_text=f"Batch idx {batch_idx}")
-            fig.show()
-
     @classmethod
     def from_config(
         cls,
         nerf_evaluator_wrapper_config: NerfEvaluatorWrapperConfig,
         console: Optional[Console] = None,
-    ) -> NerfEvaluatorWrapper:
+    ) -> NerfEvaluator:
         assert nerf_evaluator_wrapper_config.X_N_Oy is not None
         return cls.from_configs(
             nerf_config=nerf_evaluator_wrapper_config.nerf_config,
@@ -362,7 +470,7 @@ class NerfEvaluatorWrapper(torch.nn.Module):
         X_N_Oy: np.ndarray,
         nerf_evaluator_checkpoint: int = -1,
         console: Optional[Console] = None,
-    ) -> NerfEvaluatorWrapper:
+    ) -> NerfEvaluator:
         # Load nerf
         with (
             Progress(
@@ -398,6 +506,10 @@ class NerfEvaluatorWrapper(torch.nn.Module):
             nerf_evaluator_config.nerfdata_config.fingertip_config,
             X_N_Oy,
         )
+
+    @property
+    def top_K(self) -> int:
+        return 5
 
 
 def load_nerf_evaluator(
@@ -455,91 +567,3 @@ def load_nerf_evaluator(
             progress.update(task, advance=1)
 
     return nerf_evaluator
-
-
-@dataclass
-class NerfEvaluatorWrapperCmdLineArgs:
-    nerf_evaluator_wrapper: NerfEvaluatorWrapperConfig = field(
-        default_factory=NerfEvaluatorWrapperConfig
-    )
-    grasp_config_dict_path: pathlib.Path = (
-        get_data_folder()
-        / "NEW_DATASET/final_evaled_grasp_config_dicts_train/core-bottle-11fc9827d6b467467d3aa3bae1f7b494_0_0726.npy"
-    )
-    max_num_grasps: Optional[int] = None
-    batch_size: int = 32
-
-
-def main(cfg: NerfEvaluatorWrapperCmdLineArgs):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    grasp_config_dict = np.load(cfg.grasp_config_dict_path, allow_pickle=True).item()
-
-    if cfg.max_num_grasps is not None:
-        print(f"Limiting number of grasps to {cfg.max_num_grasps}")
-        for key in grasp_config_dict.keys():
-            grasp_config_dict[key] = grasp_config_dict[key][: cfg.max_num_grasps]
-
-    grasp_config = AllegroGraspConfig.from_grasp_config_dict(grasp_config_dict)
-
-    # Create grasp metric
-    nerf_evaluator_wrapper = NerfEvaluatorWrapper.from_config(
-        cfg.nerf_evaluator_wrapper,
-    ).to(device)
-    nerf_evaluator_wrapper = nerf_evaluator_wrapper.to(device)
-    nerf_evaluator_wrapper.eval()
-
-    # Evaluate grasp
-    with torch.no_grad():
-        predicted_pass_prob_list = []
-        n_batches = len(grasp_config) // cfg.batch_size
-        for batch_i in tqdm(range(n_batches)):
-            batch_grasp_config = grasp_config[
-                batch_i * cfg.batch_size : (batch_i + 1) * cfg.batch_size
-            ].to(device)
-            predicted_failure_prob = nerf_evaluator_wrapper.get_failure_probability(
-                batch_grasp_config
-            )
-            predicted_pass_prob = 1 - predicted_failure_prob
-            predicted_pass_prob_list += (
-                predicted_pass_prob.detach().cpu().numpy().tolist()
-            )
-        if n_batches * cfg.batch_size < len(grasp_config):
-            batch_grasp_config = grasp_config[n_batches * cfg.batch_size :].to(device)
-            predicted_failure_prob = nerf_evaluator_wrapper.get_failure_probability(
-                batch_grasp_config
-            )
-            predicted_pass_prob = 1 - predicted_failure_prob
-            predicted_pass_prob_list += (
-                predicted_pass_prob.detach().cpu().numpy().tolist()
-            )
-    print(f"Grasp predicted_pass_prob_list: {predicted_pass_prob_list}")
-
-    # Ensure grasp_config was not modified
-    output_grasp_config_dict = grasp_config.as_dict()
-    assert output_grasp_config_dict.keys()
-    for key, val in output_grasp_config_dict.items():
-        assert np.allclose(
-            val, grasp_config_dict[key], atol=1e-5, rtol=1e-5
-        ), f"Key {key} was modified!"
-
-    # Compare to ground truth
-    y_PGS = grasp_config_dict["y_PGS"]
-    print(f"Passed eval: {y_PGS}")
-
-    # Plot predicted vs. ground truth
-    plt.scatter(y_PGS, predicted_pass_prob_list, label="Predicted")
-    plt.plot([0, 1], [0, 1], c="r", label="Ground truth")
-    plt.xlabel("Ground truth")
-    plt.ylabel("Predicted")
-    plt.title(
-        f"Grasp metric: {cfg.nerf_evaluator_wrapper.nerf_evaluator_config.name} on {cfg.nerf_evaluator_wrapper.object_name}"
-    )
-    plt.legend()
-    plt.grid()
-    plt.tight_layout()
-    plt.show()
-
-
-if __name__ == "__main__":
-    cfg = tyro.cli(NerfEvaluatorWrapperCmdLineArgs)
-    main(cfg)

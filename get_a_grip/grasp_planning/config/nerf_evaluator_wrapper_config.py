@@ -6,11 +6,11 @@ import numpy as np
 import tyro
 
 from get_a_grip import get_data_folder
-from get_a_grip.model_training.config.nerf_evaluator_config import (
+from get_a_grip.model_training.config.nerf_evaluator_model_config import (
     DEFAULTS_DICT as NERF_EVALUATOR_DEFAULTS_DICT,
 )
-from get_a_grip.model_training.config.nerf_evaluator_config import (
-    NerfEvaluatorConfig,
+from get_a_grip.model_training.config.nerf_evaluator_model_config import (
+    NerfEvaluatorModelConfig,
 )
 
 
@@ -18,7 +18,7 @@ from get_a_grip.model_training.config.nerf_evaluator_config import (
 class NerfEvaluatorWrapperConfig:
     """Top-level config for creating a grasp metric."""
 
-    nerf_evaluator_config: NerfEvaluatorConfig = field(
+    nerf_evaluator_config: NerfEvaluatorModelConfig = field(
         default_factory=lambda: NERF_EVALUATOR_DEFAULTS_DICT["cnn-3d-xyz-global-cnn"]
     )
     nerf_evaluator_config_path: Optional[pathlib.Path] = (
