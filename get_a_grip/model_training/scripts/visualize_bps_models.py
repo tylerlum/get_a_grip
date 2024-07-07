@@ -47,7 +47,7 @@ from get_a_grip.model_training.utils.plot_utils import (
 @dataclass
 class VisualizeBpsModelsConfig:
     sampler_ckpt_path: pathlib.Path = (
-        get_data_folder() / "logs/bps_grasp_sampler/20240705003721/ckpt_100.pth"
+        get_data_folder() / "logs/bps_sampler_model/20240705003721/ckpt_100.pth"
     )
     evaluator_ckpt_path: pathlib.Path = (
         get_data_folder()

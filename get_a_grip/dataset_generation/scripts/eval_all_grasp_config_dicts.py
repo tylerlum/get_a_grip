@@ -3,7 +3,6 @@ from __future__ import annotations
 import multiprocessing
 import pathlib
 import random
-import subprocess
 from dataclasses import dataclass, field
 from functools import partial
 from typing import List, Optional
@@ -12,7 +11,14 @@ import tyro
 from tqdm import tqdm
 
 from get_a_grip import get_data_folder
+from get_a_grip.dataset_generation.scripts.eval_grasp_config_dict import (
+    EvalGraspConfigDictArgs,
+    eval_grasp_config_dict,
+)
 from get_a_grip.dataset_generation.utils.isaac_validator import ValidationType
+from get_a_grip.dataset_generation.utils.process_utils import (
+    get_object_codes_and_scales_to_process,
+)
 
 
 @dataclass
@@ -30,9 +36,7 @@ class EvalAllGraspConfigDictsArgs:
     max_grasps_per_batch: int = 5000
     move_fingers_back_at_init: bool = False
 
-    debug_index: Optional[int] = None
-    use_gui: bool = False
-    use_cpu: bool = False  # NOTE: Tyler has had big discrepancy between using GPU vs CPU, hypothesize that CPU is safer
+    use_cpu: bool = False
     randomize_order_seed: Optional[int] = None
     mid_optimization_steps: List[int] = field(default_factory=list)
     use_multiprocess: bool = True
@@ -79,46 +83,27 @@ def get_object_code_and_scale_strs_to_process(
     return list(only_in_input)
 
 
-def print_and_run_command_safe(
+def run_eval_grasp_config_dict(
     object_code_and_scale_str: str,
     args: EvalAllGraspConfigDictsArgs,
-    script_to_run: pathlib.Path,
     input_grasp_config_dicts_path: pathlib.Path,
     output_evaled_grasp_config_dicts_path: pathlib.Path,
 ):
-    command = " ".join(
-        [
-            f"CUDA_VISIBLE_DEVICES={args.gpu}",
-            f"python {script_to_run}",
-            f"--validation_type {args.validation_type.name}",
-            f"--gpu {args.gpu}",
-            f"--meshdata_root_path {args.meshdata_root_path}",
-            f"--input_grasp_config_dicts_path {input_grasp_config_dicts_path}",
-            f"--output_evaled_grasp_config_dicts_path {output_evaled_grasp_config_dicts_path}",
-            f"--object_code_and_scale_str {object_code_and_scale_str}",
-            f"--max_grasps_per_batch {args.max_grasps_per_batch}",
-            (
-                f"--num_random_pose_noise_samples_per_grasp {args.num_random_pose_noise_samples_per_grasp}"
-                if args.num_random_pose_noise_samples_per_grasp is not None
-                else ""
-            ),
-            "--move_fingers_back_at_init" if args.move_fingers_back_at_init else "",
-        ]
-    )
-
-    if args.debug_index is not None:
-        command += f" --debug_index {args.debug_index}"
-
-    if args.use_gui:
-        command += " --use_gui"
-
-    if args.use_cpu:
-        command += " --use_cpu"
-
-    print(f"Running command: {command}")
-
     try:
-        subprocess.run(command, shell=True, check=True)
+        eval_grasp_config_dict(
+            EvalGraspConfigDictArgs(
+                meshdata_root_path=args.meshdata_root_path,
+                input_grasp_config_dicts_path=input_grasp_config_dicts_path,
+                output_evaled_grasp_config_dicts_path=output_evaled_grasp_config_dicts_path,
+                object_code_and_scale_str=object_code_and_scale_str,
+                validation_type=args.validation_type,
+                num_random_pose_noise_samples_per_grasp=args.num_random_pose_noise_samples_per_grasp,
+                gpu=args.gpu,
+                max_grasps_per_batch=args.max_grasps_per_batch,
+                move_fingers_back_at_init=args.move_fingers_back_at_init,
+                use_cpu=args.use_cpu,
+            )
+        )
     except Exception as e:
         print(f"Exception: {e}")
         print(f"Skipping {object_code_and_scale_str} and continuing")
@@ -129,15 +114,17 @@ def eval_all_grasp_config_dicts(
     input_grasp_config_dicts_path: pathlib.Path,
     output_evaled_grasp_config_dicts_path: pathlib.Path,
 ) -> None:
-    # Check if script exists
-    this_directory = pathlib.Path(__file__).parent
-    script_to_run = this_directory / "eval_grasp_config_dict.py"
-    assert script_to_run.exists(), f"Script {script_to_run} does not exist"
-
-    input_object_code_and_scale_strs = get_object_code_and_scale_strs_to_process(
-        input_grasp_config_dicts_path=input_grasp_config_dicts_path,
-        output_evaled_grasp_config_dicts_path=output_evaled_grasp_config_dicts_path,
+    # Read in object codes and scales
+    input_object_code_and_scale_strs_from_folder = [
+        path.stem for path in list(input_grasp_config_dicts_path.glob("*.npy"))
+    ]
+    input_object_code_and_scale_strs = get_object_codes_and_scales_to_process(
+        input_object_code_and_scale_strs=input_object_code_and_scale_strs_from_folder,
+        meshdata_root_path=args.meshdata_root_path,
+        output_folder_path=output_evaled_grasp_config_dicts_path,
+        no_continue=False,
     )
+
     if args.randomize_order_seed is not None:
         random.Random(args.randomize_order_seed).shuffle(
             input_object_code_and_scale_strs
@@ -147,9 +134,8 @@ def eval_all_grasp_config_dicts(
     print(f"First 10 object codes: {input_object_code_and_scale_strs[:10]}")
 
     map_fn = partial(
-        print_and_run_command_safe,
+        run_eval_grasp_config_dict,
         args=args,
-        script_to_run=script_to_run,
         input_grasp_config_dicts_path=input_grasp_config_dicts_path,
         output_evaled_grasp_config_dicts_path=output_evaled_grasp_config_dicts_path,
     )
@@ -165,10 +151,9 @@ def eval_all_grasp_config_dicts(
         for object_code_and_scale_str in pbar:
             pbar.set_description(f"Processing {object_code_and_scale_str}")
 
-            print_and_run_command_safe(
+            run_eval_grasp_config_dict(
                 object_code_and_scale_str=object_code_and_scale_str,
                 args=args,
-                script_to_run=script_to_run,
                 input_grasp_config_dicts_path=input_grasp_config_dicts_path,
                 output_evaled_grasp_config_dicts_path=output_evaled_grasp_config_dicts_path,
             )

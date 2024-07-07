@@ -17,8 +17,13 @@ import tyro
 from clean_loop_timer import LoopTimer
 
 from get_a_grip import get_repo_folder
-from get_a_grip.model_training.config.nerfdata_config import (
-    GridNerfDataConfig,
+from get_a_grip.model_training.config.nerf_densities_global_config import (
+    NERF_DENSITIES_GLOBAL_NUM_X,
+    NERF_DENSITIES_GLOBAL_NUM_Y,
+    NERF_DENSITIES_GLOBAL_NUM_Z,
+)
+from get_a_grip.model_training.config.nerf_grasp_dataset_config import (
+    NerfGraspDatasetConfig,
 )
 from get_a_grip.model_training.scripts.create_nerf_grasp_dataset import (
     compute_X_N_Oy,
@@ -46,7 +51,7 @@ os.chdir(get_repo_folder())
 
 # %%
 @dataclass
-class VisualizeNerfGraspDataConfig(GridNerfDataConfig):
+class VisualizeNerfGraspDatasetConfig(NerfGraspDatasetConfig):
     object_idx: int = 0
     grasp_idx: int = 0
 
@@ -91,7 +96,7 @@ else:
 
 # %%
 
-cfg = tyro.cli(VisualizeNerfGraspDataConfig, args=arguments)
+cfg = tyro.cli(VisualizeNerfGraspDatasetConfig, args=arguments)
 print("=" * 80)
 print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
 print("=" * 80 + "\n")
@@ -102,7 +107,7 @@ assert (
     cfg.input_nerfcheckpoints_path.exists()
 ), f"{cfg.input_nerfcheckpoints_path} does not exist"
 nerf_configs = get_nerf_configs(
-    nerfcheckpoints_path=str(cfg.input_nerfcheckpoints_path),
+    nerfcheckpoints_path=cfg.input_nerfcheckpoints_path,
 )
 assert (
     len(nerf_configs) > 0
@@ -155,12 +160,14 @@ loop_timer = LoopTimer()
     loop_timer=loop_timer,
 )
 
+# %%
 mesh_Oy = create_mesh(object_code=object_code, object_scale=object_scale)
 X_N_Oy = compute_X_N_Oy(mesh_Oy=mesh_Oy)
 assert np.allclose(X_N_Oy[:3, :3], np.eye(3)), f"X_N_Oy = {X_N_Oy}"
 mesh_N = mesh_Oy.copy()
 mesh_N.apply_transform(X_N_Oy)
 
+# %%
 grasp_frame_transforms = (
     grasp_frame_transforms.matrix().cpu().detach().numpy()[cfg.grasp_idx]
 )
@@ -173,6 +180,30 @@ assert nerf_densities.shape == (
     cfg.fingertip_config.num_pts_z,
 )
 
+query_points_N = query_points_N.detach().cpu().numpy()[cfg.grasp_idx]
+assert query_points_N.shape == (
+    cfg.fingertip_config.n_fingers,
+    cfg.fingertip_config.num_pts_x,
+    cfg.fingertip_config.num_pts_y,
+    cfg.fingertip_config.num_pts_z,
+    3,
+)
+
+nerf_densities_global = nerf_densities_global.detach().cpu().numpy()
+assert nerf_densities_global.shape == (
+    NERF_DENSITIES_GLOBAL_NUM_X,
+    NERF_DENSITIES_GLOBAL_NUM_Y,
+    NERF_DENSITIES_GLOBAL_NUM_Z,
+)
+
+query_points_global_N = query_points_global_N.detach().cpu().numpy()
+assert query_points_global_N.shape == (
+    NERF_DENSITIES_GLOBAL_NUM_X,
+    NERF_DENSITIES_GLOBAL_NUM_Y,
+    NERF_DENSITIES_GLOBAL_NUM_Z,
+    3,
+)
+
 # %%
 # Compute alpha values
 delta = (
@@ -182,13 +213,11 @@ nerf_alphas = [1 - np.exp(-delta * dd) for dd in nerf_densities]
 
 # %%
 # Plot 1
-query_points = np.stack(
-    [qq.reshape(-1, 3) for qq in query_points_N[cfg.grasp_idx]], axis=0
-)
+query_points_N = np.stack([qq.reshape(-1, 3) for qq in query_points_N], axis=0)
 query_points_colors = np.stack([x.reshape(-1) for x in nerf_alphas], axis=0)
 fig = plot_mesh_and_query_points(
     mesh=mesh_N,
-    all_query_points=query_points,
+    all_query_points=query_points_N,
     all_query_points_colors=np.stack([x.reshape(-1) for x in nerf_alphas], axis=0),
     num_fingers=cfg.fingertip_config.n_fingers,
     title=f"Mesh and Query Points, Success: {y_PGSs[cfg.grasp_idx]}",

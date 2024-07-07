@@ -29,9 +29,9 @@ class GenerateNerfDataOneObjectOneScaleArgs:
     debug_with_gui: bool = False
 
 
-def main() -> None:
-    args = tyro.cli(GenerateNerfDataOneObjectOneScaleArgs)
-
+def generate_nerfdata_one_object_one_scale(
+    args: GenerateNerfDataOneObjectOneScaleArgs,
+) -> None:
     set_seed(42)
     os.environ.pop("CUDA_VISIBLE_DEVICES")
 
@@ -62,7 +62,7 @@ def main() -> None:
         )
 
     with loop_timer.add_section_timer("add env"):
-        sim.add_env_nerf_data_collection(
+        sim.add_env_nerfdata_collection(
             obj_scale=args.object_scale,
         )
 
@@ -102,6 +102,12 @@ def main() -> None:
         sim.destroy()
 
     loop_timer.pretty_print_section_times()
+    return
+
+
+def main() -> None:
+    args = tyro.cli(GenerateNerfDataOneObjectOneScaleArgs)
+    generate_nerfdata_one_object_one_scale(args)
 
 
 if __name__ == "__main__":

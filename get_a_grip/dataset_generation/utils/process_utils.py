@@ -8,21 +8,11 @@ from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
 
 
 def get_object_codes_and_scales_to_process(
-    input_object_code_and_scales_txt_path: pathlib.Path,
+    input_object_code_and_scale_strs: List[str],
     meshdata_root_path: pathlib.Path,
     output_folder_path: pathlib.Path,
     no_continue: bool,
 ) -> List[str]:
-    if not input_object_code_and_scales_txt_path.exists():
-        raise ValueError(
-            f"input_object_code_and_scales_txt_path {input_object_code_and_scales_txt_path} doesn't exist"
-        )
-
-    # Read in object codes and scales
-    input_object_code_and_scale_strs = []
-    with open(input_object_code_and_scales_txt_path, "r") as f:
-        input_object_code_and_scale_strs = f.read().splitlines()
-
     print(
         f"First 10 in input_object_code_and_scale_strs: {input_object_code_and_scale_strs[:10]}"
     )

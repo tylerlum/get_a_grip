@@ -60,9 +60,9 @@ def sdf_to_mesh(
 def nerf_to_mesh(
     field,
     level: float,
+    lb: np.ndarray,
+    ub: np.ndarray,
     npts: int = 31,
-    lb: np.ndarray = -np.ones(3),
-    ub: np.ndarray = np.ones(3),
     scale: float = 1.0,
     min_len: Optional[float] = 200,  # Default 200 to get rid of floaters
     flip_faces: bool = True,
@@ -79,10 +79,10 @@ def nerf_to_mesh(
         The density level to treat as the 0-level set.
     npts : int, default=31
         Number of points used to grid space in each dimension for marching cubes.
-    lb : np.ndarray, default=-np.ones(3)
-        Lower bound for marching cubes.
-    ub : np.ndarray, default=np.ones(3)
-        Upper bound for marching cubes.
+    lb : np.ndarray
+        Lower bound for marching cubes, shape (3,).
+    ub : np.ndarray
+        Upper bound for marching cubes, shape (3,).
     scale : float, default=1.0
         The scale to apply to the mesh.
     min_len : Optional[float], default=None
@@ -159,14 +159,14 @@ def nerf_to_mesh(
     return mesh
 
 
-if __name__ == "__main__":
+def main() -> None:
     NERFCHECKPOINTS_PATH = Path("data/2023-09-11_20-52-40/nerfcheckpoints")
     IDX = 0
     RADIUS = 0.1
     LEVEL = 10.0
 
     nerf_configs = get_nerf_configs(
-        nerfcheckpoints_path=str(NERFCHECKPOINTS_PATH),
+        nerfcheckpoints_path=NERFCHECKPOINTS_PATH,
     )
     nerf_config = nerf_configs[IDX]
     field = load_nerf_field(nerf_config)
@@ -199,3 +199,7 @@ if __name__ == "__main__":
         ub=ub,
         save_path=Path(f"./{nerf_config.stem}.obj"),
     )
+
+
+if __name__ == "__main__":
+    main()

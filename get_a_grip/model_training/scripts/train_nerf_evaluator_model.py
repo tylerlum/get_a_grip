@@ -55,10 +55,9 @@ from get_a_grip.model_training.config.nerf_evaluator_model_config import (
     PlotConfig,
     TaskType,
     TrainingConfig,
-    UnionNerfEvaluatorModelConfig,
 )
 from get_a_grip.model_training.models.nerf_evaluator_model import NerfEvaluatorModel
-from get_a_grip.model_training.utils.nerf_grasp_evaluator_batch_data import (
+from get_a_grip.model_training.utils.nerf_evaluator_model_batch_data import (
     BatchData,
     BatchDataInput,
     BatchDataOutput,
@@ -137,10 +136,10 @@ def setup_checkpoint_workspace(
 def create_grid_dataset(
     input_hdf5_filepath: pathlib.Path, cfg: NerfEvaluatorModelConfig
 ) -> NerfGraspEvalDataset:
-    assert cfg.nerfdata_config.fingertip_config is not None
+    assert cfg.nerf_grasp_dataset_config.fingertip_config is not None
     return NerfGraspEvalDataset(
         input_hdf5_filepath=input_hdf5_filepath,
-        fingertip_config=cfg.nerfdata_config.fingertip_config,
+        fingertip_config=cfg.nerf_grasp_dataset_config.fingertip_config,
         max_num_data_points=cfg.data.max_num_data_points,
     )
 
@@ -203,16 +202,14 @@ def create_train_val_test_dataloader(
 ) -> Tuple[DataLoader, DataLoader, DataLoader]:
     train_collate_fn = partial(
         custom_collate_fn,
-        fingertip_config=cfg.nerfdata_config.fingertip_config,
+        fingertip_config=cfg.nerf_grasp_dataset_config.fingertip_config,
         use_random_rotations=cfg.data.use_random_rotations,
         debug_shuffle_labels=cfg.data.debug_shuffle_labels,
-        nerf_density_threshold_value=cfg.data.nerf_density_threshold_value,
     )
     val_test_collate_fn = partial(
         custom_collate_fn,
         use_random_rotations=False,
-        fingertip_config=cfg.nerfdata_config.fingertip_config,
-        nerf_density_threshold_value=cfg.data.nerf_density_threshold_value,
+        fingertip_config=cfg.nerf_grasp_dataset_config.fingertip_config,
     )  # Run test over actual test transforms.
 
     train_loader = DataLoader(
@@ -247,7 +244,6 @@ def custom_collate_fn(
     fingertip_config: EvenlySpacedFingertipConfig,
     use_random_rotations: bool = True,
     debug_shuffle_labels: bool = False,
-    nerf_density_threshold_value: Optional[float] = None,
 ) -> BatchData:
     batch = torch.utils.data.dataloader.default_collate(batch)
     (
@@ -288,7 +284,6 @@ def custom_collate_fn(
             grasp_transforms=grasp_transforms,
             random_rotate_transform=random_rotate_transform,
             fingertip_config=fingertip_config,
-            nerf_density_threshold_value=nerf_density_threshold_value,
             grasp_configs=grasp_configs,
             nerf_densities_global=nerf_densities_global,
         ),
@@ -548,15 +543,13 @@ def create_and_optionally_load(
     Optional[torch.optim.lr_scheduler._LRScheduler],
     int,
 ]:
-    nerf_evaluator: NerfEvaluatorModel = (
-        cfg.model_config.get_nerf_evaluator_from_fingertip_config(
-            fingertip_config=cfg.nerfdata_config.fingertip_config,
-            n_tasks=cfg.task_type.n_tasks,
-        ).to(device)
-    )
+    nerf_evaluator_model: NerfEvaluatorModel = cfg.model_config.create_model(
+        fingertip_config=cfg.nerf_grasp_dataset_config.fingertip_config,
+        n_tasks=cfg.task_type.n_tasks,
+    ).to(device)
     start_epoch = 0
     optimizer = torch.optim.AdamW(
-        params=nerf_evaluator.parameters(),
+        params=nerf_evaluator_model.parameters(),
         lr=cfg.training.lr,
         betas=cfg.training.betas,
         weight_decay=cfg.training.weight_decay,
@@ -579,14 +572,14 @@ def create_and_optionally_load(
         ), f"latest_checkpoint_path does not exist at {latest_checkpoint_path}"
 
         checkpoint = torch.load(latest_checkpoint_path)
-        nerf_evaluator.load_state_dict(checkpoint["nerf_evaluator"])
+        nerf_evaluator_model.load_state_dict(checkpoint["nerf_evaluator_model"])
         optimizer.load_state_dict(checkpoint["optimizer"])
         start_epoch = checkpoint["epoch"]
         if lr_scheduler is not None and "lr_scheduler" in checkpoint:
             lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
         print("Done loading checkpoint")
     return (
-        nerf_evaluator,
+        nerf_evaluator_model,
         optimizer,
         lr_scheduler,
         start_epoch,
@@ -682,7 +675,7 @@ class SoftmaxL2Loss(nn.Module):
 def save_checkpoint(
     checkpoint_output_dir: pathlib.Path,
     epoch: int,
-    nerf_evaluator: NerfEvaluatorModel,
+    nerf_evaluator_model: NerfEvaluatorModel,
     optimizer: torch.optim.Optimizer,
     lr_scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
 ) -> None:
@@ -691,7 +684,7 @@ def save_checkpoint(
     torch.save(
         {
             "epoch": epoch,
-            "nerf_evaluator": nerf_evaluator.state_dict(),
+            "nerf_evaluator_model": nerf_evaluator_model.state_dict(),
             "optimizer": optimizer.state_dict(),
             "lr_scheduler": (
                 lr_scheduler.state_dict() if lr_scheduler is not None else None
@@ -706,7 +699,7 @@ def save_checkpoint_batch(
     checkpoint_output_dir: pathlib.Path,
     epoch: int,
     batch_idx: int,
-    nerf_evaluator: NerfEvaluatorModel,
+    nerf_evaluator_model: NerfEvaluatorModel,
     optimizer: torch.optim.Optimizer,
     lr_scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
 ) -> None:
@@ -717,7 +710,7 @@ def save_checkpoint_batch(
         {
             "epoch": epoch,
             "batch_idx": batch_idx,
-            "nerf_evaluator": nerf_evaluator.state_dict(),
+            "nerf_evaluator_model": nerf_evaluator_model.state_dict(),
             "optimizer": optimizer.state_dict(),
             "lr_scheduler": (
                 lr_scheduler.state_dict() if lr_scheduler is not None else None
@@ -737,7 +730,7 @@ def _iterate_through_dataloader(
     loop_timer: LoopTimer,
     phase: Phase,
     dataloader: DataLoader,
-    nerf_evaluator: NerfEvaluatorModel,
+    nerf_evaluator_model: NerfEvaluatorModel,
     device: torch.device,
     loss_fns: List[nn.Module],
     task_type: TaskType,
@@ -756,18 +749,18 @@ def _iterate_through_dataloader(
 
     assert phase in [Phase.TRAIN, Phase.VAL, Phase.TEST, Phase.EVAL_TRAIN]
     if phase == Phase.TRAIN:
-        nerf_evaluator.train()
+        nerf_evaluator_model.train()
         assert (
             training_cfg is not None
             and optimizer is not None
             and checkpoint_output_dir is not None
         )
     else:
-        nerf_evaluator.eval()
+        nerf_evaluator_model.eval()
         assert training_cfg is None and optimizer is None
 
-    assert_equals(len(loss_fns), nerf_evaluator.n_tasks)
-    assert_equals(len(task_type.task_names), nerf_evaluator.n_tasks)
+    assert_equals(len(loss_fns), nerf_evaluator_model.n_tasks)
+    assert_equals(len(task_type.task_names), nerf_evaluator_model.n_tasks)
 
     with torch.set_grad_enabled(phase == Phase.TRAIN):
         dataload_section_timer = loop_timer.add_section_timer("Data").start()
@@ -786,7 +779,7 @@ def _iterate_through_dataloader(
                     checkpoint_output_dir=checkpoint_output_dir,
                     batch_idx=GLOBAL_BATCH_IDX,
                     epoch=GLOBAL_EPOCH,
-                    nerf_evaluator=nerf_evaluator,
+                    nerf_evaluator_model=nerf_evaluator_model,
                     optimizer=optimizer,
                     lr_scheduler=lr_scheduler,
                 )
@@ -808,13 +801,13 @@ def _iterate_through_dataloader(
 
             # Forward pass
             with loop_timer.add_section_timer("Fwd"):
-                all_logits = nerf_evaluator.get_all_logits(batch_data.input)
+                all_logits = nerf_evaluator_model.get_all_logits(batch_data.input)
                 assert_equals(
                     all_logits.shape,
                     (
                         batch_data.batch_size,
-                        nerf_evaluator.n_tasks,
-                        nerf_evaluator.n_classes,
+                        nerf_evaluator_model.n_tasks,
+                        nerf_evaluator_model.n_classes,
                     ),
                 )
 
@@ -838,7 +831,7 @@ def _iterate_through_dataloader(
                 else:
                     raise ValueError(f"Unknown task_type: {task_type}")
 
-                assert_equals(len(task_targets), nerf_evaluator.n_tasks)
+                assert_equals(len(task_targets), nerf_evaluator_model.n_tasks)
 
                 task_losses = []
                 for task_i, (loss_fn, task_target, task_name) in enumerate(
@@ -854,7 +847,8 @@ def _iterate_through_dataloader(
                     task_losses.append(task_loss)
                 task_losses = torch.stack(task_losses, dim=0)
                 assert_equals(
-                    task_losses.shape, (nerf_evaluator.n_tasks, batch_data.batch_size)
+                    task_losses.shape,
+                    (nerf_evaluator_model.n_tasks, batch_data.batch_size),
                 )
                 total_losses = torch.mean(task_losses, dim=0)
                 assert_equals(total_losses.shape, (batch_data.batch_size,))
@@ -871,7 +865,7 @@ def _iterate_through_dataloader(
                         and training_cfg.grad_clip_val is not None
                     ):
                         torch.nn.utils.clip_grad_value_(
-                            nerf_evaluator.parameters(),
+                            nerf_evaluator_model.parameters(),
                             training_cfg.grad_clip_val,
                         )
 
@@ -1112,7 +1106,7 @@ def create_log_dict(
 def iterate_through_dataloader(
     phase: Phase,
     dataloader: DataLoader,
-    nerf_evaluator: NerfEvaluatorModel,
+    nerf_evaluator_model: NerfEvaluatorModel,
     device: torch.device,
     loss_fns: List[nn.Module],
     task_type: TaskType,
@@ -1122,8 +1116,8 @@ def iterate_through_dataloader(
     optimizer: Optional[torch.optim.Optimizer] = None,
     lr_scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
 ) -> Dict[str, Any]:
-    assert_equals(len(loss_fns), nerf_evaluator.n_tasks)
-    assert_equals(len(task_type.task_names), nerf_evaluator.n_tasks)
+    assert_equals(len(loss_fns), nerf_evaluator_model.n_tasks)
+    assert_equals(len(task_type.task_names), nerf_evaluator_model.n_tasks)
 
     loop_timer = LoopTimer()
 
@@ -1132,7 +1126,7 @@ def iterate_through_dataloader(
         loop_timer=loop_timer,
         phase=phase,
         dataloader=dataloader,
-        nerf_evaluator=nerf_evaluator,
+        nerf_evaluator_model=nerf_evaluator_model,
         device=device,
         loss_fns=loss_fns,
         task_type=task_type,
@@ -1166,7 +1160,7 @@ def run_training_loop(
     plot_cfg: PlotConfig,
     train_loader: DataLoader,
     val_loader: DataLoader,
-    nerf_evaluator: NerfEvaluatorModel,
+    nerf_evaluator_model: NerfEvaluatorModel,
     device: torch.device,
     loss_fns: List[nn.Module],
     optimizer: torch.optim.Optimizer,
@@ -1178,7 +1172,7 @@ def run_training_loop(
     global GLOBAL_EPOCH
     GLOBAL_EPOCH = start_epoch
 
-    wandb.watch(nerf_evaluator, log="gradients", log_freq=100)
+    wandb.watch(nerf_evaluator_model, log="gradients", log_freq=100)
 
     training_loop_base_description = "Training Loop"
     for epoch in (
@@ -1201,7 +1195,7 @@ def run_training_loop(
             save_checkpoint(
                 checkpoint_output_dir=checkpoint_output_dir,
                 epoch=epoch,
-                nerf_evaluator=nerf_evaluator,
+                nerf_evaluator_model=nerf_evaluator_model,
                 optimizer=optimizer,
                 lr_scheduler=lr_scheduler,
             )
@@ -1212,7 +1206,7 @@ def run_training_loop(
         train_log_dict = iterate_through_dataloader(
             phase=Phase.TRAIN,
             dataloader=train_loader,
-            nerf_evaluator=nerf_evaluator,
+            nerf_evaluator_model=nerf_evaluator_model,
             device=device,
             loss_fns=loss_fns,
             task_type=task_type,
@@ -1231,11 +1225,11 @@ def run_training_loop(
         if epoch % training_cfg.val_freq == 0 and (
             epoch != 0 or training_cfg.val_on_epoch_0
         ):
-            nerf_evaluator.eval()
+            nerf_evaluator_model.eval()
             val_log_dict = iterate_through_dataloader(
                 phase=Phase.VAL,
                 dataloader=val_loader,
-                nerf_evaluator=nerf_evaluator,
+                nerf_evaluator_model=nerf_evaluator_model,
                 device=device,
                 loss_fns=loss_fns,
                 task_type=task_type,
@@ -1245,7 +1239,7 @@ def run_training_loop(
             wandb_log_dict.update(val_log_dict)
         val_time_taken = time.time() - start_val_time
 
-        nerf_evaluator.train()
+        nerf_evaluator_model.train()
 
         if wandb.run is not None:
             wandb.log(wandb_log_dict)
@@ -1267,7 +1261,7 @@ def run_training_loop(
 
 def main() -> None:
     # Load Config
-    cfg: NerfEvaluatorModelConfig = tyro.cli(UnionNerfEvaluatorModelConfig)
+    cfg = tyro.cli(NerfEvaluatorModelConfig)
     print("=" * 80)
     print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
     print("=" * 80 + "\n")
@@ -1331,18 +1325,20 @@ def main() -> None:
     if PLOT_EXAMPLE_BATCH_DATA:
         debug_plot(
             batch_data=EXAMPLE_BATCH_DATA,
-            fingertip_config=cfg.nerfdata_config.fingertip_config,
+            fingertip_config=cfg.nerf_grasp_dataset_config.fingertip_config,
             idx_to_visualize=2,
         )
 
     # Setup for training
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    nerf_evaluator, optimizer, lr_scheduler, start_epoch = create_and_optionally_load(
-        cfg=cfg,
-        device=device,
-        num_training_steps=len(train_loader) * cfg.training.n_epochs,
+    nerf_evaluator_model, optimizer, lr_scheduler, start_epoch = (
+        create_and_optionally_load(
+            cfg=cfg,
+            device=device,
+            num_training_steps=len(train_loader) * cfg.training.n_epochs,
+        )
     )
-    print(f"nerf_evaluator = {nerf_evaluator}")
+    print(f"nerf_evaluator_model = {nerf_evaluator_model}")
     print(f"optimizer = {optimizer}")
     print(f"lr_scheduler = {lr_scheduler}")
 
@@ -1357,7 +1353,7 @@ def main() -> None:
         plot_cfg=cfg.plot,
         train_loader=train_loader,
         val_loader=val_loader,
-        nerf_evaluator=nerf_evaluator,
+        nerf_evaluator_model=nerf_evaluator_model,
         device=device,
         loss_fns=loss_fns,
         optimizer=optimizer,
@@ -1368,14 +1364,14 @@ def main() -> None:
     )
 
     # Test
-    nerf_evaluator.eval()
+    nerf_evaluator_model.eval()
     wandb_log_dict = {}
     print(f"Running test metrics on epoch {cfg.training.n_epochs}")
     wandb_log_dict["epoch"] = cfg.training.n_epochs
     test_log_dict = iterate_through_dataloader(
         phase=Phase.TEST,
         dataloader=test_loader,
-        nerf_evaluator=nerf_evaluator,
+        nerf_evaluator_model=nerf_evaluator_model,
         device=device,
         loss_fns=loss_fns,
         task_type=cfg.task_type,
@@ -1389,7 +1385,7 @@ def main() -> None:
     save_checkpoint(
         checkpoint_output_dir=cfg.checkpoint_workspace.output_dir,
         epoch=cfg.training.n_epochs,
-        nerf_evaluator=nerf_evaluator,
+        nerf_evaluator_model=nerf_evaluator_model,
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
     )

@@ -9,7 +9,7 @@ from get_a_grip.model_training.models.components.models import (
     CNN_3D_CNN_3D_Model,
     CNN_3D_Model,
 )
-from get_a_grip.model_training.utils.nerf_grasp_evaluator_batch_data import (
+from get_a_grip.model_training.utils.nerf_evaluator_model_batch_data import (
     BatchDataInput,
 )
 

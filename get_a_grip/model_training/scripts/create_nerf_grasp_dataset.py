@@ -6,6 +6,7 @@ and store the data to an HDF5 file for training.
 
 import os
 import pathlib
+from contextlib import nullcontext
 from functools import partial
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -16,6 +17,7 @@ import torch
 import trimesh
 import tyro
 from clean_loop_timer import LoopTimer
+from nerfstudio.pipelines.base_pipeline import Pipeline
 from tqdm import tqdm as std_tqdm
 
 from get_a_grip import get_data_folder
@@ -23,7 +25,7 @@ from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
 from get_a_grip.grasp_planning.utils.allegro_grasp_config import AllegroGraspConfig
-from get_a_grip.model_training.config.base import CONFIG_DATETIME_STR
+from get_a_grip.model_training.config.datetime_str import get_datetime_str
 from get_a_grip.model_training.config.fingertip_config import (
     EvenlySpacedFingertipConfig,
 )
@@ -31,11 +33,11 @@ from get_a_grip.model_training.config.nerf_densities_global_config import (
     NERF_DENSITIES_GLOBAL_NUM_X,
     NERF_DENSITIES_GLOBAL_NUM_Y,
     NERF_DENSITIES_GLOBAL_NUM_Z,
-    lb_Oy,
-    ub_Oy,
+    NERF_DENSITIES_GLOBAL_lb_Oy,
+    NERF_DENSITIES_GLOBAL_ub_Oy,
 )
-from get_a_grip.model_training.config.nerfdata_config import (
-    GridNerfDataConfig,
+from get_a_grip.model_training.config.nerf_grasp_dataset_config import (
+    NerfGraspDatasetConfig,
 )
 from get_a_grip.model_training.utils.nerf_load_utils import (
     get_nerf_configs,
@@ -46,10 +48,11 @@ from get_a_grip.model_training.utils.nerf_ray_utils import (
     get_ray_samples,
 )
 from get_a_grip.model_training.utils.nerf_utils import (
-    get_densities_in_grid,
+    get_density,
 )
 from get_a_grip.model_training.utils.point_utils import (
-    transform_point,
+    get_points_in_grid,
+    transform_points,
 )
 
 tqdm = partial(std_tqdm, dynamic_ncols=True)
@@ -161,7 +164,7 @@ def compute_X_N_Oy(mesh_Oy: trimesh.Trimesh) -> np.ndarray:
 
 
 def create_grid_dataset(
-    cfg: GridNerfDataConfig,
+    cfg: NerfGraspDatasetConfig,
     hdf5_file: h5py.File,
     max_num_datapoints: int,
     num_objects: int,
@@ -276,15 +279,15 @@ def create_grid_dataset(
 
 
 @torch.no_grad()
-def get_nerf_densities(
-    loop_timer: LoopTimer,
+def get_nerf_densities_at_fingertips(
+    nerf_pipeline: Pipeline,
+    grasp_frame_transforms: pp.LieTensor,
     fingertip_config: EvenlySpacedFingertipConfig,
     ray_samples_chunk_size: int,
-    grasp_frame_transforms: pp.LieTensor,
     ray_origins_finger_frame: torch.Tensor,
-    nerf_config: pathlib.Path,
     X_N_Oy: np.ndarray,
-) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray, np.ndarray]:
+    loop_timer: Optional[LoopTimer] = None,
+) -> Tuple[torch.Tensor, torch.Tensor]:
     # Shape check grasp_frame_transforms
     batch_size = grasp_frame_transforms.shape[0]
     assert_equals(
@@ -294,13 +297,6 @@ def get_nerf_densities(
             fingertip_config.n_fingers,
         ),
     )
-
-    # Load nerf pipeline
-    # Note: I don't like that we are mixing IO and computation here, but it seems to avoid OOM better
-    #       if IO in main code, I believe it causes weird memory leak having nerf_pipeline in global scope
-    # Note: for some reason this seems to help avoid GPU memory leak
-    #       whereas loading nerf_model or nerf_field directly causes GPU memory leak
-    nerf_pipeline = load_nerf_pipeline(nerf_config)
 
     # Prepare transforms
     # grasp_frame_transforms are in Oy frame
@@ -329,14 +325,18 @@ def get_nerf_densities(
     T_N_Fi = T_N_Oy @ T_Oy_Fi
 
     # Transform query points
-    with loop_timer.add_section_timer("get_ray_samples"):
+    with loop_timer.add_section_timer(
+        "get_ray_samples"
+    ) if loop_timer is not None else nullcontext():
         ray_samples = get_ray_samples(
             ray_origins_finger_frame,
             T_N_Fi,
             fingertip_config,
         )
 
-    with loop_timer.add_section_timer("get_density"):
+    with loop_timer.add_section_timer(
+        "get_density"
+    ) if loop_timer is not None else nullcontext():
         # Split ray_samples into chunks so everything fits on the gpu
         split_inds = torch.arange(0, batch_size, ray_samples_chunk_size)
         split_inds = torch.cat(
@@ -375,7 +375,9 @@ def get_nerf_densities(
             curr_ray_samples.to("cpu")
             nerf_densities[curr_ind:next_ind] = curr_nerf_densities
 
-    with loop_timer.add_section_timer("frustums.get_positions"):
+    with loop_timer.add_section_timer(
+        "frustums.get_positions"
+    ) if loop_timer is not None else nullcontext():
         query_points_N = ray_samples.frustums.get_positions().reshape(
             batch_size,
             fingertip_config.n_fingers,
@@ -384,18 +386,80 @@ def get_nerf_densities(
             fingertip_config.num_pts_z,
             3,
         )
+    return nerf_densities, query_points_N
 
-    with loop_timer.add_section_timer("get_densities_in_grid"):
-        lb_N = transform_point(T=X_N_Oy, point=lb_Oy)
-        ub_N = transform_point(T=X_N_Oy, point=ub_Oy)
-        nerf_densities_global, query_points_global_N = get_densities_in_grid(
-            field=nerf_pipeline.model.field,
-            lb=lb_N,
-            ub=ub_N,
+
+@torch.no_grad()
+def get_nerf_densities_global(
+    nerf_pipeline: Pipeline,
+    X_N_Oy: np.ndarray,
+    loop_timer: Optional[LoopTimer] = None,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    assert X_N_Oy.shape == (
+        4,
+        4,
+    )
+
+    with loop_timer.add_section_timer(
+        "get_densities_in_grid"
+    ) if loop_timer is not None else nullcontext():
+        # WARNING: MUST keep NERF_DENSITIES_GLOBAL_lb_Oy and NERF_DENSITIES_GLOBAL_ub_Oy
+        #          in sync with NERF_DENSITIES_GLOBAL_NUM_X, NERF_DENSITIES_GLOBAL_NUM_Y, NERF_DENSITIES_GLOBAL_NUM_Z
+        #          since X_N_Oy may have rotation in the general case. If rotate, then will apply NUM_X in the "wrong direction"
+        #          Thus, do not use get_densities_in_grid here, since it doesn't handle rotations
+        # Below's commented code introduces a subtle bug with X_N_Oy has rotation
+        # lb_N = transform_point(T=X_N_Oy, point=NERF_DENSITIES_GLOBAL_lb_Oy)
+        # ub_N = transform_point(T=X_N_Oy, point=NERF_DENSITIES_GLOBAL_ub_Oy)
+        # nerf_densities_global, query_points_global_N = get_densities_in_grid(
+        #     field=nerf_pipeline.model.field,
+        #     lb=lb_N,
+        #     ub=ub_N,
+        #     num_pts_x=NERF_DENSITIES_GLOBAL_NUM_X,
+        #     num_pts_y=NERF_DENSITIES_GLOBAL_NUM_Y,
+        #     num_pts_z=NERF_DENSITIES_GLOBAL_NUM_Z,
+        # )
+
+        # Get query points in Oy frame
+        query_points_global_Oy_np = get_points_in_grid(
+            lb=NERF_DENSITIES_GLOBAL_lb_Oy,
+            ub=NERF_DENSITIES_GLOBAL_ub_Oy,
             num_pts_x=NERF_DENSITIES_GLOBAL_NUM_X,
             num_pts_y=NERF_DENSITIES_GLOBAL_NUM_Y,
             num_pts_z=NERF_DENSITIES_GLOBAL_NUM_Z,
         )
+        assert query_points_global_Oy_np.shape == (
+            NERF_DENSITIES_GLOBAL_NUM_X,
+            NERF_DENSITIES_GLOBAL_NUM_Y,
+            NERF_DENSITIES_GLOBAL_NUM_Z,
+            3,
+        )
+
+        # Then transform to N frame
+        query_points_global_N_np = transform_points(
+            T=X_N_Oy,
+            points=query_points_global_Oy_np.reshape(-1, 3),
+        ).reshape(
+            NERF_DENSITIES_GLOBAL_NUM_X,
+            NERF_DENSITIES_GLOBAL_NUM_Y,
+            NERF_DENSITIES_GLOBAL_NUM_Z,
+            3,
+        )
+
+        query_points_global_N = torch.from_numpy(query_points_global_N_np).cuda()
+
+        nerf_densities_global = (
+            get_density(
+                field=nerf_pipeline.model.field,
+                positions=query_points_global_N,
+            )[0]
+            .squeeze(dim=-1)
+            .reshape(
+                NERF_DENSITIES_GLOBAL_NUM_X,
+                NERF_DENSITIES_GLOBAL_NUM_Y,
+                NERF_DENSITIES_GLOBAL_NUM_Z,
+            )
+        )
+
         assert nerf_densities_global.shape == (
             NERF_DENSITIES_GLOBAL_NUM_X,
             NERF_DENSITIES_GLOBAL_NUM_Y,
@@ -407,6 +471,33 @@ def get_nerf_densities(
             NERF_DENSITIES_GLOBAL_NUM_Z,
             3,
         )
+    return nerf_densities_global, query_points_global_N
+
+
+@torch.no_grad()
+def get_nerf_densities(
+    nerf_pipeline: Pipeline,
+    grasp_frame_transforms: pp.LieTensor,
+    fingertip_config: EvenlySpacedFingertipConfig,
+    ray_samples_chunk_size: int,
+    ray_origins_finger_frame: torch.Tensor,
+    X_N_Oy: np.ndarray,
+    loop_timer: Optional[LoopTimer] = None,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    nerf_densities, query_points_N = get_nerf_densities_at_fingertips(
+        nerf_pipeline=nerf_pipeline,
+        grasp_frame_transforms=grasp_frame_transforms,
+        fingertip_config=fingertip_config,
+        ray_samples_chunk_size=ray_samples_chunk_size,
+        ray_origins_finger_frame=ray_origins_finger_frame,
+        X_N_Oy=X_N_Oy,
+        loop_timer=loop_timer,
+    )
+    nerf_densities_global, query_points_global_N = get_nerf_densities_global(
+        nerf_pipeline=nerf_pipeline,
+        X_N_Oy=X_N_Oy,
+        loop_timer=loop_timer,
+    )
 
     return nerf_densities, query_points_N, nerf_densities_global, query_points_global_N
 
@@ -503,6 +594,8 @@ def get_data(
     mesh_N = mesh_Oy.copy()
     mesh_N.apply_transform(X_N_Oy)
 
+    nerf_pipeline = load_nerf_pipeline(nerf_config)
+
     # Process batch of grasp data.
     (
         nerf_densities,
@@ -510,13 +603,13 @@ def get_data(
         nerf_densities_global,
         query_points_global_N,
     ) = get_nerf_densities(
-        loop_timer=loop_timer,
+        nerf_pipeline=nerf_pipeline,
         fingertip_config=fingertip_config,
         ray_samples_chunk_size=ray_samples_chunk_size,
         grasp_frame_transforms=grasp_frame_transforms,
         ray_origins_finger_frame=ray_origins_finger_frame,
-        nerf_config=nerf_config,
         X_N_Oy=X_N_Oy,
+        loop_timer=loop_timer,
     )
     return (
         nerf_densities,
@@ -536,7 +629,7 @@ def get_data(
 
 
 def main() -> None:
-    cfg = tyro.cli(GridNerfDataConfig)
+    cfg = tyro.cli(NerfGraspDatasetConfig)
 
     print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
     assert cfg.fingertip_config is not None
@@ -546,7 +639,7 @@ def main() -> None:
         cfg.output_filepath = (
             cfg.input_evaled_grasp_config_dicts_path.parent
             / "learned_metric_dataset"
-            / f"{CONFIG_DATETIME_STR}_learned_metric_dataset.h5"
+            / f"{get_datetime_str()}_learned_metric_dataset.h5"
         )
     assert cfg.output_filepath is not None
     if not cfg.output_filepath.parent.exists():
@@ -563,7 +656,7 @@ def main() -> None:
         cfg.input_nerfcheckpoints_path.exists()
     ), f"{cfg.input_nerfcheckpoints_path} does not exist"
     nerf_configs = get_nerf_configs(
-        nerfcheckpoints_path=str(cfg.input_nerfcheckpoints_path),
+        nerfcheckpoints_path=cfg.input_nerfcheckpoints_path,
     )
     assert (
         len(nerf_configs) > 0
@@ -711,7 +804,9 @@ def main() -> None:
                 nerf_densities.detach().cpu().numpy()
             )
             del nerf_densities
-            nerf_densities_global_dataset[object_i] = nerf_densities_global
+            nerf_densities_global_dataset[object_i] = (
+                nerf_densities_global.detach().cpu().numpy()
+            )
             del nerf_densities_global
             nerf_densities_global_idx_dataset[prev_idx:current_idx] = object_i
 

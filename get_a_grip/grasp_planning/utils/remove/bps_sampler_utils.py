@@ -24,8 +24,7 @@ from get_a_grip.grasp_planning.nerf_conversions.nerf_to_bps import (
 )
 from get_a_grip.grasp_planning.scripts import optimizer as nerf_evaluator_optimizer
 from get_a_grip.grasp_planning.utils import (
-    bps_evaluator_utils,
-    train_nerf_return_trainer,
+    train_nerf,
 )
 from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
     AllegroGraspConfig,
@@ -34,6 +33,7 @@ from get_a_grip.grasp_planning.utils.nerf_evaluator_wrapper import (
     NerfEvaluatorWrapper,
     load_nerf_evaluator,
 )
+from get_a_grip.grasp_planning.utils.remove import bps_evaluator_utils
 from get_a_grip.model_training.config.diffusion_config import (
     DiffusionConfig,
     TrainingConfig,
@@ -248,8 +248,8 @@ def run_bps_sampler_sim_eval(args: CommandlineArgs) -> None:
     if args.nerfdata_path is not None:
         start_time = time.time()
         nerfcheckpoints_folder = args.output_folder / "nerfcheckpoints"
-        nerf_trainer = train_nerf_return_trainer.train_nerf(
-            args=train_nerf_return_trainer.TrainNerfReturnTrainerArgs(
+        nerf_trainer = train_nerf.train_nerf_return_trainer(
+            args=train_nerf.TrainNerfArgs(
                 nerfdata_folder=args.nerfdata_path,
                 nerfcheckpoints_folder=nerfcheckpoints_folder,
                 max_num_iterations=args.max_num_iterations,
@@ -359,7 +359,7 @@ def run_bps_sampler_sim_eval(args: CommandlineArgs) -> None:
             nerf_evaluator_wrapper = NerfEvaluatorWrapper(
                 nerf_field=nerf_pipeline.model.field,
                 nerf_evaluator_model=nerf_evaluator_model,
-                fingertip_config=nerf_evaluator_config.nerfdata_config.fingertip_config,
+                fingertip_config=nerf_evaluator_config.nerf_grasp_dataset_config.fingertip_config,
                 X_N_Oy=X_N_Oy,
             )
 

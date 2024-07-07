@@ -55,14 +55,14 @@ def main() -> None:
                     log_path=(
                         get_data_folder()
                         / (
-                            f"logs/nerf_grasp_sampler/{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+                            f"logs/nerf_sampler_model/{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
                         )
                     ),
                 ),
                 multigpu=True,
                 wandb=WandbConfig(
                     log=True,
-                    project="nerf_grasp_sampler",
+                    project="nerf_sampler_model",
                 ),
             ),
         ),

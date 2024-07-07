@@ -1,5 +1,4 @@
 import pathlib
-import subprocess
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -9,10 +8,50 @@ import tyro
 from get_a_grip.grasp_planning.nerf_conversions.nerf_to_mesh import nerf_to_mesh
 from get_a_grip.model_training.utils.nerf_load_utils import load_nerf_field
 
+# Hardcoded intentionally for consistency
+NERF_TO_MESH_MIN_HEIGHT = 0
+NERF_TO_MESH_MAX_HEIGHT = 0.3
+NERF_TO_MESH_MIN_WIDTH = -0.2
+NERF_TO_MESH_MAX_WIDTH = 0.2
+
+
+def nerf_to_mesh_bounding_box_min(nerf_is_z_up: bool) -> np.ndarray:
+    min_height = NERF_TO_MESH_MIN_HEIGHT
+    min_width = NERF_TO_MESH_MIN_WIDTH
+
+    if nerf_is_z_up:
+        min_z = min_height
+
+        min_x = min_width
+        min_y = min_width
+    else:
+        min_y = min_height
+
+        min_x = min_width
+        min_z = min_width
+    return np.array([min_x, min_y, min_z])
+
+
+def nerf_to_mesh_bounding_box_max(nerf_is_z_up: bool) -> np.ndarray:
+    max_height = NERF_TO_MESH_MAX_HEIGHT
+    max_width = NERF_TO_MESH_MAX_WIDTH
+
+    if nerf_is_z_up:
+        max_z = max_height
+
+        max_x = max_width
+        max_y = max_width
+    else:
+        max_y = max_height
+
+        max_x = max_width
+        max_z = max_width
+    return np.array([max_x, max_y, max_z])
+
 
 @dataclass
 class NerfToUrdfArgs:
-    nerfcheckpoint_filepath: pathlib.Path
+    nerf_config: pathlib.Path
     nerf_is_z_up: bool
     density_of_0_level_set: float = 15.0
     n_pts_each_dim_marching_cubes: int = 31
@@ -36,11 +75,6 @@ class NerfToUrdfArgs:
             return np.array([0.2, 0.2, 0.3])
         else:
             return np.array([0.2, 0.3, 0.2])
-
-
-def print_and_run(cmd: str) -> None:
-    print(cmd)
-    subprocess.run(cmd, shell=True)
 
 
 def create_urdf(
@@ -105,21 +139,19 @@ def nerf_to_urdf(args: NerfToUrdfArgs) -> Tuple[pathlib.Path, pathlib.Path]:
     print(f"{pathlib.Path(__file__).name} args: {args}")
     print("=" * 80 + "\n")
 
+    assert args.nerf_config.exists(), f"{args.nerf_config} does not exist"
     assert (
-        args.nerfcheckpoint_filepath.exists()
-    ), f"{args.nerfcheckpoint_filepath} does not exist"
+        args.nerf_config.name == "config.yml"
+    ), f"{args.nerf_config} is not a config.yml file"
     assert (
-        args.nerfcheckpoint_filepath.name == "config.yml"
-    ), f"{args.nerfcheckpoint_filepath} is not a config.yml file"
-    assert (
-        args.nerfcheckpoint_filepath.parent.parent.name == "nerfacto"
-    ), f"{args.nerfcheckpoint_filepath.parent.parent.name} should be nerfacto"
+        args.nerf_config.parent.parent.name == "nerfacto"
+    ), f"{args.nerf_config.parent.parent.name} should be nerfacto"
     # Eg. path=data/2023-10-13_13-12-28/nerfcheckpoints/sem-RubiksCube-1e3d89eb3b5427053bdd31f1cd9eec98_0_1076/nerfacto/2023-10-13_131849/config.yml
     # object_code_and_scale=sem-RubiksCube-1e3d89eb3b5427053bdd31f1cd9eec98_0_1076
-    object_code_and_scale = args.nerfcheckpoint_filepath.parent.parent.parent.name
+    object_code_and_scale = args.nerf_config.parent.parent.parent.name
     object_code, object_scale = parse_object_code_and_scale(object_code_and_scale)
 
-    nerf_field = load_nerf_field(args.nerfcheckpoint_filepath)
+    nerf_field = load_nerf_field(args.nerf_config)
     lb = args.lb
     ub = args.ub
 

@@ -41,11 +41,11 @@ class TrainBpsEvaluatorModelConfig:
     snapshot_freq: int = 5
     log_path: Path = (
         get_data_folder()
-        / f"logs/bps_grasp_evaluator/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        / f"logs/bps_evaluator_model/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     )
 
     # wandb
-    wandb_project: str = "bps_grasp_evaluator"
+    wandb_project: str = "bps_evaluator_model"
     wandb_log: bool = True
 
     train_frac_throw_away: float = 0.0  # Increase for dataset size ablation

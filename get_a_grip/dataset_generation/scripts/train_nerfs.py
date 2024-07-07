@@ -1,5 +1,4 @@
 import pathlib
-import subprocess
 from dataclasses import dataclass
 from typing import Optional
 
@@ -10,35 +9,31 @@ from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     is_object_code_and_scale_str,
 )
+from get_a_grip.grasp_planning.utils.train_nerf import (
+    TrainNerfArgs,
+    train_nerf,
+    train_nerf_return_trainer,
+)
 
 
 @dataclass
 class TrainNerfsArgs:
-    experiment_name: str
+    input_nerfdata_path: pathlib.Path = get_data_folder() / "NEW_DATASET/nerfdata"
+    output_nerfcheckpoints_path: pathlib.Path = (
+        get_data_folder() / "NEW_DATASET/nerfcheckpoints"
+    )
     max_num_iterations: int = 400
-    input_nerfdata_name: str = "nerfdata"
-    output_nerfcheckpoints_name: str = "nerfcheckpoints"
-    root_data_path: pathlib.Path = get_data_folder()
     randomize_order_seed: Optional[int] = None
 
 
-def print_and_run(cmd: str) -> None:
-    print(f"Running: {cmd}")
-    subprocess.run(cmd, shell=True, check=True)
-
-
 def train_nerfs(args: TrainNerfsArgs) -> pathlib.Path:
-    assert args.root_data_path.exists(), f"{args.root_data_path} does not exist"
-    experiment_path = args.root_data_path / args.experiment_name
-    assert experiment_path.exists(), f"{experiment_path} does not exist"
+    assert (
+        args.input_nerfdata_path.exists()
+    ), f"{args.input_nerfdata_path} does not exist"
 
-    nerfdata_path = experiment_path / args.input_nerfdata_name
-    assert nerfdata_path.exists(), f"{nerfdata_path} does not exist"
+    args.output_nerfcheckpoints_path.mkdir(exist_ok=True, parents=True)
 
-    output_nerfcheckpoints_path = experiment_path / args.output_nerfcheckpoints_name
-    output_nerfcheckpoints_path.mkdir(exist_ok=True)
-
-    object_nerfdata_paths = sorted(list(nerfdata_path.iterdir()))
+    object_nerfdata_paths = sorted(list(args.input_nerfdata_path.iterdir()))
 
     if args.randomize_order_seed is not None:
         import random
@@ -57,29 +52,34 @@ def train_nerfs(args: TrainNerfsArgs) -> pathlib.Path:
         ), f"{object_nerfdata_path.name} is not an object code and scale"
 
         output_path_to_be_created = (
-            output_nerfcheckpoints_path / object_nerfdata_path.name
+            args.output_nerfcheckpoints_path / object_nerfdata_path.name
         )
         if output_path_to_be_created.exists():
             print(f"Skipping {output_path_to_be_created} because it already exists")
             continue
 
-        command = " ".join(
-            [
-                "ns-train nerfacto",
-                f"--data {str(object_nerfdata_path)}",
-                f"--max-num-iterations {args.max_num_iterations}",
-                f"--output-dir {str(output_nerfcheckpoints_path)}",
-                "--vis wandb",
-                "--pipeline.model.disable-scene-contraction True",
-                "nerfstudio-data",
-                "--auto-scale-poses False",
-                "--scale-factor 1.",
-                "--center-method none",
-                "--orientation-method none",
-            ]
-        )
-        print_and_run(command)
-    return output_nerfcheckpoints_path
+        # Both options are equivalent
+        OPTION = "train_nerf"
+        if OPTION == "train_nerf":
+            train_nerf(
+                TrainNerfArgs(
+                    nerfdata_folder=object_nerfdata_path,
+                    nerfcheckpoints_folder=args.output_nerfcheckpoints_path,
+                    max_num_iterations=args.max_num_iterations,
+                )
+            )
+        elif OPTION == "train_nerf_return_trainer":
+            train_nerf_return_trainer(
+                TrainNerfArgs(
+                    nerfdata_folder=object_nerfdata_path,
+                    nerfcheckpoints_folder=args.output_nerfcheckpoints_path,
+                    max_num_iterations=args.max_num_iterations,
+                )
+            )
+        else:
+            raise ValueError(f"Invalid option: {OPTION}")
+
+    return args.output_nerfcheckpoints_path
 
 
 def main() -> None:

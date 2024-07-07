@@ -37,7 +37,7 @@ from get_a_grip.grasp_motion_planning.utils.trajopt_batch import (
 from get_a_grip.grasp_planning.nerf_conversions.nerf_to_mesh import nerf_to_mesh
 from get_a_grip.grasp_planning.utils import (
     frogger_utils,
-    train_nerf_return_trainer,
+    train_nerf,
 )
 from get_a_grip.grasp_planning.utils.joint_limit_utils import (
     clamp_in_limits_np,
@@ -424,8 +424,8 @@ def main() -> None:
     if args.nerfdata_path is not None:
         start_time = time.time()
         nerfcheckpoints_folder = args.output_folder / "nerfcheckpoints"
-        nerf_trainer = train_nerf_return_trainer.train_nerf(
-            args=train_nerf_return_trainer.TrainNerfReturnTrainerArgs(
+        nerf_trainer = train_nerf.train_nerf_return_trainer(
+            args=train_nerf.TrainNerfArgs(
                 nerfdata_folder=args.nerfdata_path,
                 nerfcheckpoints_folder=nerfcheckpoints_folder,
                 max_num_iterations=args.max_num_iterations,

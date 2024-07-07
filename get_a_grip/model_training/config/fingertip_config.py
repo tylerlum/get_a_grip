@@ -5,7 +5,6 @@ import tyro
 
 @dataclass
 class EvenlySpacedFingertipConfig:
-    # Dec 15, 2023:
     # Allegro fingertip width/height ~28mm (http://wiki.wonikrobotics.com/AllegroHandWiki/index.php/Joint_Dimensions_and_Directions)
     # Moving in fingers by ~30mm
     # Add some buffer so we can have gradients for improvement

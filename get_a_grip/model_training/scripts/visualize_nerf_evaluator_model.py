@@ -37,7 +37,7 @@ from get_a_grip.model_training.scripts.train_nerf_evaluator_model import (
     debug_plot,
     setup_loss_fns,
 )
-from get_a_grip.model_training.utils.nerf_grasp_evaluator_batch_data import (
+from get_a_grip.model_training.utils.nerf_evaluator_model_batch_data import (
     BatchData,
 )
 
@@ -138,19 +138,19 @@ print(f"y_PGS = {EXAMPLE_BATCH_DATA.output.y_PGS[:5]}")
 # Debug plot
 debug_plot(
     batch_data=EXAMPLE_BATCH_DATA,
-    fingertip_config=cfg.nerfdata_config.fingertip_config,
+    fingertip_config=cfg.nerf_grasp_dataset_config.fingertip_config,
     idx_to_visualize=2,
 )
 
 
 # %%
 # Create model, optimizer, lr_scheduler
-nerf_evaluator, optimizer, lr_scheduler, start_epoch = create_and_optionally_load(
+nerf_evaluator_model, optimizer, lr_scheduler, start_epoch = create_and_optionally_load(
     cfg=cfg,
     device=device,
     num_training_steps=len(train_loader) * cfg.training.n_epochs,
 )
-print(f"nerf_evaluator = {nerf_evaluator}")
+print(f"nerf_evaluator_model = {nerf_evaluator_model}")
 print(f"optimizer = {optimizer}")
 print(f"lr_scheduler = {lr_scheduler}")
 
@@ -182,7 +182,7 @@ loop_timer = LoopTimer()
     loop_timer=loop_timer,
     phase=DEBUG_phase,
     dataloader=DEBUG_loader,
-    nerf_evaluator=nerf_evaluator,
+    nerf_evaluator_model=nerf_evaluator_model,
     device=device,
     loss_fns=loss_fns,
     task_type=cfg.task_type,
@@ -277,7 +277,7 @@ loop_timer = LoopTimer()
     loop_timer=loop_timer,
     phase=Phase.EVAL_TRAIN,  # Not TRAIN because we don't want to update the model
     dataloader=train_loader,
-    nerf_evaluator=nerf_evaluator,
+    nerf_evaluator_model=nerf_evaluator_model,
     device=device,
     loss_fns=loss_fns,
     task_type=cfg.task_type,
@@ -294,7 +294,7 @@ loop_timer = LoopTimer()
     loop_timer=loop_timer,
     phase=Phase.VAL,
     dataloader=val_loader,
-    nerf_evaluator=nerf_evaluator,
+    nerf_evaluator_model=nerf_evaluator_model,
     device=device,
     loss_fns=loss_fns,
     task_type=cfg.task_type,
