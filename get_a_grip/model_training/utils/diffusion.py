@@ -12,15 +12,15 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as data
-import wandb
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-from wandb.util import generate_id
 
+import wandb
 from get_a_grip.model_training.config.diffusion_config import (
     DiffusionConfig,
 )
+from wandb.util import generate_id
 
 
 def get_beta_schedule(beta_schedule, *, beta_start, beta_end, num_diffusion_timesteps):
@@ -259,19 +259,33 @@ class Diffusion(object):
         else:
             self.model = model
 
-    def load_checkpoint(
-        self, config: DiffusionConfig, name: Optional[str] = None
-    ) -> None:
-        if name is None:
-            stem = "ckpt"
-        else:
-            stem = name
+    def load_checkpoint(self, config: DiffusionConfig, filename: str) -> None:
+        # Use given filename
+        assert filename.endswith(".pth"), f"Invalid filename: {filename}"
+        checkpoint_path = config.training.log_path / filename
+        assert checkpoint_path.exists(), f"Checkpoint not found: {checkpoint_path}"
+
         states = torch.load(
-            config.training.log_path / f"{stem}.pth",
+            checkpoint_path,
             map_location=self.device,
         )
         model_state_dict = states[0]
         self.model.load_state_dict(model_state_dict)
+
+    def load_latest_checkpoint(self, config: DiffusionConfig) -> None:
+        pth_filepaths = list(config.training.log_path.glob("*.pth"))
+
+        if len(pth_filepaths) == 0:
+            raise FileNotFoundError(
+                f"No checkpoints found in {config.training.log_path}"
+            )
+
+        # Sort by created time
+        latest_pth_filepath = sorted(
+            pth_filepaths, key=lambda path: path.stat().st_ctime
+        )[-1]
+
+        self.load_checkpoint(config, latest_pth_filepath.name)
 
     def sample(self, xT: torch.Tensor, cond: torch.Tensor) -> torch.Tensor:
         self.model.eval()

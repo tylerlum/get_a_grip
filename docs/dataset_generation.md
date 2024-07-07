@@ -16,7 +16,7 @@ python get_a_grip/dataset_generation/scripts/generate_object_code_and_scales_txt
 
 ## 1. NeRF Data Generation + Object Filtering
 
-Drop each object on a table, wait for it to settle upright, then capture posed images of it on a table. If the object doesn't settle upright on the table, it is filtered out with a new txt file (<output_nerfdata_path_data>_settled_successes.txt).
+For each object, drop it on a table, wait for it to settle upright, then capture posed images of it on a table. If the object doesn't settle upright on the table, it is filtered out with a new txt file (<output_nerfdata_path_data>_settled_successes.txt).
 
 ```
 CUDA_VISIBLE_DEVICES=0 \
@@ -110,6 +110,8 @@ python get_a_grip/dataset_generation/scripts/merge_evaled_grasp_config_dicts.py 
 
 ## 6. NeRF Training
 
+Train a NeRF for each object:
+
 ```
 python get_a_grip/dataset_generation/scripts/train_nerfs.py \
 --experiment_name NEW_DATASET \
@@ -120,11 +122,13 @@ python get_a_grip/dataset_generation/scripts/train_nerfs.py \
 
 ## 7. Point Cloud Generation
 
+Generate point clouds for each object:
+
 ```
-python get_a_grip/dataset_generation/scripts/export_pointclouds.py \
+python get_a_grip/dataset_generation/scripts/export_point_clouds.py \
 --experiment_name NEW_DATASET \
 --nerf-is-z-up False \
 --input_nerfcheckpoints_name nerfcheckpoints \
---output_pointclouds_name pointclouds \
+--output_point_clouds_name point_clouds \
 --num_points 5000
 ```

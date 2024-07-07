@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pathlib
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import matplotlib.pyplot as plt
@@ -19,7 +19,7 @@ from tqdm import tqdm
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.pose_conversion import (
-    hand_config_to_pose,
+    hand_config_np_to_pose,
 )
 from get_a_grip.grasp_planning.config.nerf_evaluator_wrapper_config import (
     NerfEvaluatorWrapperConfig,
@@ -27,7 +27,7 @@ from get_a_grip.grasp_planning.config.nerf_evaluator_wrapper_config import (
 from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
     AllegroGraspConfig,
 )
-from get_a_grip.grasp_planning.utils.visualize_utils import (
+from get_a_grip.grasp_planning.utils.plot_utils import (
     plot_mesh,
     plot_nerf_densities,
 )
@@ -75,7 +75,6 @@ class NerfEvaluatorWrapper(torch.nn.Module):
         nerf_evaluator_model: NerfEvaluator,
         fingertip_config: EvenlySpacedFingertipConfig,
         X_N_Oy: np.ndarray,
-        return_type: str = "failure_probability",
     ) -> None:
         super().__init__()
         self.nerf_field = nerf_field
@@ -83,7 +82,6 @@ class NerfEvaluatorWrapper(torch.nn.Module):
         self.fingertip_config = fingertip_config
         self.X_N_Oy = X_N_Oy
         self.ray_origins_finger_frame = get_ray_origins_finger_frame(fingertip_config)
-        self.return_type = return_type
 
     def forward(
         self,
@@ -96,7 +94,7 @@ class NerfEvaluatorWrapper(torch.nn.Module):
             ray_samples,
         )
         assert densities.shape == (
-            grasp_config.batch_size,
+            len(grasp_config),
             4,
             self.fingertip_config.num_pts_x,
             self.fingertip_config.num_pts_y,
@@ -111,7 +109,7 @@ class NerfEvaluatorWrapper(torch.nn.Module):
         if need_to_query_global:
             lb_N = transform_point(T=self.X_N_Oy, point=lb_Oy)
             ub_N = transform_point(T=self.X_N_Oy, point=ub_Oy)
-            nerf_densities_global, query_points_global_N = get_densities_in_grid(
+            nerf_densities_global, _query_points_global_N = get_densities_in_grid(
                 field=self.nerf_field,
                 lb=lb_N,
                 ub=ub_N,
@@ -122,104 +120,10 @@ class NerfEvaluatorWrapper(torch.nn.Module):
             nerf_densities_global = (
                 torch.from_numpy(nerf_densities_global)
                 .float()[None, ...]
-                .repeat_interleave(grasp_config.batch_size, dim=0)
+                .repeat_interleave(len(grasp_config), dim=0)
             )
         else:
-            nerf_densities_global, query_points_global_N = None, None
-
-        # DEBUG PLOT
-        PLOT = False
-        if PLOT:
-            from pathlib import Path
-
-            import trimesh
-
-            if Path("/tmp/mesh_viz_object.obj").exists():
-                mesh = trimesh.load("/tmp/mesh_viz_object.obj")
-            else:
-                mesh = None
-
-            # Do not need this, just for debugging
-            query_points_global_N = (
-                torch.from_numpy(query_points_global_N)
-                .float()[None, ...]
-                .repeat_interleave(grasp_config.batch_size, dim=0)
-            )
-            all_query_points = ray_samples.frustums.get_positions()
-
-            for batch_idx in range(2):
-                fig = go.Figure()
-                N_FINGERS = 4
-                for i in range(N_FINGERS):
-                    plot_nerf_densities(
-                        fig=fig,
-                        densities=densities[batch_idx, i].reshape(-1),
-                        query_points=all_query_points[batch_idx, i].reshape(-1, 3),
-                        name=f"finger_{i}",
-                        opacity=0.2,
-                    )
-                if need_to_query_global:
-                    nerf_densities_global_flattened = nerf_densities_global[
-                        batch_idx
-                    ].reshape(-1)
-                    query_points_global_N_flattened = query_points_global_N[
-                        batch_idx
-                    ].reshape(-1, 3)
-                    plot_nerf_densities(
-                        fig=fig,
-                        densities=nerf_densities_global_flattened[
-                            nerf_densities_global_flattened > 15
-                        ],
-                        query_points=query_points_global_N_flattened[
-                            nerf_densities_global_flattened > 15
-                        ],
-                        name="global",
-                    )
-
-                if mesh is not None:
-                    plot_mesh(fig=fig, mesh=mesh)
-
-                wrist_trans_array = (
-                    grasp_config.wrist_pose.translation().detach().cpu().numpy()
-                )
-                wrist_rot_array = (
-                    grasp_config.wrist_pose.rotation().matrix().detach().cpu().numpy()
-                )
-                joint_angles_array = grasp_config.joint_angles.detach().cpu().numpy()
-
-                # Put into transforms X_Oy_H_array
-                B = grasp_config.batch_size
-                X_Oy_H_array = np.repeat(np.eye(4)[None, ...], B, axis=0)
-                assert X_Oy_H_array.shape == (B, 4, 4)
-                X_Oy_H_array[:, :3, :3] = wrist_rot_array
-                X_Oy_H_array[:, :3, 3] = wrist_trans_array
-
-                X_N_H_array = np.repeat(np.eye(4)[None, ...], B, axis=0)
-                for i in range(B):
-                    X_N_H_array[i] = self.X_N_Oy @ X_Oy_H_array[i]
-
-                device = "cuda"
-                hand_model = HandModel(device=device)
-
-                # Compute pregrasp and target hand poses
-                trans_array = X_N_H_array[:, :3, 3]
-                rot_array = X_N_H_array[:, :3, :3]
-
-                pregrasp_hand_pose = hand_config_to_pose(
-                    trans_array, rot_array, joint_angles_array
-                ).to(device)
-
-                # Get plotly data
-                hand_model.set_parameters(pregrasp_hand_pose)
-                pregrasp_plot_data = hand_model.get_plotly_data(
-                    i=batch_idx, opacity=1.0
-                )
-
-                for x in pregrasp_plot_data:
-                    fig.add_trace(x)
-                # Add title with idx
-                fig.update_layout(title_text=f"Batch idx {batch_idx}")
-                fig.show()
+            nerf_densities_global, _query_points_global_N = None, None
 
         batch_data_input = BatchDataInput(
             nerf_densities=densities,
@@ -229,17 +133,10 @@ class NerfEvaluatorWrapper(torch.nn.Module):
             nerf_densities_global=(
                 nerf_densities_global if nerf_densities_global is not None else None
             ),
-        ).to(grasp_config.hand_config.wrist_pose.device)
+        ).to(grasp_config.device)
 
         # Pass grasp transforms, densities into nerf_evaluator.
-        if self.return_type == "failure_probability":
-            return self.nerf_evaluator_model.get_failure_probability(batch_data_input)
-        elif self.return_type == "failure_logits":
-            return self.nerf_evaluator_model(batch_data_input)[:, -1]
-        elif self.return_type == "all_logits":
-            return self.nerf_evaluator_model(batch_data_input)
-        else:
-            raise ValueError(f"return_type {self.return_type} not recognized")
+        return self.nerf_evaluator_model.get_failure_probability(batch_data_input)
 
     def compute_ray_samples(
         self,
@@ -261,7 +158,7 @@ class NerfEvaluatorWrapper(torch.nn.Module):
 
         # Prepare transforms
         T_Oy_Fi = grasp_config.grasp_frame_transforms
-        assert T_Oy_Fi.lshape == (grasp_config.batch_size, grasp_config.num_fingers)
+        assert T_Oy_Fi.lshape == (len(grasp_config), grasp_config.num_fingers)
 
         assert self.X_N_Oy.shape == (
             4,
@@ -271,10 +168,8 @@ class NerfEvaluatorWrapper(torch.nn.Module):
             torch.from_numpy(self.X_N_Oy)
             .float()
             .unsqueeze(dim=0)
-            .repeat_interleave(
-                grasp_config.batch_size * grasp_config.num_fingers, dim=0
-            )
-            .reshape(grasp_config.batch_size, grasp_config.num_fingers, 4, 4)
+            .repeat_interleave(len(grasp_config) * grasp_config.num_fingers, dim=0)
+            .reshape(len(grasp_config), grasp_config.num_fingers, 4, 4)
         )
 
         T_N_Oy = pp.from_matrix(
@@ -308,6 +203,139 @@ class NerfEvaluatorWrapper(torch.nn.Module):
         grasp_config: AllegroGraspConfig,
     ) -> torch.Tensor:
         return self(grasp_config)
+
+    def DEBUG_PLOT(
+        self,
+        grasp_config: AllegroGraspConfig,
+    ) -> None:
+        # TODO: Clean this up a lot
+        # DEBUG PLOT
+        ray_samples = self.compute_ray_samples(grasp_config)
+
+        # Query NeRF at RaySamples.
+        densities = self.compute_nerf_densities(
+            ray_samples,
+        )
+        assert densities.shape == (
+            len(grasp_config),
+            4,
+            self.fingertip_config.num_pts_x,
+            self.fingertip_config.num_pts_y,
+            self.fingertip_config.num_pts_z,
+        )
+
+        # Query NeRF in grid
+        # BRITTLE: Require that the nerf_evaluator_model has the word "Global" in it if needed
+        need_to_query_global = (
+            "global" in self.nerf_evaluator_model.__class__.__name__.lower()
+        )
+        if need_to_query_global:
+            lb_N = transform_point(T=self.X_N_Oy, point=lb_Oy)
+            ub_N = transform_point(T=self.X_N_Oy, point=ub_Oy)
+            nerf_densities_global, query_points_global_N = get_densities_in_grid(
+                field=self.nerf_field,
+                lb=lb_N,
+                ub=ub_N,
+                num_pts_x=NERF_DENSITIES_GLOBAL_NUM_X,
+                num_pts_y=NERF_DENSITIES_GLOBAL_NUM_Y,
+                num_pts_z=NERF_DENSITIES_GLOBAL_NUM_Z,
+            )
+            nerf_densities_global = (
+                torch.from_numpy(nerf_densities_global)
+                .float()[None, ...]
+                .repeat_interleave(len(grasp_config), dim=0)
+            )
+        else:
+            nerf_densities_global, query_points_global_N = None, None
+
+        from pathlib import Path
+
+        import trimesh
+
+        if Path("/tmp/mesh_viz_object.obj").exists():
+            mesh = trimesh.load("/tmp/mesh_viz_object.obj")
+        else:
+            mesh = None
+
+        # Do not need this, just for debugging
+        query_points_global_N = (
+            torch.from_numpy(query_points_global_N)
+            .float()[None, ...]
+            .repeat_interleave(len(grasp_config), dim=0)
+        )
+        all_query_points = ray_samples.frustums.get_positions()
+
+        for batch_idx in range(2):
+            fig = go.Figure()
+            N_FINGERS = 4
+            for i in range(N_FINGERS):
+                plot_nerf_densities(
+                    fig=fig,
+                    densities=densities[batch_idx, i].reshape(-1),
+                    query_points=all_query_points[batch_idx, i].reshape(-1, 3),
+                    name=f"finger_{i}",
+                    opacity=0.2,
+                )
+            if need_to_query_global and nerf_densities_global is not None:
+                nerf_densities_global_flattened = nerf_densities_global[
+                    batch_idx
+                ].reshape(-1)
+                query_points_global_N_flattened = query_points_global_N[
+                    batch_idx
+                ].reshape(-1, 3)
+                plot_nerf_densities(
+                    fig=fig,
+                    densities=nerf_densities_global_flattened[
+                        nerf_densities_global_flattened > 15
+                    ],
+                    query_points=query_points_global_N_flattened[
+                        nerf_densities_global_flattened > 15
+                    ],
+                    name="global",
+                )
+
+            if mesh is not None:
+                plot_mesh(fig=fig, mesh=mesh)
+
+            wrist_trans_array = (
+                grasp_config.wrist_pose.translation().detach().cpu().numpy()
+            )
+            wrist_rot_array = (
+                grasp_config.wrist_pose.rotation().matrix().detach().cpu().numpy()
+            )
+            joint_angles_array = grasp_config.joint_angles.detach().cpu().numpy()
+
+            # Put into transforms X_Oy_H_array
+            B = len(grasp_config)
+            X_Oy_H_array = np.repeat(np.eye(4)[None, ...], B, axis=0)
+            assert X_Oy_H_array.shape == (B, 4, 4)
+            X_Oy_H_array[:, :3, :3] = wrist_rot_array
+            X_Oy_H_array[:, :3, 3] = wrist_trans_array
+
+            X_N_H_array = np.repeat(np.eye(4)[None, ...], B, axis=0)
+            for i in range(B):
+                X_N_H_array[i] = self.X_N_Oy @ X_Oy_H_array[i]
+
+            device = "cuda"
+            hand_model = HandModel(device=device)
+
+            # Compute pregrasp and target hand poses
+            trans_array = X_N_H_array[:, :3, 3]
+            rot_array = X_N_H_array[:, :3, :3]
+
+            pregrasp_hand_pose = hand_config_np_to_pose(
+                trans_array, rot_array, joint_angles_array
+            ).to(device)
+
+            # Get plotly data
+            hand_model.set_parameters(pregrasp_hand_pose)
+            pregrasp_plot_data = hand_model.get_plotly_data(i=batch_idx, opacity=1.0)
+
+            for x in pregrasp_plot_data:
+                fig.add_trace(x)
+            # Add title with idx
+            fig.update_layout(title_text=f"Batch idx {batch_idx}")
+            fig.show()
 
     @classmethod
     def from_config(
@@ -428,19 +456,19 @@ def load_nerf_evaluator(
 
 
 @dataclass
-class Args:
-    nerf_evaluator_wrapper: NerfEvaluatorWrapperConfig
+class NerfEvaluatorWrapperCmdLineArgs:
+    nerf_evaluator_wrapper: NerfEvaluatorWrapperConfig = field(
+        default_factory=NerfEvaluatorWrapperConfig
+    )
     grasp_config_dict_path: pathlib.Path = (
         get_data_folder()
-        / "2023-01-03_mugs_smaller0-075_noise_lightshake_mid_opt"
-        / "evaled_grasp_config_dicts"
-        / "core-mug-10f6e09036350e92b3f21f1137c3c347_0_0750.npy"
+        / "NEW_DATASET/final_evaled_grasp_config_dicts_train/core-bottle-11fc9827d6b467467d3aa3bae1f7b494_0_0726.npy"
     )
     max_num_grasps: Optional[int] = None
     batch_size: int = 32
 
 
-def main(cfg: Args):
+def main(cfg: NerfEvaluatorWrapperCmdLineArgs):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     grasp_config_dict = np.load(cfg.grasp_config_dict_path, allow_pickle=True).item()
 
@@ -511,5 +539,5 @@ def main(cfg: Args):
 
 
 if __name__ == "__main__":
-    cfg = tyro.cli(Args)
+    cfg = tyro.cli(NerfEvaluatorWrapperCmdLineArgs)
     main(cfg)

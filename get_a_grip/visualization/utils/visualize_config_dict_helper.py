@@ -11,7 +11,7 @@ from get_a_grip.dataset_generation.utils.joint_angle_targets import (
     compute_optimized_joint_angle_targets_given_fingertip_targets,
 )
 from get_a_grip.dataset_generation.utils.object_model import ObjectModel
-from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_to_pose
+from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_np_to_pose
 
 
 def get_hand_config_dict_plotly_data_list(
@@ -194,7 +194,7 @@ def create_config_dict_fig(
 
     # hand pose
     hand_pose = (
-        hand_config_to_pose(
+        hand_config_np_to_pose(
             trans=config_dict["trans"],
             rot=config_dict["rot"],
             joint_angles=config_dict["joint_angles"],
@@ -205,7 +205,7 @@ def create_config_dict_fig(
 
     # hand pose start
     if "joint_angles_start" in config_dict and not skip_visualize_qpos_start:
-        hand_pose_start = hand_config_to_pose(
+        hand_pose_start = hand_config_np_to_pose(
             trans=config_dict["trans_start"],
             rot=config_dict["rot_start"],
             joint_angles=config_dict["joint_angles_start"],

@@ -16,7 +16,7 @@ Small:
 
 - <download_url>/small/nerfcheckpoints.zip
 
-- <download_url>/small/pointclouds.zip
+- <download_url>/small/point_clouds.zip
 
 Large:
 
@@ -28,7 +28,7 @@ Large:
 
 - <download_url>/large/nerfcheckpoints.zip
 
-- <download_url>/large/pointclouds.zip
+- <download_url>/large/point_clouds.zip
 
 Create a directories `data/small` and `data/large`, then unzip into these folder to get the following directory structure:
 
@@ -39,13 +39,13 @@ data
 │   ├── meshes
 │   ├── nerfdata
 │   ├── nerfcheckpoints
-│   └── pointclouds
+│   └── point_clouds
 └── large
     ├── final_evaled_grasp_config_dicts
     ├── meshes
     ├── nerfdata
     ├── nerfcheckpoints
-    └── pointclouds
+    └── point_clouds
 ```
 
 ## Dataset Details
@@ -133,6 +133,17 @@ optimized_grasp_config_dict['loss'].shape == (batch_size,)
 ```
 
 Where loss refer to predicted failure probabilities (1 is bad, 0 is good)
+
+
+#### Grasps in Neural Networks
+
+When grasps are used as input to or output from neural networks, we need a good way to represent them. We choose to represent the grasps as a compact vector of (xyz, rot6d, theta, d_i, ..., d_n_f). This is 37D (3 + 6 + 16 + 4*3) for the Allegro hand.
+- xyz: The wrist position in Oy frame.
+- rot6d: The wrist rotation in Oy frame, represented as a 6D vector (first two columns of the rotation matrix)
+- theta: The pre-grasp joint configuration
+- d_i: The direction in which the ith fingertip moves during the grasp in Oy frame, belongs to the space S^2.
+
+We try to use the word "grasp config" or "grasp config dict" when referring to the information in the dicts described above, and "grasp" when referring to the compact vector representation.
 
 ### meshes
 
@@ -235,12 +246,12 @@ View a NeRF with:
 ns-viewer --load-config <path_to_config.yml>
 ```
 
-### pointclouds
+### point_clouds
 
 Directory structure:
 
 ```
-pointclouds
+point_clouds
 ├── <object_code_and_scale_str>
 │   └── point_cloud.ply
 ├── <object_code_and_scale_str>

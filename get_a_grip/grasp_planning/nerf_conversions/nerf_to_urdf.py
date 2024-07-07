@@ -11,7 +11,7 @@ from get_a_grip.model_training.utils.nerf_load_utils import load_nerf_field
 
 
 @dataclass
-class Args:
+class NerfToUrdfArgs:
     nerfcheckpoint_filepath: pathlib.Path
     nerf_is_z_up: bool
     density_of_0_level_set: float = 15.0
@@ -100,7 +100,7 @@ def parse_object_code_and_scale(object_code_and_scale_str: str) -> Tuple[str, fl
     return object_code, object_scale
 
 
-def nerf_to_urdf(args: Args) -> Tuple[pathlib.Path, pathlib.Path]:
+def nerf_to_urdf(args: NerfToUrdfArgs) -> Tuple[pathlib.Path, pathlib.Path]:
     print("=" * 80)
     print(f"{pathlib.Path(__file__).name} args: {args}")
     print("=" * 80 + "\n")
@@ -158,7 +158,7 @@ def nerf_to_urdf(args: Args) -> Tuple[pathlib.Path, pathlib.Path]:
 
 
 def main() -> None:
-    args = tyro.cli(Args)
+    args = tyro.cli(NerfToUrdfArgs)
     nerf_to_urdf(args)
 
 

@@ -6,7 +6,7 @@ from nerfstudio.scripts.train import _set_random_seed
 
 
 @dataclass
-class Args:
+class TrainNerfReturnTrainerArgs:
     nerfdata_folder: pathlib.Path
     nerfcheckpoints_folder: pathlib.Path
     max_num_iterations: int = 400
@@ -39,7 +39,7 @@ def get_nerfacto_default_config():
 
 
 def train_nerf(
-    args: Args,
+    args: TrainNerfReturnTrainerArgs,
 ) -> Trainer:
     config = get_nerfacto_default_config()
 
@@ -68,7 +68,7 @@ def train_nerf(
 
 
 def main() -> None:
-    args = Args(
+    args = TrainNerfReturnTrainerArgs(
         nerfdata_folder=pathlib.Path(
             "experiments/2024-04-15_DEBUG/nerfdata/sem-Vase-3a275e00d69810c62600e861c93ad9cc_0_0846"
         ),

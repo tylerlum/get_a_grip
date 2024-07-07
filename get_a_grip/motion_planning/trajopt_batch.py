@@ -27,7 +27,7 @@ from get_a_grip.dataset_generation.utils.torch_quat_utils import (
     matrix_to_quat_wxyz,
 )
 from get_a_grip.grasp_planning.utils.joint_limit_utils import (
-    is_in_limits,
+    is_in_limits_np,
 )
 from get_a_grip.motion_planning.joint_limit_utils import (
     modify_robot_cfg_to_add_joint_limit_buffer,
@@ -189,7 +189,7 @@ def solve_prepared_trajopt_batch(
     N_GRASPS = X_W_Hs.shape[0]
     assert X_W_Hs.shape == (N_GRASPS, 4, 4), f"X_W_Hs.shape: {X_W_Hs.shape}"
     assert q_algrs.shape == (N_GRASPS, 16), f"q_algrs.shape: {q_algrs.shape}"
-    assert is_in_limits(q_algrs).all(), f"q_algrs: {q_algrs}"
+    assert is_in_limits_np(q_algrs).all(), f"q_algrs: {q_algrs}"
 
     if q_fr3_starts is None:
         print("Using default q_fr3_starts")

@@ -15,7 +15,7 @@ from tqdm import tqdm, trange
 
 import wandb
 from get_a_grip import get_data_folder
-from get_a_grip.model_training.models.dex_evaluator import DexEvaluator
+from get_a_grip.model_training.models.bps_evaluator import BpsEvaluator
 from get_a_grip.model_training.utils.bps_grasp_dataset import BpsGraspEvalDataset
 from wandb.util import generate_id
 
@@ -127,9 +127,9 @@ def setup(cfg: TrainBpsGraspEvaluatorConfig, rank: int = 0):
 
     # make other stuff we need
     if cfg.multigpu:
-        model = DDP(DexEvaluator(in_grasp=37).to(device), device_ids=[rank])
+        model = DDP(BpsEvaluator(in_grasp=37).to(device), device_ids=[rank])
     else:
-        model = DexEvaluator(in_grasp=37).to(device)
+        model = BpsEvaluator(in_grasp=37).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.learning_rate)
     scheduler = ReduceLROnPlateau(optimizer, "min", patience=10, factor=0.9)
 

@@ -14,7 +14,7 @@ from get_a_grip.dataset_generation.utils.object_model import ObjectModel
 from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
-from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_to_pose
+from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_np_to_pose
 from get_a_grip.visualization.utils.visualize_config_dict_helper import (
     create_config_dict_fig,
 )
@@ -58,7 +58,7 @@ def get_hand_model_from_config_dicts(
     device: str,
     idx_to_visualize: int,
 ) -> HandModel:
-    hand_pose = hand_config_to_pose(
+    hand_pose = hand_config_np_to_pose(
         trans=config_dict["trans"][idx_to_visualize],
         rot=config_dict["rot"][idx_to_visualize],
         joint_angles=config_dict["joint_angles"][idx_to_visualize],

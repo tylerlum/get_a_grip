@@ -1,15 +1,13 @@
 import pypose as pp
 import torch
 
-from get_a_grip.grasp_planning.utils.joint_limit_utils import (
-    get_joint_limits,
-)
-from get_a_grip.model_training.models.dex_evaluator import DexEvaluator
+from get_a_grip.grasp_planning.utils.joint_limit_utils import get_joint_limits
+from get_a_grip.model_training.models.bps_evaluator import BpsEvaluator
 
 
 class RandomSamplingOptimizer:
     def __init__(
-        self, dex_evaluator: DexEvaluator, bps: torch.Tensor, init_grasps: torch.Tensor
+        self, dex_evaluator: BpsEvaluator, bps: torch.Tensor, init_grasps: torch.Tensor
     ) -> None:
         self.dex_evaluator = dex_evaluator
         self.bps = bps
@@ -20,10 +18,8 @@ class RandomSamplingOptimizer:
         self.joint_angle_noise = 0.01
         self.grasp_orientation_noise = 0.05
 
-        joint_lower_limits, joint_upper_limits = get_joint_limits()
-        self.joint_lower_limits, self.joint_upper_limits = (
-            torch.from_numpy(joint_lower_limits).float().to(self.grasps.device),
-            torch.from_numpy(joint_upper_limits).float().to(self.grasps.device),
+        self.joint_lower_limits, self.joint_upper_limits = get_joint_limits(
+            device=self.grasps.device
         )
 
     def step(self) -> torch.Tensor:
@@ -153,7 +149,7 @@ class RandomSamplingOptimizer:
 
 def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dex_evaluator = DexEvaluator(in_grasp=37, in_bps=4096).to(device)
+    dex_evaluator = BpsEvaluator(in_grasp=37, in_bps=4096).to(device)
     dex_evaluator.eval()
     bps = torch.zeros(2, 4096, device=device)
     init_grasps = torch.randn(2, 37, device=device)

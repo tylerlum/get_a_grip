@@ -373,16 +373,20 @@ class PlotConfig:
 
 @dataclass
 class NerfEvaluatorConfig:
-    model_config: ModelConfig = DEFAULT_CNN_3D_XYZ_Global_CNN_ModelConfig
-    nerfdata_config: GridNerfDataConfig = GridNerfDataConfig()
+    model_config: ModelConfig = field(
+        default_factory=lambda: DEFAULT_CNN_3D_XYZ_Global_CNN_ModelConfig
+    )
+    nerfdata_config: GridNerfDataConfig = field(default_factory=GridNerfDataConfig)
     nerfdata_config_path: Optional[pathlib.Path] = None
-    train_dataset_filepath: Optional[pathlib.Path] = None
-    val_dataset_filepath: Optional[pathlib.Path] = None
-    test_dataset_filepath: Optional[pathlib.Path] = None
+    train_dataset_path: Optional[pathlib.Path] = None
+    val_dataset_path: Optional[pathlib.Path] = None
+    test_dataset_path: Optional[pathlib.Path] = None
     data: DataConfig = DataConfig()
-    dataloader: DataLoaderConfig = DataLoaderConfig()
-    training: TrainingConfig = TrainingConfig()
-    checkpoint_workspace: CheckpointWorkspaceConfig = CheckpointWorkspaceConfig()
+    dataloader: DataLoaderConfig = field(default_factory=DataLoaderConfig)
+    training: TrainingConfig = field(default_factory=TrainingConfig)
+    checkpoint_workspace: CheckpointWorkspaceConfig = field(
+        default_factory=CheckpointWorkspaceConfig
+    )
     task_type: TaskType = TaskType.Y_PICK_AND_Y_COLL_AND_Y_PGS
     wandb: WandbConfig = field(
         default_factory=lambda: WandbConfig(project=DEFAULT_WANDB_PROJECT)
@@ -406,12 +410,11 @@ class NerfEvaluatorConfig:
             )
 
         assert (
-            (self.val_dataset_filepath is None and self.test_dataset_filepath is None)
+            (self.val_dataset_path is None and self.test_dataset_path is None)
             or (
-                self.val_dataset_filepath is not None
-                and self.test_dataset_filepath is not None
+                self.val_dataset_path is not None and self.test_dataset_path is not None
             )
-        ), f"Must specify both val and test dataset filepaths, or neither. Got val: {self.val_dataset_filepath}, test: {self.test_dataset_filepath}"
+        ), f"Must specify both val and test dataset paths, or neither. Got val: {self.val_dataset_path}, test: {self.test_dataset_path}"
 
         # Set the name of the run if given
         # HACK: don't want to overwrite these if we're loading this config from a file
@@ -424,27 +427,27 @@ class NerfEvaluatorConfig:
             self.wandb = WandbConfig(project=DEFAULT_WANDB_PROJECT, name=name_with_date)
 
     @property
-    def actual_train_dataset_filepath(self) -> pathlib.Path:
-        if self.train_dataset_filepath is None:
+    def actual_train_dataset_path(self) -> pathlib.Path:
+        if self.train_dataset_path is None:
             assert self.nerfdata_config.output_filepath is not None
             return self.nerfdata_config.output_filepath
-        return self.train_dataset_filepath
+        return self.train_dataset_path
 
     @property
     def create_val_test_from_train(self) -> bool:
-        return self.val_dataset_filepath is None and self.test_dataset_filepath is None
+        return self.val_dataset_path is None and self.test_dataset_path is None
 
     @property
-    def actual_val_dataset_filepath(self) -> pathlib.Path:
-        if self.val_dataset_filepath is None:
+    def actual_val_dataset_path(self) -> pathlib.Path:
+        if self.val_dataset_path is None:
             raise ValueError("Must specify val dataset filepath")
-        return self.val_dataset_filepath
+        return self.val_dataset_path
 
     @property
-    def actual_test_dataset_filepath(self) -> pathlib.Path:
-        if self.test_dataset_filepath is None:
+    def actual_test_dataset_path(self) -> pathlib.Path:
+        if self.test_dataset_path is None:
             raise ValueError("Must specify test dataset filepath")
-        return self.test_dataset_filepath
+        return self.test_dataset_path
 
 
 DEFAULTS_DICT = {

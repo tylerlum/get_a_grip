@@ -5,15 +5,15 @@ from torch.nn.modules.activation import MultiheadAttention
 from get_a_grip.model_training.models.components.fc_resblock import FCResBlock
 
 
-class DexSampler(nn.Module):
-    """DexDiffuser: https://arxiv.org/pdf/2402.02989
+class BpsSampler(nn.Module):
+    """Motivated by DexDiffuser: https://arxiv.org/pdf/2402.02989
     It takes three inputs: fO, gt, and t and outputs εˆt for grasp denoising.
     Its input fO is processed into a key-value pair while gt at time t is processed into a query using a self-attention block.
     The key-value-query triplet is then embedded using a crossattention block and used to compute ε
     """
 
     def __init__(
-        self, n_pts: int, grasp_dim: int, d_model: int, virtual_seq_len: int
+        self, n_pts: int, grasp_dim: int, d_model: int = 128, virtual_seq_len: int = 4
     ) -> None:
         """Attention needs a seq_len dimension, but the input doesn't have it, so we create a virtual seq_len dimension"""
         super().__init__()
@@ -97,16 +97,16 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     print("\n" + "-" * 80)
-    print("Testing DexSampler...")
+    print("Testing BpsSampler...")
     print("-" * 80)
-    dex_sampler = DexSampler(
+    bps_sampler = BpsSampler(
         n_pts=4096, grasp_dim=37, d_model=128, virtual_seq_len=4
     ).to(device)
     batch_size = 2
     f_O = torch.rand(batch_size, 4096, device=device)
     g_t = torch.rand(batch_size, 37, device=device)
     t = torch.rand(batch_size, 1, device=device)
-    output = dex_sampler(f_O=f_O, g_t=g_t, t=t)
+    output = bps_sampler(f_O=f_O, g_t=g_t, t=t)
     print(f"Output shape: {output.shape}")
 
 

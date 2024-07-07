@@ -1,5 +1,5 @@
 import os
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import plotly.graph_objects as go
@@ -14,6 +14,8 @@ from kaolin.metrics.trianglemesh import (
     compute_sdf,
 )
 
+from get_a_grip.model_training.utils.point_utils import transform_points
+
 
 class ObjectModel:
     def __init__(
@@ -23,7 +25,7 @@ class ObjectModel:
         num_samples: int = 250,
         num_calc_samples: Optional[int] = None,
         device: Union[str, torch.device] = "cpu",
-    ):
+    ) -> None:
         """
         Create a Object Model
 
@@ -56,7 +58,11 @@ class ObjectModel:
         self.object_mesh_list = None
         self.object_face_verts_list = None
 
-    def initialize(self, object_code_list, object_scale_list):
+    def initialize(
+        self,
+        object_code_list: Union[List[str], str],
+        object_scale_list: Union[List[float], float],
+    ) -> None:
         """
         Initialize Object Model with list of objects
 
@@ -66,8 +72,10 @@ class ObjectModel:
         ----------
         object_code_list: list | str
             list of object codes
+        object_scale_list: list | float
+            list of object scales
         """
-        if not isinstance(object_code_list, list):
+        if isinstance(object_code_list, str):
             object_code_list = [object_code_list]
         self.object_code_list = object_code_list
         if isinstance(object_scale_list, float):
@@ -133,7 +141,58 @@ class ObjectModel:
                 .reshape(-1, self.num_samples, 3)
             )  # (n_objects * batch_size_each, num_samples, 3)
 
-    def cal_distance(self, x, with_closest_points=False):
+    def cal_distance(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Calculate signed distances from hand contact points to object meshes and return contact normals
+
+        Interiors are positive, exteriors are negative
+
+        Parameters
+        ----------
+        x: (B, `n_contact`, 3) torch.Tensor
+            hand contact points
+
+        Returns
+        -------
+        distance: (B, `n_contact`) torch.Tensor
+            signed distances from hand contact points to object meshes, inside is positive
+        normals: (B, `n_contact`, 3) torch.Tensor
+            contact normal vectors defined by gradient
+        """
+        distance, normals, _ = self._cal_distance_internal(x)
+        return distance, normals
+
+    def cal_distance_with_closest_points(
+        self, x: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Calculate signed distances from hand contact points to object meshes and return contact normals and closest points
+
+        Interiors are positive, exteriors are negative
+
+        Parameters
+        ----------
+        x: (B, `n_contact`, 3) torch.Tensor
+            hand contact points
+
+        Returns
+        -------
+        distance: (B, `n_contact`) torch.Tensor
+            signed distances from hand contact points to object meshes, inside is positive
+        normals: (B, `n_contact`, 3) torch.Tensor
+            contact normal vectors defined by gradient
+        closest_points: (B, `n_contact`, 3) torch.Tensor
+            contact points on object meshes
+        """
+        distance, normals, closest_points = self._cal_distance_internal(
+            x, with_closest_points=True
+        )
+        assert closest_points is not None
+        return distance, normals, closest_points
+
+    def _cal_distance_internal(
+        self, x: torch.Tensor, with_closest_points: bool = False
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """
         Calculate signed distances from hand contact points to object meshes and return contact normals
 
@@ -146,7 +205,7 @@ class ObjectModel:
         x: (B, `n_contact`, 3) torch.Tensor
             hand contact points
         with_closest_points: bool
-            whether to return closest points on object meshes
+            whether to compute the closest points on object meshes
 
         Returns
         -------
@@ -154,9 +213,13 @@ class ObjectModel:
             signed distances from hand contact points to object meshes, inside is positive
         normals: (B, `n_contact`, 3) torch.Tensor
             contact normal vectors defined by gradient
-        closest_points: (B, `n_contact`, 3) torch.Tensor
-            contact points on object meshes, returned only when `with_closest_points is True`
+        closest_points: (B, `n_contact`, 3) Optional[torch.Tensor]
+            contact points on object meshes, `with_closest_points is False` -> None
         """
+        assert self.object_scale_tensor is not None
+        assert self.object_mesh_list is not None
+        assert self.object_face_verts_list is not None
+
         _, n_points, _ = x.shape
         x = x.reshape(-1, self.batch_size_each * n_points, 3)
         distance = []
@@ -183,17 +246,17 @@ class ObjectModel:
                 -1, n_points, 3
             )
             return distance, normals, closest_points
-        return distance, normals
+        return distance, normals, None
 
     def get_plotly_data(
         self,
-        i,
-        color="lightgreen",
-        opacity=0.5,
-        pose=None,
-        with_surface_points=False,
-        with_table=False,
-    ):
+        i: int,
+        color: str = "lightgreen",
+        opacity: float = 0.5,
+        pose: Optional[np.ndarray] = None,
+        with_surface_points: bool = False,
+        with_table: bool = False,
+    ) -> list:
         """
         Get visualization data for plotly.graph_objects
 
@@ -213,6 +276,14 @@ class ObjectModel:
         data: list
             list of plotly.graph_object visualization data
         """
+        if pose is None:
+            pose = np.eye(4, dtype=np.float32)
+        assert pose.shape == (4, 4), f"{pose.shape}"
+
+        assert self.object_code_list is not None
+        assert self.object_mesh_list is not None
+        assert self.object_scale_tensor is not None
+
         data = []
         model_index = i // self.batch_size_each
         model_code = self.object_code_list[model_index]
@@ -224,9 +295,7 @@ class ObjectModel:
         )
         mesh = self.object_mesh_list[model_index]
         vertices = mesh.vertices * model_scale
-        if pose is not None:
-            pose = np.array(pose, dtype=np.float32)
-            vertices = vertices @ pose[:3, :3].T + pose[:3, 3]
+        vertices = transform_points(T=pose, points=vertices)
         data.append(
             go.Mesh3d(
                 x=vertices[:, 0],
@@ -245,10 +314,9 @@ class ObjectModel:
             object_surface_points = (
                 self.surface_points_tensor[i].detach().cpu().numpy() * model_scale
             )  # (num_samples, 3)
-            if pose is not None:
-                object_surface_points = (
-                    object_surface_points @ pose[:3, :3].T + pose[:3, 3]
-                )
+            object_surface_points = transform_points(
+                T=pose, points=object_surface_points
+            )
             data.append(
                 go.Scatter3d(
                     x=object_surface_points[:, 0],
@@ -262,9 +330,8 @@ class ObjectModel:
         if with_table:
             table_mesh = self.get_table_mesh(i, scaled=True)
             table_vertices = table_mesh.vertices
-            if pose is not None:
-                pose = np.array(pose, dtype=np.float32)
-                table_vertices = table_vertices @ pose[:3, :3].T + pose[:3, 3]
+
+            table_vertices = transform_points(T=pose, points=table_vertices)
             data.append(
                 go.Mesh3d(
                     x=table_vertices[:, 0],

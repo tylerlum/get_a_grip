@@ -8,13 +8,13 @@ import tyro
 
 
 @dataclass
-class Args:
+class VisualizeMeshArgs:
     obj_filepath: pathlib.Path
     opacity: float = 1.0
 
 
 def main() -> None:
-    args = tyro.cli(Args)
+    args = tyro.cli(VisualizeMeshArgs)
 
     # Load your .obj file
     mesh = trimesh.load(str(args.obj_filepath))

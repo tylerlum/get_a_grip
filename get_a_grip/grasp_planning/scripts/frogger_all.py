@@ -18,7 +18,7 @@ from get_a_grip.grasp_planning.utils.frogger_utils import (
 
 
 @dataclass
-class Args:
+class FroggerAllArgs:
     input_object_code_and_scales_txt_path: pathlib.Path = (
         get_data_folder() / "NEW_DATASET/nerfdata_settled_successes.txt"
     )
@@ -33,7 +33,7 @@ class Args:
 
 
 def main() -> None:
-    args = tyro.cli(Args)
+    args = tyro.cli(FroggerAllArgs)
 
     input_object_code_and_scale_strs = get_object_codes_and_scales_to_process(
         input_object_code_and_scales_txt_path=args.input_object_code_and_scales_txt_path,

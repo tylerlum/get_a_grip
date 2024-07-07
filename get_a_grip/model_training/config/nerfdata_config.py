@@ -1,5 +1,5 @@
 import pathlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import tyro
@@ -24,7 +24,9 @@ class GridNerfDataConfig:
     )
     output_filepath: Optional[pathlib.Path] = None
 
-    fingertip_config: EvenlySpacedFingertipConfig = EvenlySpacedFingertipConfig()
+    fingertip_config: EvenlySpacedFingertipConfig = field(
+        default_factory=EvenlySpacedFingertipConfig
+    )
     print_timing: bool = True
 
     limit_num_objects: Optional[int] = None  # None for no limit

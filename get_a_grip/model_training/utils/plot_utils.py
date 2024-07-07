@@ -2,7 +2,16 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 import plotly.graph_objects as go
+import torch
 import trimesh
+
+from get_a_grip.grasp_planning.utils.allegro_grasp_config import AllegroGraspConfig
+from get_a_grip.model_training.config.nerf_densities_global_config import (
+    NERF_DENSITIES_GLOBAL_NUM_X,
+    NERF_DENSITIES_GLOBAL_NUM_Y,
+    NERF_DENSITIES_GLOBAL_NUM_Z,
+)
+from get_a_grip.model_training.utils.point_utils import transform_points
 
 
 def get_scene_dict() -> Dict[str, Any]:
@@ -109,7 +118,7 @@ def plot_mesh_and_transforms(
         fig.add_trace(y_plot)
         fig.add_trace(z_plot)
 
-    fig.update_layout(legend_orientation="h", title_text=title)
+    fig.update_layout(legend_orientation="h", title_text=title, scene=get_scene_dict())
     return fig
 
 
@@ -207,4 +216,175 @@ def plot_mesh_and_high_density_points(
         legend_orientation="h",
     )  # Avoid overlapping legend
     fig.update_layout(scene_aspectmode="data")
+    return fig
+
+
+def plot_grasp_and_mesh_and_more(
+    fig: Optional[go.Figure] = None,
+    grasp: Optional[torch.Tensor] = None,
+    X_N_Oy: Optional[np.ndarray] = None,
+    visualize_target_hand: bool = False,
+    visualize_pre_hand: bool = False,
+    mesh: Optional[trimesh.Trimesh] = None,
+    basis_points: Optional[np.ndarray] = None,
+    bps: Optional[np.ndarray] = None,
+    raw_point_cloud_points: Optional[np.ndarray] = None,
+    processed_point_cloud_points: Optional[np.ndarray] = None,
+    nerf_global_grids_with_coords: Optional[np.ndarray] = None,
+    title: Optional[str] = None,
+) -> go.Figure:
+    """Create a plot in NeRF y-up (N) frame"""
+    if fig is None:
+        fig = go.Figure()
+
+    if grasp is not None:
+        # Extract data from grasp
+        assert grasp.shape == (
+            3 + 6 + 16 + 4 * 3,
+        ), f"Expected shape (3 + 6 + 16 + 4 * 3), got {grasp.shape}"
+        if X_N_Oy is not None:
+            assert X_N_Oy.shape == (4, 4), f"Expected shape (4, 4), got {X_N_Oy.shape}"
+
+        grasp_config = AllegroGraspConfig.from_grasp(grasp[None])
+        hand_model = grasp_config.hand_config.as_hand_model()
+        hand_plotly = hand_model.get_plotly_data(
+            i=0, opacity=0.8, color="lightblue", pose=X_N_Oy
+        )
+        for trace in hand_plotly:
+            fig.add_trace(trace)
+
+        if visualize_target_hand:
+            target_hand_model = grasp_config.get_target_hand_config().as_hand_model()
+            target_hand_plotly = target_hand_model.get_plotly_data(
+                i=0, opacity=0.3, color="lightgreen", pose=X_N_Oy
+            )
+            for trace in target_hand_plotly:
+                fig.add_trace(trace)
+        if visualize_pre_hand:
+            pre_hand_model = grasp_config.get_pre_hand_config().as_hand_model()
+            pre_hand_plotly = pre_hand_model.get_plotly_data(
+                i=0, opacity=0.3, color="lightgreen", pose=X_N_Oy
+            )
+            for trace in pre_hand_plotly:
+                fig.add_trace(trace)
+
+    if mesh is not None:
+        fig.add_trace(
+            go.Mesh3d(
+                x=mesh.vertices[:, 0],
+                y=mesh.vertices[:, 1],
+                z=mesh.vertices[:, 2],
+                i=mesh.faces[:, 0],
+                j=mesh.faces[:, 1],
+                k=mesh.faces[:, 2],
+                name="Object",
+                color="white",
+                opacity=0.5,
+            )
+        )
+
+    if basis_points is not None and bps is not None:
+        assert basis_points.shape == (
+            4096,
+            3,
+        ), f"Expected shape (4096, 3), got {basis_points.shape}"
+        assert bps.shape == (4096,), f"Expected shape (4096,), got {bps.shape}"
+
+        fig.add_trace(
+            go.Scatter3d(
+                x=basis_points[:, 0],
+                y=basis_points[:, 1],
+                z=basis_points[:, 2],
+                mode="markers",
+                marker=dict(
+                    size=1,
+                    color=bps,
+                    colorscale="rainbow",
+                    colorbar=dict(title="Basis points", orientation="h"),
+                ),
+                name="Basis points",
+            )
+        )
+
+    if raw_point_cloud_points is not None:
+        N_raw_pts = raw_point_cloud_points.shape[0]
+        assert raw_point_cloud_points.shape == (
+            N_raw_pts,
+            3,
+        ), f"Expected shape ({N_raw_pts}, 3), got {raw_point_cloud_points.shape}"
+
+        fig.add_trace(
+            go.Scatter3d(
+                x=raw_point_cloud_points[:, 0],
+                y=raw_point_cloud_points[:, 1],
+                z=raw_point_cloud_points[:, 2],
+                mode="markers",
+                marker=dict(size=1.5, color="blue"),
+                name="Raw point cloud",
+            )
+        )
+
+    if processed_point_cloud_points is not None:
+        N_processed_pts = processed_point_cloud_points.shape[0]
+        assert (
+            processed_point_cloud_points.shape
+            == (
+                N_processed_pts,
+                3,
+            )
+        ), f"Expected shape ({N_processed_pts}, 3), got {processed_point_cloud_points.shape}"
+
+        fig.add_trace(
+            go.Scatter3d(
+                x=processed_point_cloud_points[:, 0],
+                y=processed_point_cloud_points[:, 1],
+                z=processed_point_cloud_points[:, 2],
+                mode="markers",
+                marker=dict(size=1.5, color="black"),
+                name="Processed point cloud",
+            )
+        )
+
+    if nerf_global_grids_with_coords is not None:
+        assert (
+            nerf_global_grids_with_coords.shape
+            == (
+                3 + 1,
+                NERF_DENSITIES_GLOBAL_NUM_X,
+                NERF_DENSITIES_GLOBAL_NUM_Y,
+                NERF_DENSITIES_GLOBAL_NUM_Z,
+            )
+        ), f"Expected shape (3 + 1, {NERF_DENSITIES_GLOBAL_NUM_X}, {NERF_DENSITIES_GLOBAL_NUM_Y}, {NERF_DENSITIES_GLOBAL_NUM_Z}), got {nerf_global_grids_with_coords.shape}"
+        assert X_N_Oy is not None, "X_N_Oy must be provided to plot high density points"
+
+        query_points_colors = nerf_global_grids_with_coords[0].reshape(-1)
+        query_points = nerf_global_grids_with_coords[1:].reshape(3, -1).T
+
+        query_points = query_points[query_points_colors > 15]
+        query_points_colors = query_points_colors[query_points_colors > 15]
+
+        query_points = transform_points(T=X_N_Oy, points=query_points)
+
+        query_point_plot = go.Scatter3d(
+            x=query_points[:, 0],
+            y=query_points[:, 1],
+            z=query_points[:, 2],
+            mode="markers",
+            marker=dict(
+                size=4,
+                color=query_points_colors,
+                colorscale="viridis",
+                colorbar=dict(title="Density Scale"),
+            ),
+            name="Nerf High Density Points",
+        )
+        fig.add_trace(query_point_plot)
+
+    if title is not None:
+        fig.update_layout(
+            title=dict(
+                text=title,
+            ),
+        )
+
     return fig

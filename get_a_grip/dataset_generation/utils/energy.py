@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Union
 
 import torch
 
@@ -33,7 +33,7 @@ assert set(ENERGY_NAMES) == set(ENERGY_NAME_TO_SHORTHAND_DICT.keys())
 def _cal_force_closure(
     object_to_hand_contact_point_normal: torch.Tensor,
     contact_points: torch.Tensor,
-    device: torch.device,
+    device: Union[torch.device, str],
 ) -> torch.Tensor:
     batch_size, n_contact, _ = object_to_hand_contact_point_normal.shape
 

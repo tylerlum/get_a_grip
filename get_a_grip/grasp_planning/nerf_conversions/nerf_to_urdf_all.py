@@ -10,7 +10,7 @@ from get_a_grip.model_training.utils.nerf_load_utils import get_nerf_configs
 
 
 @dataclass
-class Args:
+class NerfToUrdfAllArgs:
     nerfcheckpoints_path: pathlib.Path
     nerf_is_z_up: bool
     density_of_0_level_set: float = 15.0
@@ -27,7 +27,7 @@ def print_and_run(cmd: str) -> None:
     subprocess.run(cmd, shell=True)
 
 
-def nerf_to_urdf_all(args: Args) -> None:
+def nerf_to_urdf_all(args: NerfToUrdfAllArgs) -> None:
     print("=" * 80)
     print(f"{pathlib.Path(__file__).name} args: {args}")
     print("=" * 80 + "\n")
@@ -60,7 +60,7 @@ def nerf_to_urdf_all(args: Args) -> None:
 
 
 def main() -> None:
-    args = tyro.cli(Args)
+    args = tyro.cli(NerfToUrdfAllArgs)
     nerf_to_urdf_all(args)
 
 

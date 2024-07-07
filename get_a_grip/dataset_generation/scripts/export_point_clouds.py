@@ -15,11 +15,11 @@ from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
 
 
 @dataclass
-class ExportPointcloudsArgs:
+class ExportPointCloudsArgs:
     experiment_name: str
     nerf_is_z_up: bool
     input_nerfcheckpoints_name: str = "nerfcheckpoints"
-    output_pointclouds_name: str = "pointclouds"
+    output_point_clouds_name: str = "point_clouds"
     nerf_grasping_data_path: pathlib.Path = get_data_folder()
     randomize_order_seed: Optional[int] = None
     num_points: int = 5000
@@ -66,7 +66,7 @@ def get_latest_nerf_config(nerfcheckpoint_path: pathlib.Path) -> pathlib.Path:
     return latest_nerf_config
 
 
-def export_pointclouds(args: ExportPointcloudsArgs) -> pathlib.Path:
+def export_point_clouds(args: ExportPointCloudsArgs) -> pathlib.Path:
     assert (
         args.nerf_grasping_data_path.exists()
     ), f"{args.nerf_grasping_data_path} does not exist"
@@ -76,8 +76,8 @@ def export_pointclouds(args: ExportPointcloudsArgs) -> pathlib.Path:
     nerfcheckpoints_path = experiment_path / args.input_nerfcheckpoints_name
     assert nerfcheckpoints_path.exists(), f"{nerfcheckpoints_path} does not exist"
 
-    output_pointclouds_path = experiment_path / args.output_pointclouds_name
-    output_pointclouds_path.mkdir(exist_ok=True)
+    output_point_clouds_path = experiment_path / args.output_point_clouds_name
+    output_point_clouds_path.mkdir(exist_ok=True)
 
     nerfcheckpoint_paths = sorted(
         [
@@ -93,7 +93,7 @@ def export_pointclouds(args: ExportPointcloudsArgs) -> pathlib.Path:
         random.Random(args.randomize_order_seed).shuffle(nerfcheckpoint_paths)
 
     for nerfcheckpoint_path in tqdm(
-        nerfcheckpoint_paths, dynamic_ncols=True, desc="Exporting Pointclouds"
+        nerfcheckpoint_paths, dynamic_ncols=True, desc="Exporting PointClouds"
     ):
         nerf_config = get_latest_nerf_config(nerfcheckpoint_path)
 
@@ -102,12 +102,12 @@ def export_pointclouds(args: ExportPointcloudsArgs) -> pathlib.Path:
             object_code_and_scale_str
         ), f"object_code_and_scale_str: {object_code_and_scale_str} is not valid."
 
-        output_path_to_be_created = output_pointclouds_path / object_code_and_scale_str
+        output_path_to_be_created = output_point_clouds_path / object_code_and_scale_str
         if output_path_to_be_created.exists():
             print(f"Skipping {output_path_to_be_created} because it already exists")
             continue
 
-        # Need to do this here to avoid error when saving the pointclouds
+        # Need to do this here to avoid error when saving the point_clouds
         print(f"Creating {output_path_to_be_created}")
         output_path_to_be_created.mkdir(exist_ok=False)
 
@@ -138,21 +138,21 @@ def export_pointclouds(args: ExportPointcloudsArgs) -> pathlib.Path:
 
             timeout_path = (
                 experiment_path
-                / f"{args.input_nerfcheckpoints_name}_{args.output_pointclouds_name}_timeout.txt"
+                / f"{args.input_nerfcheckpoints_name}_{args.output_point_clouds_name}_timeout.txt"
             )
             print(f"Writing to {timeout_path}")
             with open(timeout_path, "a") as f:
                 f.write(f"{object_code_and_scale_str}\n")
 
-    return output_pointclouds_path
+    return output_point_clouds_path
 
 
 def main() -> None:
-    args = tyro.cli(ExportPointcloudsArgs)
+    args = tyro.cli(ExportPointCloudsArgs)
     print("=" * 80)
     print(f"{pathlib.Path(__file__).name} args: {args}")
     print("=" * 80 + "\n")
-    export_pointclouds(args)
+    export_point_clouds(args)
 
 
 if __name__ == "__main__":

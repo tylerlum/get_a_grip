@@ -39,8 +39,8 @@ from get_a_grip.grasp_planning.utils import (
     train_nerf_return_trainer,
 )
 from get_a_grip.grasp_planning.utils.joint_limit_utils import (
-    clamp_in_limits,
-    is_in_limits,
+    clamp_in_limits_np,
+    is_in_limits_np,
 )
 from get_a_grip.grasp_planning.utils.optimizer_utils import (
     get_sorted_grasps_from_dict,
@@ -308,14 +308,14 @@ def compute_ablation_grasps(
         q_algr_pres[:, 11] -= DELTA
     else:
         raise ValueError(f"Invalid MODE: {MODE}")
-    q_algr_pres = clamp_in_limits(q_algr_pres)
+    q_algr_pres = clamp_in_limits_np(q_algr_pres)
 
     num_grasps = X_Oy_Hs.shape[0]
     assert X_Oy_Hs.shape == (num_grasps, 4, 4)
     assert q_algr_pres.shape == (num_grasps, 16)
     assert q_algr_posts.shape == (num_grasps, 16)
 
-    q_algr_pres_is_in_limits = is_in_limits(q_algr_pres)
+    q_algr_pres_is_in_limits = is_in_limits_np(q_algr_pres)
     assert q_algr_pres_is_in_limits.shape == (num_grasps,)
     pass_idxs = set(np.where(q_algr_pres_is_in_limits)[0])
     print(
@@ -441,7 +441,7 @@ def main() -> None:
         start_time = time.time()
         nerfcheckpoints_folder = args.output_folder / "nerfcheckpoints"
         nerf_trainer = train_nerf_return_trainer.train_nerf(
-            args=train_nerf_return_trainer.Args(
+            args=train_nerf_return_trainer.TrainNerfReturnTrainerArgs(
                 nerfdata_folder=args.nerfdata_path,
                 nerfcheckpoints_folder=nerfcheckpoints_folder,
                 max_num_iterations=args.max_num_iterations,

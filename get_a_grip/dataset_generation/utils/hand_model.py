@@ -29,6 +29,7 @@ from get_a_grip.dataset_generation.utils.allegro_hand_info import (
 from get_a_grip.dataset_generation.utils.rot6d import (
     robust_compute_rotation_matrix_from_ortho6d,
 )
+from get_a_grip.model_training.utils.point_utils import transform_points
 
 
 class HandModel:
@@ -716,9 +717,14 @@ class HandModel:
         data: list
             list of plotly.graph_object visualization data
         """
-        if pose is not None:
-            pose = np.array(pose, dtype=np.float32)
+        if pose is None:
+            pose = np.eye(4, dtype=np.float32)
+        assert pose.shape == (4, 4), f"pose shape: {pose.shape}"
+
         data = []
+        assert self.current_status is not None
+        assert self.global_translation is not None
+        assert self.global_rotation is not None
         for link_name in self.mesh:
             v = self.current_status[link_name].transform_points(
                 self.mesh[link_name]["visual_vertices"]
@@ -728,7 +734,7 @@ class HandModel:
             if len(v.shape) == 3:
                 v = v[i]
             v = v @ self.global_rotation[i].T + self.global_translation[i]
-            v = v.detach().cpu()
+            v = v.detach().cpu().numpy()
             f = (
                 (
                     self.mesh[link_name]["visual_faces"]
@@ -738,8 +744,7 @@ class HandModel:
                 .detach()
                 .cpu()
             )
-            if pose is not None:
-                v = v @ pose[:3, :3].T + pose[:3, 3]
+            v = transform_points(T=pose, points=v)
             data.append(
                 go.Mesh3d(
                     x=v[:, 0],
@@ -754,9 +759,9 @@ class HandModel:
                 )
             )
         if with_contact_points:
-            contact_points = self.contact_points[i].detach().cpu()
-            if pose is not None:
-                contact_points = contact_points @ pose[:3, :3].T + pose[:3, 3]
+            assert self.contact_points is not None
+            contact_points = self.contact_points[i].detach().cpu().numpy()
+            contact_points = transform_points(T=pose, points=contact_points)
             data.append(
                 go.Scatter3d(
                     x=contact_points[:, 0],
@@ -768,9 +773,8 @@ class HandModel:
                 )
             )
         if with_contact_candidates:
-            contact_candidates = self.get_contact_candidates()[i].detach().cpu()
-            if pose is not None:
-                contact_candidates = contact_candidates @ pose[:3, :3].T + pose[:3, 3]
+            contact_candidates = self.get_contact_candidates()[i].detach().cpu().numpy()
+            contact_candidates = transform_points(T=pose, points=contact_candidates)
             data.append(
                 go.Scatter3d(
                     x=contact_candidates[:, 0],
@@ -782,9 +786,8 @@ class HandModel:
                 )
             )
         if with_surface_points:
-            surface_points = self.get_surface_points()[i].detach().cpu()
-            if pose is not None:
-                surface_points = surface_points @ pose[:3, :3].T + pose[:3, 3]
+            surface_points = self.get_surface_points()[i].detach().cpu().numpy()
+            surface_points = transform_points(T=pose, points=surface_points)
             data.append(
                 go.Scatter3d(
                     x=surface_points[:, 0],
@@ -797,11 +800,12 @@ class HandModel:
             )
 
         if with_penetration_keypoints:
-            penetration_keypoints = self.get_penetration_keypoints()[i].detach().cpu()
-            if pose is not None:
-                penetration_keypoints = (
-                    penetration_keypoints @ pose[:3, :3].T + pose[:3, 3]
-                )
+            penetration_keypoints = (
+                self.get_penetration_keypoints()[i].detach().cpu().numpy()
+            )
+            penetration_keypoints = transform_points(
+                T=pose, points=penetration_keypoints
+            )
             data.append(
                 go.Scatter3d(
                     x=penetration_keypoints[:, 0],

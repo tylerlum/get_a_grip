@@ -15,7 +15,7 @@ from get_a_grip.dataset_generation.utils.joint_angle_targets import (
     compute_grasp_orientations_from_z_dirs,
 )
 from get_a_grip.dataset_generation.utils.pose_conversion import (
-    hand_config_to_pose,
+    hand_config_np_to_pose,
 )
 
 
@@ -213,9 +213,9 @@ def add_noise(
     new_data_dict["joint_angles"] = new_joint_angles
 
     # hand_model
-    hand_pose = hand_config_to_pose(new_trans, new_rot, new_joint_angles).to(
-        hand_model.device
-    )
+    hand_pose = hand_config_np_to_pose(
+        trans=new_trans, rot=new_rot, joint_angles=new_joint_angles
+    ).to(hand_model.device)
     hand_model.set_parameters(hand_pose)
 
     # grasp_orientations
@@ -323,7 +323,7 @@ def main() -> None:
         )
 
         # hand_model
-        input_hand_pose = hand_config_to_pose(
+        input_hand_pose = hand_config_np_to_pose(
             trans=test_input["trans"],
             rot=test_input["rot"],
             joint_angles=test_input["joint_angles"],
@@ -333,7 +333,7 @@ def main() -> None:
             i=object_idx, color="lightblue", opacity=1.0
         )
 
-        output_hand_pose = hand_config_to_pose(
+        output_hand_pose = hand_config_np_to_pose(
             trans=test_output["trans"],
             rot=test_output["rot"],
             joint_angles=test_output["joint_angles"],

@@ -79,9 +79,6 @@ def main() -> None:
             NERF_DENSITIES_GLOBAL_NUM_Z,
         ),
         grasp_dim=config.diffusion.data.grasp_dim,
-        d_model=128,
-        virtual_seq_len=4,
-        conv_channels=(32, 64, 128),
     )
 
     if config.diffusion.multigpu:

@@ -29,7 +29,7 @@ from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
 from get_a_grip.dataset_generation.utils.pose_conversion import (
-    hand_config_to_pose,
+    hand_config_np_to_pose,
 )
 from get_a_grip.dataset_generation.utils.seed import set_seed
 from get_a_grip.dataset_generation.utils.torch_quat_utils import matrix_to_quat_wxyz
@@ -148,7 +148,9 @@ def main() -> None:
 
     # Compute hand pose
     quat_wxyz = matrix_to_quat_wxyz(torch.from_numpy(rot)).numpy()
-    hand_pose = hand_config_to_pose(trans, rot, joint_angles).to(device)
+    hand_pose = hand_config_np_to_pose(
+        trans=trans, rot=rot, joint_angles=joint_angles
+    ).to(device)
 
     # Compute joint angle targets
     joint_angle_targets_array = compute_joint_angle_targets(
