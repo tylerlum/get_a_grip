@@ -52,11 +52,17 @@ class OptimConfig:
 
 
 @dataclass
+class WandbConfig:
+    log: bool = True
+    project: str = "diffusion_sampler"
+
+
+@dataclass
 class DiffusionConfig:
     data: DataConfig = field(default_factory=DataConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
     optim: OptimConfig = field(default_factory=OptimConfig)
-    wandb_log: bool = True
+    wandb: WandbConfig = field(default_factory=WandbConfig)
     multigpu: bool = True

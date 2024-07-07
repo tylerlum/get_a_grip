@@ -26,8 +26,8 @@ from get_a_grip.model_training.config.diffusion_config import (
     DiffusionConfig,
     TrainingConfig,
 )
-from get_a_grip.model_training.models.bps_evaluator import BpsEvaluator
-from get_a_grip.model_training.models.bps_sampler import BpsSampler
+from get_a_grip.model_training.models.bps_evaluator_model import BpsEvaluatorModel
+from get_a_grip.model_training.models.bps_sampler_model import BpsSamplerModel
 from get_a_grip.model_training.scripts.create_bps_grasp_dataset import (
     crop_single_point_cloud,
     read_and_process_single_point_cloud,
@@ -110,7 +110,7 @@ diffusion_cfg = DiffusionConfig(
         log_path=cfg.sampler_ckpt_path.parent,
     )
 )
-model = BpsSampler(
+model = BpsSamplerModel(
     n_pts=diffusion_cfg.data.n_pts,
     grasp_dim=diffusion_cfg.data.grasp_dim,
 )
@@ -119,9 +119,9 @@ runner.load_checkpoint(diffusion_cfg, filename=cfg.sampler_ckpt_path.name)
 
 # %%
 # loading bps evaluator
-dex_evaluator = BpsEvaluator(in_grasp=37).to(runner.device)
-dex_evaluator.load_state_dict(torch.load(cfg.evaluator_ckpt_path))
-dex_evaluator.eval()
+bps_evaluator = BpsEvaluatorModel(in_grasp=37).to(runner.device)
+bps_evaluator.load_state_dict(torch.load(cfg.evaluator_ckpt_path))
+bps_evaluator.eval()
 
 # %%
 # running just the sampler
@@ -154,7 +154,7 @@ for i, (grasps, bpss, y_true) in tqdm(
         bpss.to(runner.device),
         y_true.to(runner.device),
     )
-    y_pred = dex_evaluator(f_O=bpss, g_O=grasps)
+    y_pred = bps_evaluator(f_O=bpss, g_O=grasps)
 
     y_PGS_pred = y_pred[0, -1].detach().cpu().numpy()
     y_PGS_true = y_true[0, -1].detach().cpu().numpy()
@@ -190,7 +190,7 @@ assert grasp.shape == (1, 37), f"Expected shape (1, 37), got {grasp.shape}"
 
 # %%
 # evaluating a grasp
-y_pred = dex_evaluator(f_O=bps[None].to(runner.device), g_O=grasp.to(runner.device))
+y_pred = bps_evaluator(f_O=bps[None].to(runner.device), g_O=grasp.to(runner.device))
 print(f"y_pred.shape: {y_pred.shape}")
 assert y_pred.shape == (
     1,
