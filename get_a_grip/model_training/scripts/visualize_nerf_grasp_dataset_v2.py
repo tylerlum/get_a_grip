@@ -30,7 +30,7 @@ from get_a_grip.model_training.utils.plot_utils import (
 
 # %%
 @dataclass
-class VisualizeNerfGraspDatasetConfig:
+class VisualizeNerfGraspDatasetV2Config:
     dataset_path: Path = (
         get_data_folder() / "SMALL_DATASET/nerf_grasp_dataset/train_dataset.h5"
     )
@@ -77,7 +77,7 @@ else:
 
 
 # %%
-cfg = tyro.cli(VisualizeNerfGraspDatasetConfig, args=arguments)
+cfg = tyro.cli(VisualizeNerfGraspDatasetV2Config, args=arguments)
 print("=" * 80)
 print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
 print("=" * 80 + "\n")

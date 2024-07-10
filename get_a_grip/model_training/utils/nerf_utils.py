@@ -25,25 +25,24 @@ def get_densities_in_grid(
     num_pts_x: int,
     num_pts_y: int,
     num_pts_z: int,
-) -> Tuple[np.ndarray, np.ndarray]:
-    query_points_in_region = get_points_in_grid(
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    query_points_in_region_np = get_points_in_grid(
         lb=lb,
         ub=ub,
         num_pts_x=num_pts_x,
         num_pts_y=num_pts_y,
         num_pts_z=num_pts_z,
     )
-    assert query_points_in_region.shape == (num_pts_x, num_pts_y, num_pts_z, 3)
+    assert query_points_in_region_np.shape == (num_pts_x, num_pts_y, num_pts_z, 3)
+
+    query_points_in_region = torch.from_numpy(query_points_in_region_np).cuda()
 
     nerf_densities_in_region = (
         get_density(
             field=field,
-            positions=torch.from_numpy(query_points_in_region).cuda(),
+            positions=query_points_in_region,
         )[0]
         .squeeze(dim=-1)
-        .detach()
-        .cpu()
-        .numpy()
         .reshape(
             num_pts_x,
             num_pts_y,
@@ -51,6 +50,28 @@ def get_densities_in_grid(
         )
     )
     return nerf_densities_in_region, query_points_in_region
+
+
+def get_densities_in_grid_np(
+    field: Field,
+    lb: np.ndarray,
+    ub: np.ndarray,
+    num_pts_x: int,
+    num_pts_y: int,
+    num_pts_z: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+    nerf_densities_in_region, query_points_in_region = get_densities_in_grid(
+        field=field,
+        lb=lb,
+        ub=ub,
+        num_pts_x=num_pts_x,
+        num_pts_y=num_pts_y,
+        num_pts_z=num_pts_z,
+    )
+    return (
+        nerf_densities_in_region.detach().cpu().numpy(),
+        query_points_in_region.detach().cpu().numpy(),
+    )
 
 
 def compute_centroid_from_nerf(
@@ -65,7 +86,7 @@ def compute_centroid_from_nerf(
     """
     Compute the centroid of the field.
     """
-    nerf_densities_in_region, query_points_in_region = get_densities_in_grid(
+    nerf_densities_in_region, query_points_in_region = get_densities_in_grid_np(
         field=field,
         lb=lb,
         ub=ub,

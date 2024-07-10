@@ -9,92 +9,9 @@ from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
     AllegroGraspConfig,
 )
 from get_a_grip.model_training.config.nerf_densities_global_config import (
-    NERF_DENSITIES_GLOBAL_NUM_X,
-    NERF_DENSITIES_GLOBAL_NUM_Y,
-    NERF_DENSITIES_GLOBAL_NUM_Z,
-    lb_Oy,
-    ub_Oy,
+    add_coords_to_global_grids,
+    get_coords_global,
 )
-from get_a_grip.model_training.utils.point_utils import (
-    get_points_in_grid,
-)
-
-
-def get_coords_global(
-    device: torch.device, dtype: torch.dtype, batch_size: int
-) -> torch.Tensor:
-    points = get_points_in_grid(
-        lb=lb_Oy,
-        ub=ub_Oy,
-        num_pts_x=NERF_DENSITIES_GLOBAL_NUM_X,
-        num_pts_y=NERF_DENSITIES_GLOBAL_NUM_Y,
-        num_pts_z=NERF_DENSITIES_GLOBAL_NUM_Z,
-    )
-
-    assert points.shape == (
-        NERF_DENSITIES_GLOBAL_NUM_X,
-        NERF_DENSITIES_GLOBAL_NUM_Y,
-        NERF_DENSITIES_GLOBAL_NUM_Z,
-        3,
-    )
-    points = torch.from_numpy(points).to(device=device, dtype=dtype)
-    points = points.permute(3, 0, 1, 2)
-    points = points[None, ...].repeat_interleave(batch_size, dim=0)
-    assert points.shape == (
-        batch_size,
-        3,
-        NERF_DENSITIES_GLOBAL_NUM_X,
-        NERF_DENSITIES_GLOBAL_NUM_Y,
-        NERF_DENSITIES_GLOBAL_NUM_Z,
-    )
-    return points
-
-
-def add_coords_to_global_grids(global_grids: torch.Tensor) -> torch.Tensor:
-    B = global_grids.shape[0]
-    assert (
-        global_grids.shape
-        == (
-            B,
-            NERF_DENSITIES_GLOBAL_NUM_X,
-            NERF_DENSITIES_GLOBAL_NUM_Y,
-            NERF_DENSITIES_GLOBAL_NUM_Z,
-        )
-    ), f"Expected shape ({B}, {NERF_DENSITIES_GLOBAL_NUM_X}, {NERF_DENSITIES_GLOBAL_NUM_Y}, {NERF_DENSITIES_GLOBAL_NUM_Z}), got {global_grids.shape}"
-    coords_global = get_coords_global(
-        device=global_grids.device,
-        dtype=global_grids.dtype,
-        batch_size=B,
-    )
-    assert (
-        coords_global.shape
-        == (
-            B,
-            3,
-            NERF_DENSITIES_GLOBAL_NUM_X,
-            NERF_DENSITIES_GLOBAL_NUM_Y,
-            NERF_DENSITIES_GLOBAL_NUM_Z,
-        )
-    ), f"Expected shape (B, 3, NERF_DENSITIES_GLOBAL_NUM_X, NERF_DENSITIES_GLOBAL_NUM_Y, NERF_DENSITIES_GLOBAL_NUM_Z), got {coords_global.shape}"
-
-    global_grids_with_coords = torch.cat(
-        (
-            global_grids.unsqueeze(dim=1),
-            coords_global,
-        ),
-        dim=1,
-    )
-    assert (
-        global_grids_with_coords.shape
-        == (
-            B,
-            3 + 1,
-            NERF_DENSITIES_GLOBAL_NUM_X,
-            NERF_DENSITIES_GLOBAL_NUM_Y,
-            NERF_DENSITIES_GLOBAL_NUM_Z,
-        )
-    ), f"Expected shape (B, 3 + 1, NERF_DENSITIES_GLOBAL_NUM_X, NERF_DENSITIES_GLOBAL_NUM_Y, NERF_DENSITIES_GLOBAL_NUM_Z), got {global_grids_with_coords.shape}"
-    return global_grids_with_coords
 
 
 class NerfGraspDataset(data.Dataset):
@@ -105,7 +22,7 @@ class NerfGraspDataset(data.Dataset):
         self.input_hdf5_filepath = input_hdf5_filepath
         with h5py.File(self.input_hdf5_filepath, "r") as hdf5_file:
             # Essentials
-            self.num_grasps = hdf5_file.attrs["num_data_points"]
+            self.num_grasps: int = hdf5_file.attrs["num_data_points"]
             grasp_configs_tensor = torch.from_numpy(
                 hdf5_file["/grasp_configs"][()]
             ).float()
@@ -121,8 +38,14 @@ class NerfGraspDataset(data.Dataset):
             nerf_global_grids = torch.from_numpy(
                 hdf5_file["/nerf_densities_global"][()]
             ).float()[: self.num_grasps, ...]
+
+            coords_global = get_coords_global(
+                device=nerf_global_grids.device,
+                dtype=nerf_global_grids.dtype,
+                batch_size=nerf_global_grids.shape[0],
+            )
             self.nerf_global_grids_with_coords = add_coords_to_global_grids(
-                nerf_global_grids
+                global_grids=nerf_global_grids, coords_global=coords_global
             )[: self.num_grasps, ...]
             self.global_grid_idxs = torch.from_numpy(
                 hdf5_file["/nerf_densities_global_idx"][()]

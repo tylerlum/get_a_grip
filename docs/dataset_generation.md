@@ -20,7 +20,7 @@ For each object, drop it on a table, wait for it to settle upright, then capture
 
 ```
 CUDA_VISIBLE_DEVICES=0 \
-python get_a_grip/dataset_generation/scripts/generate_nerf_data.py \
+python get_a_grip/dataset_generation/scripts/generate_nerfdata.py \
 --meshdata_root_path data/large/meshes \
 --input_object_code_and_scales_txt_path data/NEW_DATASET/object_code_and_scales.txt \
 --output_nerfdata_path data/NEW_DATASET/nerfdata \
@@ -114,9 +114,8 @@ Train a NeRF for each object:
 
 ```
 python get_a_grip/dataset_generation/scripts/train_nerfs.py \
---experiment_name NEW_DATASET \
---input_nerfdata_name nerfdata \
---output_nerfcheckpoints_name nerfcheckpoints \
+--input_nerfdata_path data/NEW_DATASET/nerfdata \
+--output_nerfcheckpoints_path data/NEW_DATASET/nerfcheckpoints \
 --max_num_iterations 400
 ```
 
@@ -125,10 +124,9 @@ python get_a_grip/dataset_generation/scripts/train_nerfs.py \
 Generate point clouds for each object:
 
 ```
-python get_a_grip/dataset_generation/scripts/export_point_clouds.py \
---experiment_name NEW_DATASET \
+python get_a_grip/dataset_generation/scripts/generate_point_clouds.py \
 --nerf-is-z-up False \
---input_nerfcheckpoints_name nerfcheckpoints \
---output_point_clouds_name point_clouds \
+--input_nerfcheckpoints_path data/NEW_DATASET/nerfcheckpoints \
+--output_point_clouds_path data/NEW_DATASET/point_clouds \
 --num_points 5000
 ```

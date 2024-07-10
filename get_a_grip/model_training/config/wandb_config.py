@@ -1,9 +1,7 @@
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Literal, Optional
 
-# A general date-time string for naming runs -- shared across all config modules.
-CONFIG_DATETIME_STR = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
+from get_a_grip.model_training.config.datetime_str import get_datetime_str
 
 
 @dataclass(frozen=True)
@@ -16,7 +14,7 @@ class WandbConfig:
     entity: Optional[str] = None
     """Account associated with the wandb project."""
 
-    name: str = CONFIG_DATETIME_STR
+    name: str = get_datetime_str()
     """Name of the run."""
 
     group: Optional[str] = None

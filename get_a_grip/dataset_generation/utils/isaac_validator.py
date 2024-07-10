@@ -1503,7 +1503,7 @@ class IsaacValidator:
     ########## KEYBOARD SUBSCRIPTIONS END ##########
 
     ########## NERF DATA COLLECTION START ##########
-    def add_env_nerf_data_collection(
+    def add_env_nerfdata_collection(
         self,
         obj_scale: float,
     ) -> None:

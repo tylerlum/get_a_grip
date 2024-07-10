@@ -179,8 +179,8 @@ def solve_prepared_trajopt_batch(
     ik_solver2: IKSolver,
     motion_gen: MotionGen,
     motion_gen_config: MotionGenConfig,
-    q_fr3_starts: Optional[np.ndarray] = None,
-    q_algr_starts: Optional[np.ndarray] = None,
+    q_fr3s_start: Optional[np.ndarray] = None,
+    q_algrs_start: Optional[np.ndarray] = None,
     enable_graph: bool = True,
     enable_opt: bool = False,  # Getting some errors from setting this to True
     timeout: float = 5.0,
@@ -191,20 +191,20 @@ def solve_prepared_trajopt_batch(
     assert q_algrs.shape == (N_GRASPS, 16), f"q_algrs.shape: {q_algrs.shape}"
     assert is_in_limits_np(q_algrs).all(), f"q_algrs: {q_algrs}"
 
-    if q_fr3_starts is None:
+    if q_fr3s_start is None:
         print("Using default q_fr3_starts")
-        q_fr3_starts = DEFAULT_Q_FR3[None, ...].repeat(N_GRASPS, axis=0)
-    assert q_fr3_starts.shape == (
+        q_fr3s_start = DEFAULT_Q_FR3[None, ...].repeat(N_GRASPS, axis=0)
+    assert q_fr3s_start.shape == (
         N_GRASPS,
         7,
-    ), f"q_fr3_starts.shape: {q_fr3_starts.shape}"
-    if q_algr_starts is None:
+    ), f"q_fr3_starts.shape: {q_fr3s_start.shape}"
+    if q_algrs_start is None:
         print("Using default q_algr_starts")
-        q_algr_starts = DEFAULT_Q_ALGR[None, ...].repeat(N_GRASPS, axis=0)
-    assert q_algr_starts.shape == (
+        q_algrs_start = DEFAULT_Q_ALGR[None, ...].repeat(N_GRASPS, axis=0)
+    assert q_algrs_start.shape == (
         N_GRASPS,
         16,
-    ), f"q_algr_starts.shape: {q_algr_starts.shape}"
+    ), f"q_algr_starts.shape: {q_algrs_start.shape}"
 
     print("Step 2: Prepare target_pose")
     trans = X_W_Hs[:, :3, 3]
@@ -241,8 +241,8 @@ def solve_prepared_trajopt_batch(
         torch.from_numpy(
             np.concatenate(
                 [
-                    q_fr3_starts,
-                    q_algr_starts,
+                    q_fr3s_start,
+                    q_algrs_start,
                 ],
                 axis=1,
             )
@@ -377,8 +377,8 @@ def solve_trajopt_batch(
         ik_solver2=ik_solver2,
         motion_gen=motion_gen,
         motion_gen_config=motion_gen_config,
-        q_fr3_starts=q_fr3_starts,
-        q_algr_starts=q_algr_starts,
+        q_fr3s_start=q_fr3_starts,
+        q_algrs_start=q_algr_starts,
         enable_graph=enable_graph,
         enable_opt=enable_opt,
         timeout=timeout,

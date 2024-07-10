@@ -4,12 +4,12 @@ import pathlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import List, Literal, Optional, Tuple
+from typing import List, Literal, Optional, Tuple, Union
 
 import tyro
 
 from get_a_grip import get_data_folder
-from get_a_grip.model_training.config.base import CONFIG_DATETIME_STR, WandbConfig
+from get_a_grip.model_training.config.datetime_str import get_datetime_str
 from get_a_grip.model_training.config.fingertip_config import (
     EvenlySpacedFingertipConfig,
 )
@@ -18,16 +18,17 @@ from get_a_grip.model_training.config.nerf_densities_global_config import (
     NERF_DENSITIES_GLOBAL_NUM_Y,
     NERF_DENSITIES_GLOBAL_NUM_Z,
 )
-from get_a_grip.model_training.config.nerfdata_config import (
-    GridNerfDataConfig,
+from get_a_grip.model_training.config.nerf_grasp_dataset_config import (
+    NerfGraspDatasetConfig,
 )
+from get_a_grip.model_training.config.wandb_config import WandbConfig
 from get_a_grip.model_training.models.nerf_evaluator_model import (
     CNN_3D_XYZ_Global_CNN_NerfEvaluator,
     CNN_3D_XYZ_NerfEvaluator,
     NerfEvaluatorModel,
 )
 
-DEFAULT_WANDB_PROJECT = "learned_metric"
+DEFAULT_WANDB_PROJECT = "nerf_evaluator_model"
 
 
 class TaskType(Enum):
@@ -82,9 +83,6 @@ class DataConfig:
 
     debug_shuffle_labels: bool = False
     """Flag to randomize all the labels to see what memorization looks like."""
-
-    nerf_density_threshold_value: Optional[float] = None
-    """Threshold used to convert nerf density values to binary 0/1 occupancy values, None for no thresholding."""
 
 
 @dataclass(frozen=True)
@@ -157,13 +155,13 @@ class TrainingConfig:
 class CheckpointWorkspaceConfig:
     """Parameters for paths to checkpoints."""
 
-    root_dir: pathlib.Path = get_data_folder() / "logs/nerf_grasp_evaluator"
+    root_dir: pathlib.Path = get_data_folder() / "logs/nerf_evaluator_model"
     """Root directory for checkpoints."""
 
     input_leaf_dir_name: Optional[str] = None
     """Leaf directory name to LOAD a checkpoint and potentially resume a run."""
 
-    output_leaf_dir_name: str = CONFIG_DATETIME_STR
+    output_leaf_dir_name: str = get_datetime_str()
     """Leaf directory name to SAVE checkpoints and run information."""
 
     @property
@@ -237,23 +235,23 @@ class ModelConfig(ABC):
     """Default (abstract) parameters for the nerf_evaluator."""
 
     @abstractmethod
-    def get_nerf_evaluator_from_fingertip_config(
+    def create_model(
         self,
         fingertip_config: EvenlySpacedFingertipConfig,
         n_tasks: int,
     ) -> NerfEvaluatorModel:
-        """Helper method to return the correct nerf_evaluator from config."""
-        raise NotImplementedError("Implement in subclass.")
+        """Helper method to return the correct nerf_evaluator_model from config."""
+        raise NotImplementedError
 
 
 @dataclass(frozen=True)
 class CNN_3D_XYZ_ModelConfig(ModelConfig):
     """Parameters for the CNN_3D_XYZ_NerfEvaluator."""
 
-    conv_channels: Tuple[int, ...]
+    conv_channels: Tuple[int, ...] = (32, 64, 128)
     """List of channels for each convolutional layer. Length specifies number of layers."""
 
-    mlp_hidden_layers: Tuple[int, ...]
+    mlp_hidden_layers: Tuple[int, ...] = (256, 256)
     """List of hidden layer sizes for the MLP. Length specifies number of layers."""
 
     n_fingers: int = 4
@@ -271,7 +269,7 @@ class CNN_3D_XYZ_ModelConfig(ModelConfig):
             fingertip_config.num_pts_z,
         )
 
-    def get_nerf_evaluator_from_fingertip_config(
+    def create_model(
         self,
         fingertip_config: EvenlySpacedFingertipConfig,
         n_tasks: int,
@@ -292,13 +290,13 @@ class CNN_3D_XYZ_ModelConfig(ModelConfig):
 class CNN_3D_XYZ_Global_CNN_ModelConfig(ModelConfig):
     """Parameters for the CNN_3D_XYZ_Global_CNN_NerfEvaluator."""
 
-    conv_channels: Tuple[int, ...]
+    conv_channels: Tuple[int, ...] = (32, 64, 128)
     """List of channels for each convolutional layer. Length specifies number of layers."""
 
-    mlp_hidden_layers: Tuple[int, ...]
+    mlp_hidden_layers: Tuple[int, ...] = (256, 256)
     """List of hidden layer sizes for the MLP. Length specifies number of layers."""
 
-    global_conv_channels: Tuple[int, ...]
+    global_conv_channels: Tuple[int, ...] = (32, 64, 128)
     """List of channels for each convolutional layer for the global CNN. Length specifies number of layers."""
 
     n_fingers: int = 4
@@ -326,7 +324,7 @@ class CNN_3D_XYZ_Global_CNN_ModelConfig(ModelConfig):
             NERF_DENSITIES_GLOBAL_NUM_Z,
         )
 
-    def get_nerf_evaluator_from_fingertip_config(
+    def create_model(
         self,
         fingertip_config: EvenlySpacedFingertipConfig,
         n_tasks: int,
@@ -344,16 +342,6 @@ class CNN_3D_XYZ_Global_CNN_ModelConfig(ModelConfig):
             global_input_shape=global_input_shape,
             global_conv_channels=self.global_conv_channels,
         )
-
-
-DEFAULT_CNN_3D_XYZ_ModelConfig = CNN_3D_XYZ_ModelConfig(
-    conv_channels=(32, 64, 128), mlp_hidden_layers=(256, 256)
-)
-DEFAULT_CNN_3D_XYZ_Global_CNN_ModelConfig = CNN_3D_XYZ_Global_CNN_ModelConfig(
-    conv_channels=(32, 64, 128),
-    mlp_hidden_layers=(256, 256),
-    global_conv_channels=(32, 64, 128),
-)
 
 
 @dataclass
@@ -375,15 +363,17 @@ class PlotConfig:
 
 @dataclass
 class NerfEvaluatorModelConfig:
-    model_config: ModelConfig = field(
-        default_factory=lambda: DEFAULT_CNN_3D_XYZ_Global_CNN_ModelConfig
+    model_config: Union[CNN_3D_XYZ_ModelConfig, CNN_3D_XYZ_Global_CNN_ModelConfig] = (
+        field(default_factory=CNN_3D_XYZ_Global_CNN_ModelConfig)
     )
-    nerfdata_config: GridNerfDataConfig = field(default_factory=GridNerfDataConfig)
-    nerfdata_config_path: Optional[pathlib.Path] = None
+    nerf_grasp_dataset_config: NerfGraspDatasetConfig = field(
+        default_factory=NerfGraspDatasetConfig
+    )
+    nerf_grasp_dataset_config_path: Optional[pathlib.Path] = None
     train_dataset_path: Optional[pathlib.Path] = None
     val_dataset_path: Optional[pathlib.Path] = None
     test_dataset_path: Optional[pathlib.Path] = None
-    data: DataConfig = DataConfig()
+    data: DataConfig = field(default_factory=DataConfig)
     dataloader: DataLoaderConfig = field(default_factory=DataLoaderConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
     checkpoint_workspace: CheckpointWorkspaceConfig = field(
@@ -394,21 +384,20 @@ class NerfEvaluatorModelConfig:
         default_factory=lambda: WandbConfig(project=DEFAULT_WANDB_PROJECT)
     )
     name: Optional[str] = None
-    plot: PlotConfig = PlotConfig()
+    plot: PlotConfig = field(default_factory=PlotConfig)
 
     random_seed: int = 42
 
     def __post_init__(self):
         """
-        If a nerfdata config path was passed, load that config object.
+        If a nerf grasp dataset config path was passed, load that config object.
         Otherwise use defaults.
-
-        Then load the correct model config based on the nerfdata config.
         """
-        if self.nerfdata_config_path is not None:
-            print(f"Loading nerfdata config from {self.nerfdata_config_path}")
-            self.nerfdata_config = tyro.extras.from_yaml(
-                type(self.nerfdata_config), self.nerfdata_config_path.open()
+        if self.nerf_grasp_dataset_config_path is not None:
+            print(f"Loading nerfdata config from {self.nerf_grasp_dataset_config_path}")
+            self.nerf_grasp_dataset_config = tyro.extras.from_yaml(
+                type(self.nerf_grasp_dataset_config),
+                self.nerf_grasp_dataset_config_path.open(),
             )
 
         assert (
@@ -418,11 +407,11 @@ class NerfEvaluatorModelConfig:
             )
         ), f"Must specify both val and test dataset paths, or neither. Got val: {self.val_dataset_path}, test: {self.test_dataset_path}"
 
-        # Set the name of the run if given
+        # Set the name of the run if given, which updates both checkpoint_workspace and wandb
         # HACK: don't want to overwrite these if we're loading this config from a file
         #       can tell if loading by file if self.checkpoint_workspace.output_dir exists
         if self.name is not None and not self.checkpoint_workspace.output_dir.exists():
-            name_with_date = f"{self.name}_{CONFIG_DATETIME_STR}"
+            name_with_date = f"{self.name}_{get_datetime_str()}"
             self.checkpoint_workspace = CheckpointWorkspaceConfig(
                 output_leaf_dir_name=name_with_date
             )
@@ -431,8 +420,8 @@ class NerfEvaluatorModelConfig:
     @property
     def actual_train_dataset_path(self) -> pathlib.Path:
         if self.train_dataset_path is None:
-            assert self.nerfdata_config.output_filepath is not None
-            return self.nerfdata_config.output_filepath
+            assert self.nerf_grasp_dataset_config.output_filepath is not None
+            return self.nerf_grasp_dataset_config.output_filepath
         return self.train_dataset_path
 
     @property
@@ -452,19 +441,6 @@ class NerfEvaluatorModelConfig:
         return self.test_dataset_path
 
 
-DEFAULTS_DICT = {
-    "cnn-3d-xyz": NerfEvaluatorModelConfig(
-        model_config=DEFAULT_CNN_3D_XYZ_ModelConfig,
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-    "cnn-3d-xyz-global-cnn": NerfEvaluatorModelConfig(
-        model_config=DEFAULT_CNN_3D_XYZ_Global_CNN_ModelConfig,
-        nerfdata_config=GridNerfDataConfig(),
-    ),
-}
-
-UnionNerfEvaluatorModelConfig = tyro.extras.subcommand_type_from_defaults(DEFAULTS_DICT)
-
 if __name__ == "__main__":
-    cfg = tyro.cli(UnionNerfEvaluatorModelConfig)
+    cfg = tyro.cli(NerfEvaluatorModelConfig)
     print(cfg)

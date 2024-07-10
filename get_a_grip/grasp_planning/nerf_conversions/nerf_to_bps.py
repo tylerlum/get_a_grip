@@ -5,6 +5,9 @@ from typing import Tuple
 import numpy as np
 from nerfstudio.pipelines.base_pipeline import Pipeline
 
+from get_a_grip.grasp_planning.utils.generate_point_cloud import (
+    PointCloudBoundingBox,
+)
 from get_a_grip.grasp_planning.utils.nerfstudio_point_cloud import ExportPointCloud
 from get_a_grip.model_training.scripts.create_bps_grasp_dataset import (
     crop_single_point_cloud,
@@ -19,19 +22,17 @@ from get_a_grip.model_training.utils.point_utils import (
 
 def nerf_to_bps(
     nerf_pipeline: Pipeline,
-    lb_N: np.ndarray,
-    ub_N: np.ndarray,
+    nerf_is_z_up: bool,
     X_N_By: np.ndarray,
     num_points: int = 5000,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    assert lb_N.shape == (3,)
-    assert ub_N.shape == (3,)
-
     # TODO: This is slow because it loads NeRF from file and then outputs point cloud to file
+    bounding_box = PointCloudBoundingBox(nerf_is_z_up=nerf_is_z_up)
     point_cloud_exporter = ExportPointCloud(
         normal_method="open3d",
-        bounding_box_min=(lb_N[0], lb_N[1], lb_N[2]),
-        bounding_box_max=(ub_N[0], ub_N[1], ub_N[2]),
+        obb_center=bounding_box.obb_center,
+        obb_rotation=bounding_box.obb_rotation,
+        obb_scale=bounding_box.obb_scale,
         num_points=num_points,
     )
     point_cloud = point_cloud_exporter.main(nerf_pipeline)
@@ -55,7 +56,7 @@ def nerf_to_bps(
     bps_values = get_bps(
         all_points=final_points_N[None],
         basis_points=basis_points_N,
-    )
+    ).squeeze(axis=0)
     assert bps_values.shape == (
         4096,
     ), f"Expected shape (4096,), got {bps_values.shape}"

@@ -22,11 +22,11 @@ def load_nerf_pipeline(
     return pipeline
 
 
-def get_nerf_configs(nerfcheckpoints_path: str) -> List[pathlib.Path]:
+def get_nerf_configs(nerfcheckpoints_path: pathlib.Path) -> List[pathlib.Path]:
     """
     Returns a list of all the NeRF configs in the given directory, searching recursively
     """
-    return list(pathlib.Path(nerfcheckpoints_path).rglob("nerfacto/*/config.yml"))
+    return list(nerfcheckpoints_path.rglob("nerfacto/*/config.yml"))
 
 
 def get_latest_nerf_config(nerfcheckpoint_path: pathlib.Path) -> pathlib.Path:

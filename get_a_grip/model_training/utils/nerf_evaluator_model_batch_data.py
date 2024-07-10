@@ -13,11 +13,12 @@ from get_a_grip.model_training.config.fingertip_config import (
     EvenlySpacedFingertipConfig,
 )
 from get_a_grip.model_training.config.nerf_densities_global_config import (
+    NERF_DENSITIES_GLOBAL_DELTA,
     NERF_DENSITIES_GLOBAL_NUM_X,
     NERF_DENSITIES_GLOBAL_NUM_Y,
     NERF_DENSITIES_GLOBAL_NUM_Z,
-    lb_Oy,
-    ub_Oy,
+    add_coords_to_global_grids,
+    get_coords_global,
 )
 from get_a_grip.model_training.utils.nerf_ray_utils import (
     get_ray_origins_finger_frame,
@@ -65,7 +66,6 @@ class BatchDataInput:
     grasp_configs: torch.Tensor
     nerf_densities_global: Optional[torch.Tensor]
     random_rotate_transform: Optional[pp.LieTensor] = None
-    nerf_density_threshold_value: Optional[float] = None
 
     def print_shapes(self) -> None:
         print(f"nerf_densities.shape: {self.nerf_densities.shape}")
@@ -77,8 +77,6 @@ class BatchDataInput:
             print(
                 f"random_rotate_transform.lshape: {self.random_rotate_transform.lshape}"
             )
-        if self.nerf_density_threshold_value is not None:
-            print(f"nerf_density_threshold_value: {self.nerf_density_threshold_value}")
 
     def to(self, device) -> BatchDataInput:
         self.nerf_densities = self.nerf_densities.to(device)
@@ -97,21 +95,8 @@ class BatchDataInput:
     def nerf_alphas(self) -> torch.Tensor:
         # alpha = 1 - exp(-delta * sigma)
         #       = probability of collision within this segment starting from beginning of segment
-        delta = (
-            self.fingertip_config.grasp_depth_mm
-            / (self.fingertip_config.num_pts_z - 1)
-            / 1000
-        )
-        if isinstance(self.fingertip_config, EvenlySpacedFingertipConfig):
-            assert delta == self.fingertip_config.distance_between_pts_mm / 1000
+        delta = self.fingertip_config.distance_between_pts_mm / 1000
         alphas = 1.0 - torch.exp(-delta * self.nerf_densities)
-
-        if self.nerf_density_threshold_value is not None:
-            alphas = torch.where(
-                self.nerf_densities > self.nerf_density_threshold_value,
-                torch.ones_like(alphas),
-                torch.zeros_like(alphas),
-            )
 
         return alphas
 
@@ -119,21 +104,8 @@ class BatchDataInput:
     def nerf_alphas_global(self) -> torch.Tensor:
         # alpha = 1 - exp(-delta * sigma)
         #       = probability of collision within this segment starting from beginning of segment
-        delta = (
-            self.fingertip_config.grasp_depth_mm
-            / (self.fingertip_config.num_pts_z - 1)
-            / 1000
-        )
-        if isinstance(self.fingertip_config, EvenlySpacedFingertipConfig):
-            assert delta == self.fingertip_config.distance_between_pts_mm / 1000
+        delta = NERF_DENSITIES_GLOBAL_DELTA
         alphas = 1.0 - torch.exp(-delta * self.nerf_densities_global)
-
-        if self.nerf_density_threshold_value is not None:
-            alphas = torch.where(
-                self.nerf_densities_global > self.nerf_density_threshold_value,
-                torch.ones_like(alphas),
-                torch.zeros_like(alphas),
-            )
 
         return alphas
 
@@ -147,25 +119,12 @@ class BatchDataInput:
 
     @property
     def coords_global(self) -> torch.Tensor:
-        points = get_points_in_grid(
-            lb=lb_Oy,
-            ub=ub_Oy,
-            num_pts_x=NERF_DENSITIES_GLOBAL_NUM_X,
-            num_pts_y=NERF_DENSITIES_GLOBAL_NUM_Y,
-            num_pts_z=NERF_DENSITIES_GLOBAL_NUM_Z,
+        points = get_coords_global(
+            device=self.device,
+            dtype=self.nerf_densities.dtype,
+            batch_size=self.batch_size,
         )
 
-        assert points.shape == (
-            NERF_DENSITIES_GLOBAL_NUM_X,
-            NERF_DENSITIES_GLOBAL_NUM_Y,
-            NERF_DENSITIES_GLOBAL_NUM_Z,
-            NUM_XYZ,
-        )
-        points = torch.from_numpy(points).to(
-            device=self.device, dtype=self.nerf_densities.dtype
-        )
-        points = points.permute(3, 0, 1, 2)
-        points = points[None, ...].repeat_interleave(self.batch_size, dim=0)
         assert points.shape == (
             self.batch_size,
             NUM_XYZ,
@@ -219,22 +178,16 @@ class BatchDataInput:
 
     @property
     def nerf_alphas_global_with_coords(self) -> torch.Tensor:
-        return self._nerf_alphas_global_with_coords_helper(
+        return add_coords_to_global_grids(
+            global_grids=self.nerf_alphas_global,
             coords_global=self.coords_global,
-            nerf_alphas_global=self.nerf_alphas_global,
-            x_dim=NERF_DENSITIES_GLOBAL_NUM_X,
-            y_dim=NERF_DENSITIES_GLOBAL_NUM_Y,
-            z_dim=NERF_DENSITIES_GLOBAL_NUM_Z,
         )
 
     @property
     def nerf_alphas_global_with_augmented_coords(self) -> torch.Tensor:
-        return self._nerf_alphas_global_with_coords_helper(
+        return add_coords_to_global_grids(
+            global_grids=self.nerf_alphas_global,
             coords_global=self.augmented_coords_global,
-            nerf_alphas_global=self.nerf_alphas_global,
-            x_dim=NERF_DENSITIES_GLOBAL_NUM_X,
-            y_dim=NERF_DENSITIES_GLOBAL_NUM_Y,
-            z_dim=NERF_DENSITIES_GLOBAL_NUM_Z,
         )
 
     @property

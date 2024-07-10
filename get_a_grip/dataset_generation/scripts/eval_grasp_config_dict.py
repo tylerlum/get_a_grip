@@ -62,7 +62,6 @@ class EvalGraspConfigDictArgs:
 
 
 def compute_joint_angle_targets(
-    args: EvalGraspConfigDictArgs,
     hand_pose: torch.Tensor,
     grasp_orientations: torch.Tensor,
 ) -> np.ndarray:
@@ -90,7 +89,6 @@ def compute_joint_angle_targets(
 
 
 def compute_init_joint_angles(
-    args: EvalGraspConfigDictArgs,
     hand_pose: torch.Tensor,
     grasp_orientations: torch.Tensor,
 ) -> np.ndarray:
@@ -117,12 +115,7 @@ def compute_init_joint_angles(
     return init_joint_angles.detach().cpu().numpy()
 
 
-def main() -> None:
-    args = tyro.cli(EvalGraspConfigDictArgs)
-    print("=" * 80)
-    print(f"args = {args}")
-    print("=" * 80 + "\n")
-
+def eval_grasp_config_dict(args: EvalGraspConfigDictArgs) -> dict:
     os.environ.pop("CUDA_VISIBLE_DEVICES")
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     N_NOISY = args.num_random_pose_noise_samples_per_grasp  # alias
@@ -154,13 +147,11 @@ def main() -> None:
 
     # Compute joint angle targets
     joint_angle_targets_array = compute_joint_angle_targets(
-        args=args,
         hand_pose=hand_pose,
         grasp_orientations=torch.from_numpy(grasp_orientations).float().to(device),
     )
     init_joint_angles = (
         compute_init_joint_angles(
-            args=args,
             hand_pose=hand_pose,
             grasp_orientations=torch.from_numpy(grasp_orientations).float().to(device),
         )
@@ -376,9 +367,19 @@ def main() -> None:
     )
 
     sim.destroy()
+    return evaled_grasp_config_dict
 
     # NOTE: Tried making this run in a loop over all objects, but had issues with simulator GPU memory leaks
     #       Instead, this script should be run for each object
+
+
+def main() -> None:
+    args = tyro.cli(EvalGraspConfigDictArgs)
+    print("=" * 80)
+    print(f"args = {args}")
+    print("=" * 80 + "\n")
+
+    eval_grasp_config_dict(args)
 
 
 if __name__ == "__main__":

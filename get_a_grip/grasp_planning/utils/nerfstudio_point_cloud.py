@@ -1,5 +1,5 @@
 """
-Copied mostly from: https://github.com/nerfstudio-project/nerfstudio/blob/main/nerfstudio/exporter/exporter_utils.py
+Copied mostly from: https://github.com/nerfstudio-project/nerfstudio/blob/main/nerfstudio/scripts/exporter.py
 Script for exporting NeRF into other formats.
 """
 
@@ -22,6 +22,7 @@ from nerfstudio.exporter.exporter_utils import (
     generate_point_cloud,
 )
 from nerfstudio.fields.sdf_field import SDFField  # noqa
+from nerfstudio.pipelines.base_pipeline import Pipeline
 from typing_extensions import Literal
 
 
@@ -50,13 +51,6 @@ class ExportPointCloud(Exporter):
     """Name of the depth output."""
     rgb_output_name: str = "rgb"
     """Name of the RGB output."""
-    use_bounding_box: bool = True
-    """Only query points within the bounding box"""
-    bounding_box_min: Optional[Tuple[float, float, float]] = (-1, -1, -1)
-    """Minimum of the bounding box, used if use_bounding_box is True."""
-    bounding_box_max: Optional[Tuple[float, float, float]] = (1, 1, 1)
-    """Maximum of the bounding box, used if use_bounding_box is True."""
-
     obb_center: Optional[Tuple[float, float, float]] = None
     """Center of the oriented bounding box."""
     obb_rotation: Optional[Tuple[float, float, float]] = None
@@ -71,7 +65,7 @@ class ExportPointCloud(Exporter):
     """If set, saves the point cloud in the same frame as the original dataset. Otherwise, uses the
     scaled and reoriented coordinate space expected by the NeRF models."""
 
-    def main(self, pipeline) -> o3d.geometry.PointCloud:
+    def main(self, pipeline: Pipeline) -> o3d.geometry.PointCloud:
         """Export point cloud."""
         # Increase the batchsize to speed up the evaluation.
         assert isinstance(
@@ -112,9 +106,6 @@ class ExportPointCloud(Exporter):
                 if self.normal_method == "model_output"
                 else None
             ),
-            use_bounding_box=self.use_bounding_box,
-            bounding_box_min=self.bounding_box_min,
-            bounding_box_max=self.bounding_box_max,
             crop_obb=crop_obb,
             std_ratio=self.std_ratio,
         )

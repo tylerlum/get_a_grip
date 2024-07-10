@@ -1,6 +1,5 @@
 import multiprocessing
 import pathlib
-import subprocess
 from dataclasses import dataclass
 from typing import Optional
 
@@ -8,6 +7,10 @@ import tyro
 from tqdm import tqdm
 
 from get_a_grip import get_data_folder
+from get_a_grip.dataset_generation.scripts.generate_nerfdata_one_object_one_scale import (
+    GenerateNerfDataOneObjectOneScaleArgs,
+    generate_nerfdata_one_object_one_scale,
+)
 from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
@@ -35,22 +38,18 @@ def run_command(
     object_code: str,
     object_scale: float,
     args: GenerateNerfDataArgs,
-    script_to_run: pathlib.Path,
 ):
-    command = " ".join(
-        [
-            f"python {str(script_to_run)}",
-            f"--gpu {args.gpu}",
-            f"--meshdata_root_path {args.meshdata_root_path}",
-            f"--output_nerfdata_path {args.output_nerfdata_path}",
-            f"--object_code {object_code}",
-            f"--object_scale {object_scale}",
-            f"--num_cameras {args.num_cameras}",
-        ]
-    )
-    print(f"Running command: {command}")
     try:
-        subprocess.run(command, shell=True, check=True)
+        generate_nerfdata_one_object_one_scale(
+            GenerateNerfDataOneObjectOneScaleArgs(
+                meshdata_root_path=args.meshdata_root_path,
+                output_nerfdata_path=args.output_nerfdata_path,
+                object_code=object_code,
+                object_scale=object_scale,
+                num_cameras=args.num_cameras,
+                gpu=args.gpu,
+            )
+        )
     except Exception as e:
         print(f"Exception: {e}")
         print(f"Skipping {object_code} and continuing")
@@ -60,17 +59,20 @@ def run_command(
 def main() -> None:
     args = tyro.cli(GenerateNerfDataArgs)
 
-    # Check if script exists
-    this_folder = pathlib.Path(__file__).parent
-    script_to_run = this_folder / "generate_nerf_data_one_object_one_scale.py"
-    assert script_to_run.exists(), f"Script {script_to_run} does not exist"
-
+    # Read in object codes and scales
+    if not args.input_object_code_and_scales_txt_path.exists():
+        raise ValueError(
+            f"input_object_code_and_scales_txt_path {args.input_object_code_and_scales_txt_path} doesn't exist"
+        )
+    with open(args.input_object_code_and_scales_txt_path, "r") as f:
+        input_object_code_and_scale_strs_from_file = f.read().splitlines()
     input_object_code_and_scale_strs = get_object_codes_and_scales_to_process(
-        input_object_code_and_scales_txt_path=args.input_object_code_and_scales_txt_path,
+        input_object_code_and_scale_strs=input_object_code_and_scale_strs_from_file,
         meshdata_root_path=args.meshdata_root_path,
         output_folder_path=args.output_nerfdata_path,
         no_continue=args.no_continue,
     )
+
     assert len(input_object_code_and_scale_strs) > 0
     input_object_codes, input_object_scales = [], []
     for object_code_and_scale_str in input_object_code_and_scale_strs:
@@ -97,7 +99,6 @@ def main() -> None:
                     input_object_codes,
                     input_object_scales,
                     [args] * len(input_object_codes),
-                    [script_to_run] * len(input_object_codes),
                 ),
             )
     else:
@@ -111,7 +112,6 @@ def main() -> None:
                 object_code=object_code,
                 object_scale=object_scale,
                 args=args,
-                script_to_run=script_to_run,
             )
 
 

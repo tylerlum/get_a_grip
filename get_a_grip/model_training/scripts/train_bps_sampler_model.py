@@ -50,14 +50,14 @@ def main() -> None:
                     log_path=(
                         get_data_folder()
                         / (
-                            f"logs/bps_grasp_sampler/{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+                            f"logs/bps_sampler_model/{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
                         )
                     ),
                 ),
                 multigpu=True,
                 wandb=WandbConfig(
                     log=True,
-                    project="bps_grasp_sampler",
+                    project="bps_sampler_model",
                 ),
             ),
         ),

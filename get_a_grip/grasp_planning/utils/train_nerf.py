@@ -1,4 +1,5 @@
 import pathlib
+import subprocess
 from dataclasses import dataclass
 
 from nerfstudio.engine.trainer import Trainer, TrainerConfig
@@ -6,7 +7,7 @@ from nerfstudio.scripts.train import _set_random_seed
 
 
 @dataclass
-class TrainNerfReturnTrainerArgs:
+class TrainNerfArgs:
     nerfdata_folder: pathlib.Path
     nerfcheckpoints_folder: pathlib.Path
     max_num_iterations: int = 400
@@ -38,9 +39,10 @@ def get_nerfacto_default_config():
     return all_methods["nerfacto"]
 
 
-def train_nerf(
-    args: TrainNerfReturnTrainerArgs,
+def train_nerf_return_trainer(
+    args: TrainNerfArgs,
 ) -> Trainer:
+    # Should be equivalent to train_nerf
     config = get_nerfacto_default_config()
 
     # Modifications
@@ -48,7 +50,7 @@ def train_nerf(
     config.pipeline.datamanager.data = args.nerfdata_folder
     config.max_num_iterations = args.max_num_iterations
     config.output_dir = args.nerfcheckpoints_folder
-    config.vis = "none"  # "wandb"
+    config.vis = "none"
 
     config.pipeline.model.disable_scene_contraction = True
     config.pipeline.datamanager.dataparser.auto_scale_poses = False
@@ -67,8 +69,35 @@ def train_nerf(
     return trainer
 
 
+def print_and_run(cmd: str) -> None:
+    print(f"Running: {cmd}")
+    subprocess.run(cmd, shell=True, check=True)
+
+
+def train_nerf(
+    args: TrainNerfArgs,
+) -> None:
+    # Should be equivalent to train_nerf_return_trainer
+    command = " ".join(
+        [
+            "ns-train nerfacto",
+            f"--data {str(args.nerfdata_folder)}",
+            f"--max-num-iterations {args.max_num_iterations}",
+            f"--output-dir {str(args.nerfcheckpoints_folder)}",
+            "--vis wandb",
+            "--pipeline.model.disable-scene-contraction True",
+            "nerfstudio-data",
+            "--auto-scale-poses False",
+            "--scale-factor 1.",
+            "--center-method none",
+            "--orientation-method none",
+        ]
+    )
+    print_and_run(command)
+
+
 def main() -> None:
-    args = TrainNerfReturnTrainerArgs(
+    args = TrainNerfArgs(
         nerfdata_folder=pathlib.Path(
             "experiments/2024-04-15_DEBUG/nerfdata/sem-Vase-3a275e00d69810c62600e861c93ad9cc_0_0846"
         ),
@@ -76,7 +105,7 @@ def main() -> None:
             "experiments/2024-04-15_DEBUG/nerfcheckpoints/"
         ),
     )
-    train_nerf(args)
+    train_nerf_return_trainer(args)
 
 
 if __name__ == "__main__":

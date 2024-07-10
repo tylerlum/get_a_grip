@@ -13,7 +13,7 @@ EXPERIMENT_NAME = "DEFAULT_EXPERIMENT_NAME"
 
 
 @dataclass
-class GridNerfDataConfig:
+class NerfGraspDatasetConfig:
     """Top-level config for NeRF data generation."""
 
     input_nerfcheckpoints_path: pathlib.Path = (
@@ -43,5 +43,5 @@ class GridNerfDataConfig:
 
 
 if __name__ == "__main__":
-    cfg = tyro.cli(GridNerfDataConfig)
+    cfg = tyro.cli(NerfGraspDatasetConfig)
     print(cfg)

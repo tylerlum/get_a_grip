@@ -35,8 +35,15 @@ class FroggerAllArgs:
 def main() -> None:
     args = tyro.cli(FroggerAllArgs)
 
+    # Read in object codes and scales
+    if not args.input_object_code_and_scales_txt_path.exists():
+        raise ValueError(
+            f"input_object_code_and_scales_txt_path {args.input_object_code_and_scales_txt_path} doesn't exist"
+        )
+    with open(args.input_object_code_and_scales_txt_path, "r") as f:
+        input_object_code_and_scale_strs_from_file = f.read().splitlines()
     input_object_code_and_scale_strs = get_object_codes_and_scales_to_process(
-        input_object_code_and_scales_txt_path=args.input_object_code_and_scales_txt_path,
+        input_object_code_and_scale_strs=input_object_code_and_scale_strs_from_file,
         meshdata_root_path=args.meshdata_root_path,
         output_folder_path=args.output_grasp_config_dicts_path,
         no_continue=args.no_continue,
