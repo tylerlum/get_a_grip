@@ -11,7 +11,7 @@ def get_object_codes_and_scales_to_process(
     input_object_code_and_scale_strs: List[str],
     meshdata_root_path: pathlib.Path,
     output_folder_path: pathlib.Path,
-    no_continue: bool,
+    continue_ok: bool,
 ) -> List[str]:
     print(
         f"First 10 in input_object_code_and_scale_strs: {input_object_code_and_scale_strs[:10]}"
@@ -47,17 +47,17 @@ def get_object_codes_and_scales_to_process(
         else []
     )
 
-    if no_continue and len(existing_object_code_and_scale_strs) > 0:
+    if len(existing_object_code_and_scale_strs) > 0 and not continue_ok:
         print(
             f"Found {len(existing_object_code_and_scale_strs)} objects in {output_folder_path}"
         )
-        print("Exiting because --no_continue was specified.")
+        print("Exiting because --continue_ok False was specified.")
         exit()
     elif len(existing_object_code_and_scale_strs) > 0:
         print(
             f"Found {len(existing_object_code_and_scale_strs)} objects in {output_folder_path}"
         )
-        print("Continuing because --no_continue was not specified.")
+        print("Continuing because --continue_ok True was specified.")
 
         input_object_code_and_scale_strs = list(
             set(input_object_code_and_scale_strs)
@@ -69,4 +69,4 @@ def get_object_codes_and_scales_to_process(
     else:
         print("No objects have been processed yet.")
 
-    return input_object_code_and_scale_strs
+    return sorted(input_object_code_and_scale_strs)

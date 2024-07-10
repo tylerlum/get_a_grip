@@ -32,7 +32,7 @@ def create_mesh_3d(
 
 
 def main() -> None:
-    args = tyro.cli(VisualizeMeshCompareToOriginalArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[VisualizeMeshCompareToOriginalArgs])
     assert args.obj_filepath.exists(), f"{args.obj_filepath} does not exist"
     assert (
         args.original_meshdata_dir_path.exists()

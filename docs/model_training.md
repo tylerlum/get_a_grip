@@ -80,7 +80,7 @@ python get_a_grip/model_training/scripts/create_nerf_grasp_dataset.py \
 ## BPS Evaluator Model Training
 
 ```
-python get_a_grip/model_training/scripts/train_bps_grasp_evaluator.py \
+python get_a_grip/model_training/scripts/train_bps_evaluator_model.py \
 --train_dataset_path data/NEW_DATASET/bps_grasp_dataset/train_dataset.h5 \
 --val_dataset_path data/NEW_DATASET/bps_grasp_dataset/val_dataset.h5
 ```
@@ -92,8 +92,7 @@ python get_a_grip/model_training/scripts/train_bps_grasp_evaluator.py \
 ## NeRF Evaluator Model Training
 
 ```
-python get_a_grip/model_training/scripts/train_nerf_grasp_evaluator.py \
-cnn-3d-xyz-global-cnn \
+python get_a_grip/model_training/scripts/train_nerf_evaluator_model.py \
 --train-dataset-path data/NEW_DATASET/nerf_grasp_dataset/train_dataset.h5 \
 --val-dataset-path data/NEW_DATASET/nerf_grasp_dataset/val_dataset.h5 \
 --test-dataset-path data/NEW_DATASET/nerf_grasp_dataset/test_dataset.h5 \
@@ -101,7 +100,8 @@ cnn-3d-xyz-global-cnn \
 --dataloader.batch-size 128 \
 --name MY_NERF_EXPERIMENT_NAME \
 --training.loss_fn l2 \
---training.save_checkpoint_freq 1
+--training.save_checkpoint_freq 1 \
+model-config:cnn-xyz-global-cnn-model-config
 ```
 
 <p align="center">
@@ -111,7 +111,7 @@ cnn-3d-xyz-global-cnn \
 ## BPS Sampler Model Training
 
 ```
-python get_a_grip/model_training/scripts/train_bps_grasp_sampler.py \
+python get_a_grip/model_training/scripts/train_bps_sampler_model.py \
 --train_dataset_path data/NEW_DATASET/bps_grasp_dataset/train_dataset.h5 \
 --val_dataset_path data/NEW_DATASET/bps_grasp_dataset/val_dataset.h5
 ```
@@ -123,7 +123,7 @@ python get_a_grip/model_training/scripts/train_bps_grasp_sampler.py \
 ## NeRF Sampler Model Training
 
 ```
-python get_a_grip/model_training/scripts/train_nerf_grasp_sampler.py \
+python get_a_grip/model_training/scripts/train_nerf_sampler_model.py \
 --train_dataset_path data/NEW_DATASET/nerf_grasp_dataset/train_dataset.h5 \
 --val_dataset_path data/NEW_DATASET/nerf_grasp_dataset/val_dataset.h5
 ```

@@ -235,7 +235,7 @@ def compute_frogger_grasps(
     frogger_args = frogger_utils.FroggerArgs(
         obj_filepath=nerf_to_mesh_folder / "decomposed.obj",
         obj_scale=cfg.object_scale,
-        obj_name=cfg.object_code,
+        obj_code=cfg.object_code,
         obj_is_yup=False,
         num_grasps=cfg.num_grasps,
         output_grasp_config_dicts_folder=cfg.output_folder / "grasp_config_dicts",
@@ -415,7 +415,7 @@ def run_frogger_pipeline(
 
 
 def main() -> None:
-    args = tyro.cli(CommandlineArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[CommandlineArgs])
     print("=" * 80)
     print(f"args: {args}")
     print("=" * 80 + "\n")

@@ -28,5 +28,5 @@ class EvenlySpacedFingertipConfig:
 
 
 if __name__ == "__main__":
-    cfg = tyro.cli(EvenlySpacedFingertipConfig)
+    cfg = tyro.cli(tyro.conf.FlagConversionOff[EvenlySpacedFingertipConfig])
     print(cfg)

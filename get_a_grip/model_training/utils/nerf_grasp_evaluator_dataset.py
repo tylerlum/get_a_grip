@@ -212,7 +212,7 @@ class NerfGraspEvalDataset(Dataset):
         assert_equals(y_coll.shape, ())
         assert_equals(y_PGS.shape, ())
 
-        # TODO: Consider thresholding y_* labels to be 0 or 1
+        # Consider thresholding y_* labels to be 0 or 1
         # Convert to float classes (N,) -> (N, 2)
         y_pick = torch.stack([1 - y_pick, y_pick], dim=-1)
         y_coll = torch.stack([1 - y_coll, y_coll], dim=-1)

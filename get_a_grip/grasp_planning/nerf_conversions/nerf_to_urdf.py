@@ -5,6 +5,9 @@ from typing import Optional, Tuple
 import numpy as np
 import tyro
 
+from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+    parse_object_code_and_scale,
+)
 from get_a_grip.grasp_planning.nerf_conversions.nerf_to_mesh import nerf_to_mesh
 from get_a_grip.model_training.utils.nerf_load_utils import load_nerf_field
 
@@ -122,18 +125,6 @@ def create_urdf(
     return output_urdf_path
 
 
-def parse_object_code_and_scale(object_code_and_scale_str: str) -> Tuple[str, float]:
-    keyword = "_0_"
-    idx = object_code_and_scale_str.rfind(keyword)
-    object_code = object_code_and_scale_str[:idx]
-
-    idx_offset_for_scale = keyword.index("0")
-    object_scale = float(
-        object_code_and_scale_str[idx + idx_offset_for_scale :].replace("_", ".")
-    )
-    return object_code, object_scale
-
-
 def nerf_to_urdf(args: NerfToUrdfArgs) -> Tuple[pathlib.Path, pathlib.Path]:
     print("=" * 80)
     print(f"{pathlib.Path(__file__).name} args: {args}")
@@ -190,7 +181,7 @@ def nerf_to_urdf(args: NerfToUrdfArgs) -> Tuple[pathlib.Path, pathlib.Path]:
 
 
 def main() -> None:
-    args = tyro.cli(NerfToUrdfArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[NerfToUrdfArgs])
     nerf_to_urdf(args)
 
 

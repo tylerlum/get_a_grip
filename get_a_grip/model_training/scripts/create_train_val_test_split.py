@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Dict, List
 
 import tyro
+from tqdm import tqdm
 
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
@@ -60,7 +61,7 @@ def create_symlinks(
 
 
 def main() -> None:
-    args = tyro.cli(CreateTrainValTestSplitArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[CreateTrainValTestSplitArgs])
     INPUT_PATH = args.input_evaled_grasp_config_dicts_path
     assert INPUT_PATH.exists(), f"{INPUT_PATH} does not exist"
 
@@ -126,6 +127,23 @@ def main() -> None:
         dest_folderpath=(INPUT_PATH.parent / f"{INPUT_PATH.stem}_test"),
         filenames=[f"{x}.npy" for x in test_object_codes_and_scale_strs],
     )
+
+    # Save to file
+    with open((INPUT_PATH.parent / f"{INPUT_PATH.stem}_train.txt"), "w") as f:
+        for object_code_and_scale_str in tqdm(
+            train_object_codes_and_scale_strs, desc="Writing object code and scales"
+        ):
+            f.write(f"{object_code_and_scale_str}\n")
+    with open((INPUT_PATH.parent / f"{INPUT_PATH.stem}_val.txt"), "w") as f:
+        for object_code_and_scale_str in tqdm(
+            val_object_codes_and_scale_strs, desc="Writing object code and scales"
+        ):
+            f.write(f"{object_code_and_scale_str}\n")
+    with open((INPUT_PATH.parent / f"{INPUT_PATH.stem}_test.txt"), "w") as f:
+        for object_code_and_scale_str in tqdm(
+            test_object_codes_and_scale_strs, desc="Writing object code and scales"
+        ):
+            f.write(f"{object_code_and_scale_str}\n")
 
 
 if __name__ == "__main__":

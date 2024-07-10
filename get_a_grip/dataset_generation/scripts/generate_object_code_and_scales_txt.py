@@ -25,11 +25,16 @@ class GenerateObjectCodeAndScalesTxtArgs:
 
 
 def main() -> None:
-    args = tyro.cli(GenerateObjectCodeAndScalesTxtArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[GenerateObjectCodeAndScalesTxtArgs])
 
     object_codes = sorted([path.name for path in args.meshdata_root_path.iterdir()])
     print(f"First 10 in object_codes: {object_codes[:10]}")
-    print(f"len(object_codes): {len(object_codes)}")
+    print(f"len(object_codes): {len(object_codes)} in {args.meshdata_root_path}")
+
+    if args.max_num_objects is not None:
+        print(f"Reducing number of objects to at most {args.max_num_objects}")
+        object_codes = object_codes[: args.max_num_objects]
+        print(f"len(object_codes): {len(object_codes)}")
 
     object_scales = np.random.uniform(
         low=args.min_object_scale,

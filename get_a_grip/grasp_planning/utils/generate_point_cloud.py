@@ -117,13 +117,13 @@ def generate_point_cloud(
         ]
     )
 
-    # NOTE: Some nerfs are terrible by bad luck, so computing point clouds never finishes.
+    # NOTE: Some nerfs are terrible by bad luck, so computing point clouds never finishes, so include timeout
     print(f"Running: {command}")
     subprocess.run(command, shell=True, check=True, timeout=args.timeout)
 
 
 def main() -> None:
-    args = tyro.cli(GeneratePointCloudArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[GeneratePointCloudArgs])
     generate_point_cloud(args)
 
 

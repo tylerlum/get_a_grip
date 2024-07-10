@@ -37,10 +37,11 @@ Note that in some intermediate computation, we first compute the camera transfor
   <img src="https://github.com/tylerlum/get_a_grip/assets/26510814/b2bf5405-a5b4-4c44-824e-ffe591e6c1d4" alt="intermediate_frames" style="width:27%;">
 </p>
 
-
 ## Robot
 
-This codebase currently only supports the Allegro hand, which has four fingers.
+### Allegro Hand
+
+Although our framework is agnostic to the specific hand hardware, this codebase currently only supports the Allegro hand, which has four fingers.
 
 Allegro wrist pose frame:
 
@@ -65,6 +66,22 @@ Allegro urdf details:
 - The urdf comes from [simlabrobotics/allegro_hand_ros_v4](https://github.com/simlabrobotics/allegro_hand_ros_v4/blob/master/src/allegro_hand_description/allegro_hand_description_right.urdf)
 
 - We modify the urdf to have 6 "virtual joints" (one each for translation xyz an rotation RPY), which allows us to move the gripper in 6 DOF (used to move the gripper during grasp evaluation)
+
+- We use the abbreviation "algr" for the Allegro hand in our codebase
+
+### Franka Research 3
+
+Although our framework is agnostic to the specific arm hardware, this codebase currently only supports the Franka hand, which has four fingers.
+
+Franka urdf details:
+
+- We use the abbreviation "fr3" for the Franka Research 3 arm in our codebase
+
+- Our full hardware setup includes a Franka Research 3 arm, a Allegro hand, a wrist-mounted Zed 2i camera, and a table. These are all modeled in the `fr3_algr_zed2i.urdf` (in our custom fork of `curobo`)
+
+- `curobo` requires that the robot be modeled as a set of collision spheres, which needed to be done manually
+
+- `curobo` typically is visualized using Isaac Sim, but we had issues using it, so we use pybullet for visualization
 
 ## DexGraspNet
 

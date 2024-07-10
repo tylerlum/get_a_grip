@@ -8,7 +8,13 @@ Website: https://sites.google.com/view/get-a-grip-dataset
 
 ## Overview
 
-This repo contains the official implementation of Get a Grip. It consists of a dataset of labeled grasps, object meshes, and perceptual data. It also consists of the code for dataset generation and visualization, model training, and grasp planning.
+This repo contains the official implementation of Get a Grip. It consists of:
+
+- A dataset of labeled grasps, object meshes, and perceptual data.
+
+- Pre-trained sampler and evaluator models for grasp planning.
+
+- Code for dataset generation, visualization, model training, grasp planning, and grasp motion planning.
 
 ## Project Structure
 
@@ -17,21 +23,23 @@ get_a_grip
   ├── assets
   │   └── // Assets such as allegro hand urdf files
   ├── data
-  │   └── // Store dataset and output files here
+  │   └── // Store dataset, models, and output files here
   ├── docs
   │   └── // Documentation
-  ├── get_a_grip
-  │   ├── // Source code
-  |   └── dataset_generation
-  |      └── // Generate dataset
-  |   └── grasp_planning
-  |      └── // Grasp planning training and inference
-  |   └── model_training
-  |      └── // Neural network training
-  |   └── visualization
-  |      └── // Visualization tools
-  └── scripts
-      └── // Useful scripts
+  └── get_a_grip
+      ├── // Source code
+      └── dataset_generation
+         └── // Generate dataset
+      └── grasp_motion_planning
+         └── // Motion planning to perform grasps with an arm and hand
+      └── grasp_planning
+         └── // Planning to perform grasps with a floating hand
+      └── model_training
+         └── // Neural network training for samplers and evaluators
+      └── utils
+         └── // Shared utilities
+      └── visualization
+         └── // Visualization tools
 ```
 
 ## Installation
@@ -40,13 +48,11 @@ Installation instructions [here](docs/installation.md).
 
 ## Quick Start
 
-TODO: Note that we used 4090
-
-### 1. Dataset Download
+### 1. Download Dataset
 
 TODO
 
-### 2. Dataset Visualization
+### 2. Visualize Dataset
 
 TODO
 
@@ -54,7 +60,7 @@ TODO
 
 TODO
 
-### 4. Grasp Planning with BPS Sampler and BPS Evaluator (Arm + Hand)
+### 4. Grasp Motion Planning with BPS Sampler and BPS Evaluator (Arm + Hand)
 
 TODO
 
@@ -62,9 +68,9 @@ TODO
 
 Dataset information [here](docs/dataset.md).
 
-## Visualization Tools
+## Visualization
 
-Visualization tools information [here](docs/visualization_tools.md).
+Visualization tools information [here](docs/visualization.md).
 
 ## Dataset Generation
 
@@ -77,6 +83,10 @@ Model training information [here](docs/model_training.md).
 ## Grasp Planning
 
 Grasp planning information [here](docs/grasp_planning.md).
+
+## Grasp Motion Planning
+
+Grasp motion planning information [here](docs/grasp_motion_planning.md).
 
 ## Additional Details
 

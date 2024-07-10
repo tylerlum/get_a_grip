@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-import pathlib
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-import tyro
 
 from get_a_grip.grasp_planning.utils.allegro_grasp_config import AllegroGraspConfig
 from get_a_grip.grasp_planning.utils.nerf_input import NerfInput
@@ -24,93 +20,13 @@ from get_a_grip.model_training.models.nerf_evaluator_model import (
 )
 
 
-@dataclass
-class EvaluatorConfig(ABC):
-    @abstractmethod
-    def create(self, nerf_input: NerfInput) -> Evaluator:
-        raise NotImplementedError
-
-
-@dataclass
-class BpsEvaluatorConfig(EvaluatorConfig):
-    ckpt_path: pathlib.Path
-
-    def __post_init__(self) -> None:
-        assert self.ckpt_path.exists(), f"{self.ckpt_path} does not exist"
-        assert self.ckpt_path.suffix in [
-            ".pt",
-            ".pth",
-        ], f"{self.ckpt_path} does not have a .pt or .pth suffix"
-
-    def create(self, nerf_input: NerfInput) -> BpsEvaluator:
-        bps_values = nerf_input.bps_values
-        return BpsEvaluator(
-            bps_values=bps_values,
-            ckpt_path=self.ckpt_path,
-        )
-
-
-@dataclass
-class NerfEvaluatorConfig(EvaluatorConfig):
-    nerf_evaluator_model_config: Optional[NerfEvaluatorModelConfig] = None
-    nerf_evaluator_model_config_path: Optional[pathlib.Path] = None
-    nerf_evaluator_model_checkpoint: int = -1  # Load latest checkpoint if -1.
-    eval_batch_size: int = 32
-
-    def __post_init__(self) -> None:
-        # If nerf_evaluator config is None, load nerf_evaluator config from file
-        if self.nerf_evaluator_model_config is None:
-            assert (
-                self.nerf_evaluator_model_config_path is not None
-            ), "Both nerf_evaluator_model_config and nerf_evaluator_model_config_path are None."
-            assert (
-                self.nerf_evaluator_model_config_path.exists()
-            ), f"{self.nerf_evaluator_model_config_path} does not exist"
-            assert (
-                self.nerf_evaluator_model_config_path.suffix in [".yaml", ".yml"]
-            ), f"Expected .yaml or .yml, got {self.nerf_evaluator_model_config_path.suffix}"
-            print(
-                f"Loading nerf_evaluator config from {self.nerf_evaluator_model_config_path}"
-            )
-            self.nerf_evaluator_model_config = tyro.extras.from_yaml(
-                type(self.nerf_evaluator_model_config),
-                self.nerf_evaluator_model_config_path.open(),
-            )
-        elif self.nerf_evaluator_model_config_path is not None:
-            print(
-                "WARNING: Both nerf_evaluator_model_config and nerf_evaluator_model_config_path are provided, using nerf_evaluator_model_config."
-            )
-
-    def create(self, nerf_input: NerfInput) -> Evaluator:
-        assert (
-            self.nerf_evaluator_model_config is not None
-        ), "nerf_evaluator_model_config is None"
-        nerf_evaluator_model = load_nerf_evaluator_model(
-            nerf_evaluator_model_config=self.nerf_evaluator_model_config,
-            nerf_evaluator_model_checkpoint=self.nerf_evaluator_model_checkpoint,
-        )
-        return NerfEvaluator(
-            nerf_input=nerf_input,
-            nerf_evaluator_model=nerf_evaluator_model,
-            fingertip_config=self.nerf_evaluator_model_config.nerf_grasp_dataset_config.fingertip_config,
-        )
-
-
-@dataclass
-class NoEvaluatorConfig(EvaluatorConfig):
-    def create(self, nerf_input: NerfInput) -> Evaluator:
-        return NoEvaluator()
-
-
-EvaluatorConfigUnion = Union[BpsEvaluatorConfig, NerfEvaluatorConfig, NoEvaluatorConfig]
-
-
 class Evaluator(ABC):
     @abstractmethod
     def evaluate(self, grasp_config: AllegroGraspConfig) -> torch.Tensor:
         """Returns losses where lower is better"""
         raise NotImplementedError
 
+    @torch.no_grad()
     def sort(self, grasp_config: AllegroGraspConfig) -> AllegroGraspConfig:
         B = len(grasp_config)
         losses = self.evaluate(grasp_config)
@@ -132,12 +48,16 @@ class NerfEvaluator(nn.Module, Evaluator):
     def __init__(
         self,
         nerf_input: NerfInput,
-        nerf_evaluator_model: NerfEvaluatorModel,
+        nerf_evaluator_model_config: NerfEvaluatorModelConfig,
+        nerf_evaluator_model_checkpoint: int,
         fingertip_config: EvenlySpacedFingertipConfig,
     ) -> None:
         super().__init__()
         self.nerf_input = nerf_input
-        self.nerf_evaluator_model = nerf_evaluator_model
+        self.nerf_evaluator_model = load_nerf_evaluator_model(
+            nerf_evaluator_model_config=nerf_evaluator_model_config,
+            nerf_evaluator_model_checkpoint=nerf_evaluator_model_checkpoint,
+        )
         self.fingertip_config = fingertip_config
 
     def forward(self, grasp_config: AllegroGraspConfig) -> torch.Tensor:
@@ -184,6 +104,7 @@ def load_nerf_evaluator_model(
     checkpoint_path = output_checkpoint_paths[nerf_evaluator_model_checkpoint]
 
     checkpoint = torch.load(checkpoint_path)
+    nerf_evaluator_model.eval()
     nerf_evaluator_model.load_state_dict(checkpoint["nerf_evaluator_model"])
 
     return nerf_evaluator_model

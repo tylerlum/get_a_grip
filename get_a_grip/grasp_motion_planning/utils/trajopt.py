@@ -152,7 +152,7 @@ def solve_trajopt(
         if warn_if_fail:
             print("WARNING: Trajectory Optimization Failed")
 
-    # HACK: If enable_opt=False, then the dt is not set correctly, making the dt way too small
+    # If enable_opt=False, then the dt is not set correctly, making the dt way too small
     # For some reason, can sometimes by 2D or 3D
     if len(traj.position.shape) == 2:
         n_timesteps = traj.position.shape[0]

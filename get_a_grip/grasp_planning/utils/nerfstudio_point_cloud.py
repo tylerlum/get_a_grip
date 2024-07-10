@@ -1,5 +1,8 @@
 """
 Copied mostly from: https://github.com/nerfstudio-project/nerfstudio/blob/main/nerfstudio/scripts/exporter.py
+Modified for point cloud export:
+  * Pass in pipeline so don't need to waste time loading from file again if already loaded
+  * Return point cloud without saving to file
 Script for exporting NeRF into other formats.
 """
 

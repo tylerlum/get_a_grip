@@ -19,6 +19,9 @@ from frogger.solvers import FroggerConfig
 from pydrake.math import RigidTransform, RotationMatrix
 from tqdm import tqdm
 
+from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+    object_code_and_scale_to_str,
+)
 from get_a_grip.model_training.utils.point_utils import transform_points
 
 
@@ -28,7 +31,7 @@ class FroggerArgs:
         "/juno/u/tylerlum/github_repos/DexGraspNet/data/meshdata/core-bottle-2927d6c8438f6e24fe6460d8d9bd16c6/coacd/decomposed.obj"
     )
     obj_scale: float = 0.0915
-    obj_name: str = "core-bottle-2927d6c8438f6e24fe6460d8d9bd16c6"
+    obj_code: str = "core-bottle-2927d6c8438f6e24fe6460d8d9bd16c6"
     obj_is_yup: bool = True
     num_grasps: int = 3
     output_grasp_config_dicts_folder: pathlib.Path = pathlib.Path(
@@ -37,6 +40,12 @@ class FroggerArgs:
     visualize: bool = False
     grasp_idx_to_visualize: int = 1
     max_time: float = 60.0
+
+    @property
+    def object_code_and_scale_str(self) -> str:
+        return object_code_and_scale_to_str(
+            object_code=self.obj_code, object_scale=self.obj_scale
+        )
 
 
 @dataclass
@@ -356,7 +365,7 @@ def frogger_to_grasp_config_dict(
         X_W_O = compute_X_W_O(mesh=mesh, obj_is_yup=args.obj_is_yup)
 
     mesh_object = create_frogger_mesh_object(
-        mesh=mesh, obj_name=args.obj_name, X_W_O=X_W_O
+        mesh=mesh, obj_name=args.obj_code, X_W_O=X_W_O
     )
 
     # Compute grasps
@@ -406,11 +415,12 @@ def frogger_to_grasp_config_dict(
         l_array=l_array,
     )
     args.output_grasp_config_dicts_folder.mkdir(exist_ok=True)
+    output_filepath = (
+        args.output_grasp_config_dicts_folder / f"{args.object_code_and_scale_str}.npy"
+    )
     np.save(
-        # eg. Convert 0.0915 to 0_0915 (always 4 decimal places)
-        args.output_grasp_config_dicts_folder
-        / f"{args.obj_name}_{args.obj_scale:.4f}".replace(".", "_"),
-        grasp_config_dict,
+        file=output_filepath,
+        arr=grasp_config_dict,
         allow_pickle=True,
     )
 
@@ -513,7 +523,7 @@ def custom_coll_callback(model, name_A: str, name_B: str) -> float:
 
 
 def main() -> None:
-    args = tyro.cli(FroggerArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[FroggerArgs])
     # args = Args(
     #     obj_filepath=pathlib.Path(
     #         ROOT + "/data/001_chips_can/001_chips_can_clean.obj"

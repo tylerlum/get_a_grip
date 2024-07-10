@@ -816,8 +816,11 @@ class HandModel:
                     name="penetration_keypoints",
                 )
             )
-            for penetration_keypoint in penetration_keypoints:
-                penetration_keypoint = penetration_keypoint.numpy()
+            for ii in range(penetration_keypoints.shape[0]):
+                penetration_keypoint = penetration_keypoints[ii]
+                assert penetration_keypoint.shape == (
+                    3,
+                ), f"{penetration_keypoint.shape}"
                 mesh = tm.primitives.Capsule(radius=0.01, height=0)
                 v = mesh.vertices + penetration_keypoint
                 f = mesh.faces

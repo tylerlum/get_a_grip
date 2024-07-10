@@ -46,13 +46,14 @@ def debug_start_state_invalid(
     # DEBUG
     graph_planner = motion_gen_config.graph_planner
     x_init_batch = start_state.position
-    x_goal_batch = x_init_batch  # HACK
     node_set = x_init_batch
     mask = graph_planner.mask_samples(x_init_batch)
     if not mask.all():
+        print("^" * 80)
+        print("PROBLEM WITH START_STATE")
+        print("^" * 80 + "\n")
         print(f"mask: {mask}")
         print(f"x_init_batch: {x_init_batch}")
-        print(f"x_goal_batch: {x_goal_batch}")
         print(f"mask.nonzero(): {mask.nonzero()}")
         print(f"mask.nonzero().shape: {mask.nonzero().shape}")
         print(f"torch.logical_not(mask).nonzero(): {torch.logical_not(mask).nonzero()}")
@@ -83,7 +84,6 @@ def debug_start_state_invalid(
         print(f"bound_constraint: {bound_constraint}")
         print(f"coll_constraint: {coll_constraint}")
         print(f"self_constraint: {self_constraint}")
-        print("PROBLEM WITH START_STATE")
         breakpoint()
     else:
         print("mask.all() == True, so no issues with start_state")
@@ -265,7 +265,7 @@ def solve_prepared_trajopt_batch(
             print(f"joint_upper_limits = {joint_upper_limits}")
             print("#" * 80)
 
-            # HACK: Check if out of joint limits due to small numerical issues
+            # Check if out of joint limits due to small numerical issues
             eps = 1e-4
             if (q_starts > joint_lower_limits[None] - eps).all() and (
                 q_starts < joint_upper_limits[None] + eps

@@ -23,7 +23,7 @@ class VisualizeObjectModelArgs:
 
 
 def main() -> None:
-    args = tyro.cli(VisualizeObjectModelArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[VisualizeObjectModelArgs])
 
     # object model
     object_model = ObjectModel(

@@ -83,3 +83,4 @@ pip install -e .
 - `isaacgym` requires Python 3.7 or 3.8.
 - If you encounter issues installing third-party dependencies, please take a look at the installation instructions associated with these dependencies. We provide the installation instructions that worked for us, but those instructions may change over time or or change on different hardware.
 - There can be challenges with `pytorch3d` depending on the exact python version, pytorch version, and cuda version. Please refer to the pytorch3d installation instructions (https://github.com/facebookresearch/pytorch3d) for more details. We also found the following issue pages to be helpful: https://github.com/facebookresearch/pytorch3d/issues/1401, https://github.com/facebookresearch/pytorch3d/discussions/1752
+- The installation has been tested on Ubuntu 20.04 with a NVIDIA RTX 4090 GPU. The installation should work on similar setups, but has not been tested extensively.

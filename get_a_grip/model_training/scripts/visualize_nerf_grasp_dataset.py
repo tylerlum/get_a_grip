@@ -96,7 +96,9 @@ else:
 
 # %%
 
-cfg = tyro.cli(VisualizeNerfGraspDatasetConfig, args=arguments)
+cfg = tyro.cli(
+    tyro.conf.FlagConversionOff[VisualizeNerfGraspDatasetConfig], args=arguments
+)
 print("=" * 80)
 print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
 print("=" * 80 + "\n")
@@ -206,9 +208,7 @@ assert query_points_global_N.shape == (
 
 # %%
 # Compute alpha values
-delta = (
-    cfg.fingertip_config.grasp_depth_mm / 1000 / (cfg.fingertip_config.num_pts_z - 1)
-)
+delta = cfg.fingertip_config.distance_between_pts_mm
 nerf_alphas = [1 - np.exp(-delta * dd) for dd in nerf_densities]
 
 # %%

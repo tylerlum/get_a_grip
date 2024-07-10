@@ -14,7 +14,7 @@ class VisualizeMeshArgs:
 
 
 def main() -> None:
-    args = tyro.cli(VisualizeMeshArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[VisualizeMeshArgs])
 
     # Load your .obj file
     mesh = trimesh.load(str(args.obj_filepath))

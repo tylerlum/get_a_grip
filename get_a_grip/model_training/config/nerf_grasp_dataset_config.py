@@ -43,5 +43,5 @@ class NerfGraspDatasetConfig:
 
 
 if __name__ == "__main__":
-    cfg = tyro.cli(NerfGraspDatasetConfig)
+    cfg = tyro.cli(tyro.conf.FlagConversionOff[NerfGraspDatasetConfig])
     print(cfg)

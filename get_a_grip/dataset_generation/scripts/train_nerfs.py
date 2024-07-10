@@ -69,6 +69,9 @@ def train_nerfs(args: TrainNerfsArgs) -> pathlib.Path:
                 )
             )
         elif OPTION == "train_nerf_return_trainer":
+            raise ValueError(
+                "This option is not supported. Because of nerfstudio's implementation, its experiment config does not update on each loop, so it keeps saving all nerfs to the same directory, overwriting itself"
+            )
             train_nerf_return_trainer(
                 TrainNerfArgs(
                     nerfdata_folder=object_nerfdata_path,
@@ -83,7 +86,7 @@ def train_nerfs(args: TrainNerfsArgs) -> pathlib.Path:
 
 
 def main() -> None:
-    args = tyro.cli(TrainNerfsArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[TrainNerfsArgs])
     print("=" * 80)
     print(f"{pathlib.Path(__file__).name} args: {args}")
     print("=" * 80 + "\n")

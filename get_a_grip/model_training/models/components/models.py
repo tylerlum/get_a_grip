@@ -15,7 +15,7 @@ def assert_equals(a, b):
     assert a == b, f"{a} != {b}"
 
 
-class CNN_3D_Model(nn.Module):
+class CNN3D_Model(nn.Module):
     def __init__(
         self,
         input_shape: Tuple[int, int, int, int],
@@ -97,7 +97,7 @@ class CNN_3D_Model(nn.Module):
         return self(x)
 
 
-class CNN_3D_CNN_3D_Model(nn.Module):
+class CNN3D_CNN3D_Model(nn.Module):
     def __init__(
         self,
         input_shape: Tuple[int, int, int, int],
@@ -251,7 +251,7 @@ if __name__ == "__main__":
     x = torch.zeros(batch_size, n_fingers, n_x, n_y, n_z)
 
     # CNN 3D.
-    model = CNN_3D_Model(
+    model = CNN3D_Model(
         input_shape=(n_fingers, n_x, n_y, n_z),
         conv_channels=(32, 16, 8, 4),
         mlp_hidden_layers=(32, 32),

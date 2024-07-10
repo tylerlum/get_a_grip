@@ -17,7 +17,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import trimesh
 import tyro
-import wandb
 from clean_loop_timer import LoopTimer
 from sklearn.metrics import (
     accuracy_score,
@@ -31,15 +30,14 @@ from torch.utils.data import (
     random_split,
 )
 from tqdm import tqdm as std_tqdm
-from wandb.util import generate_id
-from wandb.viz import CustomChart
 
+import wandb
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
 from get_a_grip.dataset_generation.utils.seed import set_seed
-from get_a_grip.grasp_planning.utils.nerf_evaluator_optimizer_utils import (
+from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
     sample_random_rotate_transforms_only_around_y,
 )
 from get_a_grip.model_training.config.fingertip_config import (
@@ -70,6 +68,8 @@ from get_a_grip.model_training.utils.plot_utils import (
     plot_mesh_and_query_points,
 )
 from get_a_grip.model_training.utils.scheduler import get_scheduler
+from wandb.util import generate_id
+from wandb.viz import CustomChart
 
 tqdm = partial(std_tqdm, dynamic_ncols=True)
 
@@ -1261,7 +1261,7 @@ def run_training_loop(
 
 def main() -> None:
     # Load Config
-    cfg = tyro.cli(NerfEvaluatorModelConfig)
+    cfg = tyro.cli(tyro.conf.FlagConversionOff[NerfEvaluatorModelConfig])
     print("=" * 80)
     print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
     print("=" * 80 + "\n")

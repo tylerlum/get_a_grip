@@ -287,6 +287,7 @@ def get_nerf_densities_at_fingertips(
     ray_origins_finger_frame: torch.Tensor,
     X_N_Oy: np.ndarray,
     loop_timer: Optional[LoopTimer] = None,
+    use_progress_bar: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     # Shape check grasp_frame_transforms
     batch_size = grasp_frame_transforms.shape[0]
@@ -354,12 +355,19 @@ def get_nerf_densities_at_fingertips(
             dtype=torch.float,
             device="cpu",
         )
-        for curr_ind, next_ind in tqdm(
-            zip(split_inds[:-1], split_inds[1:]),
-            total=len(split_inds) - 1,
-            desc="get_density",
-            dynamic_ncols=True,
-        ):
+
+        inds_list = zip(split_inds[:-1], split_inds[1:])
+        iterable = (
+            tqdm(
+                inds_list,
+                total=len(split_inds) - 1,
+                desc="get_density",
+                dynamic_ncols=True,
+            )
+            if use_progress_bar
+            else inds_list
+        )
+        for curr_ind, next_ind in iterable:
             curr_ray_samples = ray_samples[curr_ind:next_ind].to("cuda")
             curr_nerf_densities = (
                 nerf_pipeline.model.field.get_density(curr_ray_samples)[0]
@@ -445,7 +453,9 @@ def get_nerf_densities_global(
             3,
         )
 
-        query_points_global_N = torch.from_numpy(query_points_global_N_np).cuda()
+        query_points_global_N = (
+            torch.from_numpy(query_points_global_N_np).float().cuda()
+        )
 
         nerf_densities_global = (
             get_density(
@@ -492,6 +502,7 @@ def get_nerf_densities(
         ray_origins_finger_frame=ray_origins_finger_frame,
         X_N_Oy=X_N_Oy,
         loop_timer=loop_timer,
+        use_progress_bar=True,
     )
     nerf_densities_global, query_points_global_N = get_nerf_densities_global(
         nerf_pipeline=nerf_pipeline,
@@ -629,7 +640,7 @@ def get_data(
 
 
 def main() -> None:
-    cfg = tyro.cli(NerfGraspDatasetConfig)
+    cfg = tyro.cli(tyro.conf.FlagConversionOff[NerfGraspDatasetConfig])
 
     print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
     assert cfg.fingertip_config is not None
@@ -668,7 +679,7 @@ def main() -> None:
         cfg.input_evaled_grasp_config_dicts_path.exists()
     ), f"{cfg.input_evaled_grasp_config_dicts_path} does not exist"
     evaled_grasp_config_dict_filepaths = sorted(
-        list(cfg.input_evaled_grasp_config_dicts_path.glob("*.npy"))
+        list(cfg.input_evaled_grasp_config_dicts_path.rglob("*.npy"))
     )
     assert (
         len(evaled_grasp_config_dict_filepaths) > 0
