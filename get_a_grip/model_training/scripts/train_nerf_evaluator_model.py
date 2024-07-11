@@ -33,10 +33,6 @@ from tqdm import tqdm as std_tqdm
 
 import wandb
 from get_a_grip import get_data_folder
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
-    parse_object_code_and_scale,
-)
-from get_a_grip.dataset_generation.utils.seed import set_seed
 from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
     sample_random_rotate_transforms_only_around_y,
 )
@@ -68,6 +64,10 @@ from get_a_grip.model_training.utils.plot_utils import (
     plot_mesh_and_query_points,
 )
 from get_a_grip.model_training.utils.scheduler import get_scheduler
+from get_a_grip.utils.parse_object_code_and_scale import (
+    parse_object_code_and_scale,
+)
+from get_a_grip.utils.seed import set_seed
 from wandb.util import generate_id
 from wandb.viz import CustomChart
 
@@ -94,16 +94,9 @@ def assert_equals(a, b):
 def setup_checkpoint_workspace(
     cfg: NerfEvaluatorModelConfig,
 ) -> str:
-    cfg.checkpoint_workspace.root_dir.mkdir(parents=True, exist_ok=True)
-
     # If input_dir != output_dir, then we create a new output_dir and wandb_run_id
     if cfg.checkpoint_workspace.input_dir != cfg.checkpoint_workspace.output_dir:
-        assert not cfg.checkpoint_workspace.output_dir.exists(), f"checkpoint_workspace.output_dir already exists at {cfg.checkpoint_workspace.output_dir}"
-        print(
-            f"input {cfg.checkpoint_workspace.input_dir} != output {cfg.checkpoint_workspace.output_dir}. Creating new wandb_run_id"
-        )
-
-        cfg.checkpoint_workspace.output_dir.mkdir()
+        cfg.checkpoint_workspace.output_dir.mkdir(parents=True, exist_ok=False)
         print(
             f"Done creating cfg.checkpoint_workspace.output_dir {cfg.checkpoint_workspace.output_dir}"
         )
@@ -349,7 +342,7 @@ def nerf_densities_plot_example(
     object_code, object_scale = parse_object_code_and_scale(object_code_and_scale_str)
 
     # Path to meshes
-    MESHDATA_ROOT = get_data_folder() / "large/meshes"
+    MESHDATA_ROOT = get_data_folder() / "meshdata"
     mesh_path = MESHDATA_ROOT / object_code / "coacd" / "decomposed.obj"
 
     print(f"Loading mesh from {mesh_path}...")
@@ -451,7 +444,7 @@ def nerf_densities_global_plot_example(
     object_code, object_scale = parse_object_code_and_scale(object_code_and_scale_str)
 
     # Path to meshes
-    MESHDATA_ROOT = get_data_folder() / "large/meshes"
+    MESHDATA_ROOT = get_data_folder() / "meshdata"
     mesh_path = MESHDATA_ROOT / object_code / "coacd" / "decomposed.obj"
 
     print(f"Loading mesh from {mesh_path}...")
@@ -679,7 +672,7 @@ def save_checkpoint(
     optimizer: torch.optim.Optimizer,
     lr_scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
 ) -> None:
-    checkpoint_filepath = checkpoint_output_dir / f"checkpoint_{epoch:04}.pt"
+    checkpoint_filepath = checkpoint_output_dir / f"ckpt_{epoch:04}.pth"
     print(f"Saving checkpoint to {checkpoint_filepath}")
     torch.save(
         {
@@ -704,7 +697,7 @@ def save_checkpoint_batch(
     lr_scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
 ) -> None:
     # Save more frequently to be safe (epochs may take many hours each)
-    checkpoint_filepath = checkpoint_output_dir / f"checkpoint_batch_{batch_idx:04}.pt"
+    checkpoint_filepath = checkpoint_output_dir / f"ckpt_batch_{batch_idx:04}.pth"
     print(f"Saving checkpoint to {checkpoint_filepath}")
     torch.save(
         {

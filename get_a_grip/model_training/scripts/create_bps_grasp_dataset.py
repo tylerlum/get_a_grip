@@ -15,11 +15,11 @@ from scipy.spatial import KDTree
 from tqdm import tqdm
 
 from get_a_grip import get_data_folder
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
-    parse_object_code_and_scale,
-)
 from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
     AllegroGraspConfig,
+)
+from get_a_grip.utils.parse_object_code_and_scale import (
+    parse_object_code_and_scale,
 )
 
 N_FINGERS = 4
@@ -28,12 +28,14 @@ GRASP_DIM = 3 + 6 + 16 + N_FINGERS * 3
 
 @dataclass
 class BpsGraspDatasetConfig:
-    input_point_clouds_path: pathlib.Path = get_data_folder() / "large/point_clouds"
+    input_point_clouds_path: pathlib.Path = (
+        get_data_folder() / "dataset/NEW/point_clouds"
+    )
     input_evaled_grasp_config_dicts_path: pathlib.Path = (
-        get_data_folder() / "large/final_evaled_grasp_config_dicts_train"
+        get_data_folder() / "dataset/NEW/final_evaled_grasp_config_dicts_train"
     )
     output_filepath: pathlib.Path = (
-        get_data_folder() / "large/bps_grasp_dataset/train_dataset.h5"
+        get_data_folder() / "dataset/NEW/bps_grasp_dataset/train_dataset.h5"
     )
     overwrite: bool = False
 

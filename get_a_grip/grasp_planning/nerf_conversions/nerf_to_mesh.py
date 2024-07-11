@@ -7,7 +7,7 @@ import torch
 import trimesh
 from skimage.measure import marching_cubes
 
-from get_a_grip.model_training.utils.nerf_load_utils import (
+from get_a_grip.utils.nerf_load_utils import (
     get_nerf_configs,
     load_nerf_field,
 )

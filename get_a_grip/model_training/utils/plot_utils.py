@@ -11,7 +11,7 @@ from get_a_grip.model_training.config.nerf_densities_global_config import (
     NERF_DENSITIES_GLOBAL_NUM_Y,
     NERF_DENSITIES_GLOBAL_NUM_Z,
 )
-from get_a_grip.model_training.utils.point_utils import transform_points
+from get_a_grip.utils.point_utils import transform_point, transform_points
 
 
 def get_scene_dict() -> Dict[str, Any]:
@@ -20,6 +20,22 @@ def get_scene_dict() -> Dict[str, Any]:
         yaxis=dict(title="Y"),
         zaxis=dict(title="Z"),
         aspectmode="data",
+    )
+
+
+def get_yup_camera() -> Dict[str, Any]:
+    return dict(
+        up=dict(x=0, y=1, z=0),
+        center=dict(x=0, y=0, z=0),
+        eye=dict(x=1.0, y=1.0, z=0.0),
+    )
+
+
+def get_zup_camera() -> Dict[str, Any]:
+    return dict(
+        up=dict(x=0, y=0, z=1),
+        center=dict(x=0, y=0, z=0),
+        eye=dict(x=1.0, y=0.0, z=1.0),
     )
 
 
@@ -130,8 +146,6 @@ def plot_mesh_and_query_points(
     title: str = "Query Points",
 ) -> go.Figure:
     num_pts = all_query_points.shape[1]
-    print(f"all_query_points.shape = {all_query_points.shape}")
-    print(f"all_query_points_colors.shape = {all_query_points_colors.shape}")
     assert all_query_points.shape == (
         num_fingers,
         num_pts,
@@ -225,6 +239,7 @@ def plot_grasp_and_mesh_and_more(
     X_N_Oy: Optional[np.ndarray] = None,
     visualize_target_hand: bool = False,
     visualize_pre_hand: bool = False,
+    visualize_Oy: bool = False,
     mesh: Optional[trimesh.Trimesh] = None,
     basis_points: Optional[np.ndarray] = None,
     bps: Optional[np.ndarray] = None,
@@ -232,8 +247,9 @@ def plot_grasp_and_mesh_and_more(
     processed_point_cloud_points: Optional[np.ndarray] = None,
     nerf_global_grids_with_coords: Optional[np.ndarray] = None,
     title: Optional[str] = None,
+    nerf_is_z_up: bool = False,
 ) -> go.Figure:
-    """Create a plot in NeRF y-up (N) frame"""
+    """Create a plot in NeRF (N) frame"""
     if fig is None:
         fig = go.Figure()
 
@@ -267,6 +283,17 @@ def plot_grasp_and_mesh_and_more(
             )
             for trace in pre_hand_plotly:
                 fig.add_trace(trace)
+
+    if visualize_Oy:
+        assert X_N_Oy is not None, "X_N_Oy must be provided to visualize Oy"
+        assert X_N_Oy.shape == (4, 4), f"Expected shape (4, 4), got {X_N_Oy.shape}"
+
+        add_transform_plot(
+            fig=fig,
+            X_A_B=X_N_Oy,
+            A="N",
+            B="Oy",
+        )
 
     if mesh is not None:
         fig.add_trace(
@@ -386,5 +413,62 @@ def plot_grasp_and_mesh_and_more(
                 text=title,
             ),
         )
+    scene = get_scene_dict()
+    scene_camera = get_zup_camera() if nerf_is_z_up else get_yup_camera()
+    fig.update_layout(scene=scene, scene_camera=scene_camera)
 
     return fig
+
+
+def add_transform_plot(
+    fig: go.Figure,
+    X_A_B: np.ndarray,
+    A: str,
+    B: str,
+    length: float = 0.1,
+) -> None:
+    import plotly.graph_objects as go
+
+    assert X_A_B.shape == (4, 4), f"{X_A_B.shape}"
+
+    origin = np.array([0, 0, 0])
+    x_end = np.array([length, 0, 0])
+    y_end = np.array([0, length, 0])
+    z_end = np.array([0, 0, length])
+
+    transformed_origin = transform_point(T=X_A_B, point=origin)
+    transformed_x_end = transform_point(T=X_A_B, point=x_end)
+    transformed_y_end = transform_point(T=X_A_B, point=y_end)
+    transformed_z_end = transform_point(T=X_A_B, point=z_end)
+
+    fig.add_trace(
+        go.Scatter3d(
+            x=[transformed_origin[0], transformed_x_end[0]],
+            y=[transformed_origin[1], transformed_x_end[1]],
+            z=[transformed_origin[2], transformed_x_end[2]],
+            mode="lines",
+            line=dict(color="red"),
+            name=f"X_{A}_{B}_x",
+        )
+    )
+    fig.add_trace(
+        go.Scatter3d(
+            x=[transformed_origin[0], transformed_y_end[0]],
+            y=[transformed_origin[1], transformed_y_end[1]],
+            z=[transformed_origin[2], transformed_y_end[2]],
+            mode="lines",
+            line=dict(color="green"),
+            name=f"X_{A}_{B}_y",
+        )
+    )
+    fig.add_trace(
+        go.Scatter3d(
+            x=[transformed_origin[0], transformed_z_end[0]],
+            y=[transformed_origin[1], transformed_z_end[1]],
+            z=[transformed_origin[2], transformed_z_end[2]],
+            mode="lines",
+            line=dict(color="blue"),
+            name=f"X_{A}_{B}_z",
+        )
+    )
+    return

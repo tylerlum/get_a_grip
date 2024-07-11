@@ -39,7 +39,7 @@ class VisualizeBpsGraspDatasetConfig:
     dataset_path: Path = (
         get_data_folder() / "SMALL_DATASET/bps_grasp_dataset/train_dataset.h5"
     )
-    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    meshdata_root_path: pathlib.Path = get_data_folder() / "meshdata"
     successful_grasps_only: bool = False
     grasp_idx: int = 0
 

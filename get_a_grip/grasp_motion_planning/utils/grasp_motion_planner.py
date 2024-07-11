@@ -7,7 +7,8 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 import transforms3d
-from curobo.geom.types import WorldConfig
+import trimesh
+from curobo.geom.types import Cuboid, WorldConfig
 from curobo.types.robot import RobotConfig
 from curobo.wrap.reacher.ik_solver import IKResult, IKSolver
 from curobo.wrap.reacher.motion_gen import (
@@ -28,7 +29,9 @@ from get_a_grip.grasp_motion_planning.utils.trajopt_batch import (
 from get_a_grip.grasp_motion_planning.utils.world import (
     get_world_cfg,
 )
+from get_a_grip.grasp_planning.utils.allegro_grasp_config import AllegroGraspConfig
 from get_a_grip.grasp_planning.utils.frames import GraspMotionPlanningFrames
+from get_a_grip.grasp_planning.utils.nerf_input import NerfInput
 
 
 @dataclass
@@ -68,10 +71,51 @@ class MotionPlanningComponents:
             motion_gen_config=motion_gen_config,
         )
 
-    def update_world(self, world_cfg: WorldConfig) -> None:
+    def update_world(self, world_cfg: WorldConfig, visualize: bool = False) -> None:
         self.ik_solver.update_world(world_cfg)
         self.ik_solver2.update_world(world_cfg)
         self.motion_gen.update_world(world_cfg)
+
+        if visualize:
+            self.visualize_world()
+
+    def get_world_mesh(
+        self,
+        bounding_box_min: Optional[np.ndarray] = None,
+        bounding_box_max: Optional[np.ndarray] = None,
+    ) -> trimesh.Trimesh:
+        if bounding_box_min is None:
+            bounding_box_min = np.array([-1, -1, -1])
+        if bounding_box_max is None:
+            bounding_box_max = np.array([1, 1, 1])
+        assert (
+            bounding_box_min.shape == (3,) and bounding_box_max.shape == (3,)
+        ), f"Expected shape (3,), got {bounding_box_min.shape} and {bounding_box_max.shape}"
+
+        pos = (bounding_box_min + bounding_box_max) / 2
+        dims = bounding_box_max - bounding_box_min
+
+        mesh = self.motion_gen.world_coll_checker.get_mesh_in_bounding_box(
+            cuboid=Cuboid(
+                name="DEBUG",
+                pose=[*pos, 1, 0, 0, 0],
+                dims=[*dims],
+            )
+        )
+        trimesh_mesh = mesh.get_trimesh_mesh()
+        return trimesh_mesh
+
+    def visualize_world(
+        self,
+        bounding_box_min: Optional[np.ndarray] = None,
+        bounding_box_max: Optional[np.ndarray] = None,
+    ) -> None:
+        # Debugging visualization to make sure world updates are working properly
+        # Since curobo can sometimes silently fail if the world is not updated in the exact way it expects
+        trimesh_mesh = self.get_world_mesh(
+            bounding_box_min=bounding_box_min, bounding_box_max=bounding_box_max
+        )
+        trimesh.Scene([trimesh_mesh]).show()
 
     def plan(
         self,
@@ -635,7 +679,7 @@ class GraspMotionPlanner:
             log_dict,
         )
 
-    def visualize(
+    def visualize_loop(
         self,
         qs: List[np.ndarray],
         T_trajs: List[float],
@@ -643,6 +687,8 @@ class GraspMotionPlanner:
         sorted_losses: np.ndarray,
         DEBUG_TUPLE: tuple,
         object_mesh_N_path: Optional[pathlib.Path] = None,
+        nerf_input: Optional[NerfInput] = None,
+        sorted_grasp_configs: Optional[AllegroGraspConfig] = None,
     ) -> None:
         # Import here to avoid pybullet build time if visualizer isn't used
         from get_a_grip.grasp_motion_planning.utils.visualizer import (
@@ -687,6 +733,11 @@ class GraspMotionPlanner:
         q, dt = qs[TRAJ_IDX], dts[TRAJ_IDX]
         print(f"Visualizing trajectory {TRAJ_IDX}")
         animate_robot(robot=pb_robot, qs=q, dt=dt)
+        if nerf_input is not None and sorted_grasp_configs is not None:
+            nerf_input.plot_all_figs(
+                grasp_config=sorted_grasp_configs,
+                i=TRAJ_IDX,
+            )
 
         while True:
             input_options = "\n".join(
@@ -695,9 +746,11 @@ class GraspMotionPlanner:
                     "OPTIONS",
                     "b for breakpoint",
                     "v to visualize traj",
+                    "f to show figure of grasp and nerf inputs",
                     "i to move hand to exact X_W_H and q_algr_pre IK solution",
                     "n to go to next traj",
                     "p to go to prev traj",
+                    "0 to go to traj idx 0 (or any other int to go to that idx)",
                     "c to draw collision spheres",
                     "r to remove collision spheres",
                     "q to quit",
@@ -714,6 +767,14 @@ class GraspMotionPlanner:
                 q, dt = qs[TRAJ_IDX], dts[TRAJ_IDX]
                 print(f"Visualizing trajectory {TRAJ_IDX}")
                 animate_robot(robot=pb_robot, qs=q, dt=dt)
+            elif x == "f":
+                if nerf_input is not None and sorted_grasp_configs is not None:
+                    nerf_input.plot_all_figs(
+                        grasp_config=sorted_grasp_configs,
+                        i=TRAJ_IDX,
+                    )
+                else:
+                    print("nerf_input and/or grasp_config is None, cannot plot figures")
             elif x == "i":
                 print(
                     f"Moving hand to exact X_W_H and q_algr_pre of trajectory {TRAJ_IDX} with IK collision check"
@@ -742,6 +803,15 @@ class GraspMotionPlanner:
                 if TRAJ_IDX < 0:
                     TRAJ_IDX = len(qs) - 1
                 print(f"Updated to trajectory {TRAJ_IDX}")
+            elif x.isdigit():
+                new_idx = int(x)
+                if new_idx >= len(qs) or new_idx < 0:
+                    print(
+                        f"Invalid index {new_idx}, must be between 0 and {len(qs) - 1} inclusive"
+                    )
+                else:
+                    TRAJ_IDX = new_idx
+                    print(f"Updated to trajectory {TRAJ_IDX}")
             elif x == "c":
                 print("Drawing collision spheres")
                 draw_collision_spheres_default_config(robot=pb_robot)
@@ -753,8 +823,6 @@ class GraspMotionPlanner:
                 break
             else:
                 print(f"Invalid input: {x}")
-
-        breakpoint()
 
     @property
     def obj_xyz(self) -> Tuple[float, float, float]:

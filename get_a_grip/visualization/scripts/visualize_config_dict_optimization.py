@@ -11,10 +11,10 @@ from tqdm import tqdm
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.object_model import ObjectModel
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_np_to_pose
+from get_a_grip.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
-from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_np_to_pose
 from get_a_grip.visualization.utils.visualize_config_dict_helper import (
     create_config_dict_fig,
 )
@@ -39,9 +39,9 @@ class VisualizeConfigDictOptimizationArgs:
     """
 
     input_config_dicts_mid_optimization_path: pathlib.Path = (
-        get_data_folder() / "large/evaled_grasp_config_dicts/mid_optimization"
+        get_data_folder() / "dataset/large/evaled_grasp_config_dicts/mid_optimization"
     )
-    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    meshdata_root_path: pathlib.Path = get_data_folder() / "meshdata"
     object_code_and_scale_str: str = (
         "mujoco-Olive_Kids_Butterfly_Garden_Pencil_Case_0_1000"
     )

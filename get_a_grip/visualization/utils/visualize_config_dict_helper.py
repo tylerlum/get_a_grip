@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import numpy as np
 import plotly.graph_objects as go
@@ -69,7 +69,7 @@ def get_grasp_config_dict_plotly_data_list(
     hand_pose: torch.Tensor,
     config_dict: Dict[str, np.ndarray],
     idx_to_visualize: int,
-    device: str,
+    device: Union[str, torch.device],
 ) -> list:
     if "grasp_orientations" not in config_dict:
         print(
@@ -196,7 +196,6 @@ def create_config_dict_fig(
     skip_visualize_grasp_config_dict: bool,
     title: str,
     idx_to_visualize: int,
-    concise_title: bool = False,
 ) -> go.Figure:
     if object_model is not None:
         object_plotly = object_model.get_plotly_data(
@@ -259,32 +258,17 @@ def create_config_dict_fig(
         )
     )
 
-    # energy
-    if "energy" in config_dict:
-        energy = config_dict["energy"]
-        energy_terms_to_values = {
-            key: round(value[idx_to_visualize], 3)
-            for key, value in config_dict.items()
-            if key.startswith("E_")
-        }
-
-        energy_terms_str = "\n  ".join(
-            [f"{key}: {value}" for key, value in energy_terms_to_values.items()]
-        )
-        energy_str = f"Energy: {energy}\n  {energy_terms_str}"
-        fig.add_annotation(text=energy_str, x=0.5, y=0.1, xref="paper", yref="paper")
-
     # y_PGS
     if "y_PGS" in config_dict:
         y_PGS = config_dict["y_PGS"][idx_to_visualize]
-        y_PGS_str = f"y_PGS: {y_PGS}" if not concise_title else f"E: {y_PGS}"
+        y_PGS_str = f"y_PGS: {y_PGS:.2f}"
         fig.add_annotation(text=y_PGS_str, x=0.5, y=0.05, xref="paper", yref="paper")
         # For some reason, annotations not showing up in the multi fig plot
         title += f" | {y_PGS_str}"
 
     if "y_coll" in config_dict:
         y_coll = config_dict["y_coll"][idx_to_visualize]
-        y_coll_str = f"y_coll: {y_coll}" if not concise_title else f"P: {y_coll}"
+        y_coll_str = f"y_coll: {y_coll:.2f}"
         fig.add_annotation(
             text=y_coll_str,
             x=0.5,
@@ -295,20 +279,9 @@ def create_config_dict_fig(
         # For some reason, annotations not showing up in the multi fig plot
         title += f" | {y_coll_str}"
 
-    if "penetration" in config_dict:
-        penetration = config_dict["penetration"][idx_to_visualize]
-        penetration_str = (
-            f"Penetration: {round(penetration, 5)}" if not concise_title else ""
-        )
-        fig.add_annotation(
-            text=penetration_str, x=0.5, y=0.15, xref="paper", yref="paper"
-        )
-        # For some reason, annotations not showing up in the multi fig plot
-        title += f" | {penetration_str}"
-
     if "y_pick" in config_dict:
         y_pick = config_dict["y_pick"][idx_to_visualize]
-        y_pick_str = f"y_pick: {y_pick}" if not concise_title else f"S: {y_pick}"
+        y_pick_str = f"y_pick: {y_pick:.2f}"
         fig.add_annotation(text=y_pick_str, x=0.5, y=0.2, xref="paper", yref="paper")
         # For some reason, annotations not showing up in the multi fig plot
         title += f" | {y_pick_str}"
@@ -316,8 +289,8 @@ def create_config_dict_fig(
     # loss
     if "loss" in config_dict:
         loss = round(config_dict["loss"][idx_to_visualize], 3)
-        predicted_score = 1 - loss
-        predicted_score_str = f"predicted: {predicted_score}"
+        y_PGS_pred = 1 - loss
+        predicted_score_str = f"y_PGS_pred: {y_PGS_pred:.2f}"
         fig.add_annotation(
             text=predicted_score_str, x=0.5, y=0.25, xref="paper", yref="paper"
         )

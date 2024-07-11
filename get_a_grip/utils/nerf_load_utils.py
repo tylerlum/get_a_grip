@@ -16,7 +16,7 @@ def load_nerf_field(cfg_path: pathlib.Path) -> Field:
 
 
 def load_nerf_pipeline(
-    cfg_path: pathlib.Path, test_mode: Literal["test", "val", "inference"] = "inference"
+    cfg_path: pathlib.Path, test_mode: Literal["test", "val", "inference"] = "test"
 ) -> Pipeline:
     _, pipeline, _, _ = eval_utils.eval_setup(cfg_path, test_mode=test_mode)
     return pipeline

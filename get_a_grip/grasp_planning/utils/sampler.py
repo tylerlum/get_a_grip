@@ -46,7 +46,7 @@ class BpsSampler(Sampler):
         # Load model
         config = DiffusionConfig(
             training=TrainingConfig(
-                log_path=ckpt_path.parent,
+                output_dir=ckpt_path.parent,
             )
         )
         self.model = BpsSamplerModel(
@@ -109,7 +109,7 @@ class NerfSampler(Sampler):
         # Load model
         config = DiffusionConfig(
             training=TrainingConfig(
-                log_path=ckpt_path.parent,
+                output_dir=ckpt_path.parent,
             ),
         )
         self.model = NerfSamplerModel(

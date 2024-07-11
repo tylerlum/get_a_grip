@@ -33,10 +33,10 @@ from get_a_grip.model_training.utils.nerf_grasp_dataset import (
 @dataclass
 class TrainNerfSamplerModelConfig:
     train_dataset_path: pathlib.Path = (
-        get_data_folder() / "large/nerf_grasp_dataset/train_dataset.h5"
+        get_data_folder() / "dataset/NEW/nerf_grasp_dataset/train_dataset.h5"
     )
     val_dataset_path: pathlib.Path = (
-        get_data_folder() / "large/nerf_grasp_dataset/val_dataset.h5"
+        get_data_folder() / "dataset/NEW/nerf_grasp_dataset/val_dataset.h5"
     )
     diffusion: DiffusionConfig = field(default_factory=DiffusionConfig)
 
@@ -52,10 +52,10 @@ def main() -> None:
                 training=TrainingConfig(
                     n_epochs=20000,
                     batch_size=256,
-                    log_path=(
+                    output_dir=(
                         get_data_folder()
                         / (
-                            f"trained_models/nerf_sampler_model/{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+                            f"models/NEW/nerf_sampler_model/{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
                         )
                     ),
                 ),

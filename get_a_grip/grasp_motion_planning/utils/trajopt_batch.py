@@ -92,9 +92,7 @@ def debug_start_state_invalid(
 def prepare_trajopt_batch(
     n_grasps: int,
     collision_check_object: bool = True,
-    obj_filepath: Optional[pathlib.Path] = pathlib.Path(
-        "/juno/u/tylerlum/github_repos/nerf_grasping/experiments/2024-05-02_16-19-22/nerf_to_mesh/mug_330/coacd/decomposed.obj"
-    ),
+    obj_filepath: Optional[pathlib.Path] = None,
     obj_xyz: Tuple[float, float, float] = (0.65, 0.0, 0.0),
     obj_quat_wxyz: Tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0),
     collision_check_table: bool = True,
@@ -161,6 +159,7 @@ def prepare_trajopt_batch(
         tensor_args,
         collision_checker_type=CollisionCheckerType.MESH,
         use_cuda_graph=use_cuda_graph,
+        # collision_cache={"obb": 10, "mesh": 10},  # Possible method to ensure that the cache is large enough so that update_world calls work properly
     )
     motion_gen = MotionGen(motion_gen_config)
 
@@ -342,9 +341,7 @@ def solve_trajopt_batch(
     q_fr3_starts: Optional[np.ndarray] = None,
     q_algr_starts: Optional[np.ndarray] = None,
     collision_check_object: bool = True,
-    obj_filepath: Optional[pathlib.Path] = pathlib.Path(
-        "/juno/u/tylerlum/github_repos/nerf_grasping/experiments/2024-05-02_16-19-22/nerf_to_mesh/mug_330/coacd/decomposed.obj"
-    ),
+    obj_filepath: Optional[pathlib.Path] = None,
     obj_xyz: Tuple[float, float, float] = (0.65, 0.0, 0.0),
     obj_quat_wxyz: Tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0),
     collision_check_table: bool = True,
@@ -583,15 +580,11 @@ def main() -> None:
     X_W_Hs = np.stack([X_W_H_feasible, X_W_H_feasible2], axis=0)
     q_algrs = np.stack([DEFAULT_Q_ALGR, DEFAULT_Q_ALGR], axis=0)
 
-    obj_filepath = pathlib.Path(
-        "/juno/u/tylerlum/github_repos/nerf_grasping/experiments/2024-05-02_16-19-22/nerf_to_mesh/mug_330/coacd/decomposed.obj"
-    )
-
     result, _, _ = solve_trajopt_batch(
         X_W_Hs=X_W_Hs,
         q_algrs=q_algrs,
         collision_check_object=True,
-        obj_filepath=obj_filepath,
+        obj_filepath=None,
         obj_xyz=(0.65, 0.0, 0.0),
         obj_quat_wxyz=(1.0, 0.0, 0.0, 0.0),
         collision_check_table=True,

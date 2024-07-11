@@ -16,7 +16,7 @@ from get_a_grip.grasp_planning.scripts.run_grasp_planning import (
     run_grasp_planning,
 )
 from get_a_grip.grasp_planning.utils.nerf_args import NerfArgs
-from get_a_grip.model_training.utils.nerf_load_utils import (
+from get_a_grip.utils.nerf_load_utils import (
     get_nerf_configs,
 )
 
@@ -26,7 +26,9 @@ class Args:
     bps_sampler_ckpt_path: pathlib.Path
     nerf_evaluator_model_config_path: pathlib.Path
     nerfcheckpoints_path: pathlib.Path
-    output_folder: pathlib.Path = get_data_folder() / "sim_eval_script_outputs"
+    output_folder: pathlib.Path = (
+        get_data_folder() / "sim_eval_script_outputs/bps_sampler_nerf_evaluator"
+    )
 
     def __post_init__(self) -> None:
         assert (

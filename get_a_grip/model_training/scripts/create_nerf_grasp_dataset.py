@@ -21,9 +21,6 @@ from nerfstudio.pipelines.base_pipeline import Pipeline
 from tqdm import tqdm as std_tqdm
 
 from get_a_grip import get_data_folder
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
-    parse_object_code_and_scale,
-)
 from get_a_grip.grasp_planning.utils.allegro_grasp_config import AllegroGraspConfig
 from get_a_grip.model_training.config.datetime_str import get_datetime_str
 from get_a_grip.model_training.config.fingertip_config import (
@@ -39,10 +36,6 @@ from get_a_grip.model_training.config.nerf_densities_global_config import (
 from get_a_grip.model_training.config.nerf_grasp_dataset_config import (
     NerfGraspDatasetConfig,
 )
-from get_a_grip.model_training.utils.nerf_load_utils import (
-    get_nerf_configs,
-    load_nerf_pipeline,
-)
 from get_a_grip.model_training.utils.nerf_ray_utils import (
     get_ray_origins_finger_frame,
     get_ray_samples,
@@ -50,7 +43,14 @@ from get_a_grip.model_training.utils.nerf_ray_utils import (
 from get_a_grip.model_training.utils.nerf_utils import (
     get_density,
 )
-from get_a_grip.model_training.utils.point_utils import (
+from get_a_grip.utils.nerf_load_utils import (
+    get_nerf_configs,
+    load_nerf_pipeline,
+)
+from get_a_grip.utils.parse_object_code_and_scale import (
+    parse_object_code_and_scale,
+)
+from get_a_grip.utils.point_utils import (
     get_points_in_grid,
     transform_points,
 )
@@ -134,7 +134,7 @@ def count_total_num_grasps(
 
 
 def create_mesh(object_code: str, object_scale: float) -> trimesh.Trimesh:
-    MESHDATA_ROOT = get_data_folder() / "large/meshes"
+    MESHDATA_ROOT = get_data_folder() / "meshdata"
     mesh_path = MESHDATA_ROOT / object_code / "coacd" / "decomposed.obj"
     assert mesh_path.exists(), f"mesh_path {mesh_path} does not exist"
     mesh_Oy = trimesh.load(mesh_path, force="mesh")

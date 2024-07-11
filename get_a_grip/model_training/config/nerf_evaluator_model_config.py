@@ -155,28 +155,13 @@ class TrainingConfig:
 class CheckpointWorkspaceConfig:
     """Parameters for paths to checkpoints."""
 
-    root_dir: pathlib.Path = get_data_folder() / "trained_models/nerf_evaluator_model"
-    """Root directory for checkpoints."""
+    input_dir: Optional[pathlib.Path] = None
+    """Input directory to LOAD a checkpoint and potentially resume a run."""
 
-    input_leaf_dir_name: Optional[str] = None
-    """Leaf directory name to LOAD a checkpoint and potentially resume a run."""
-
-    output_leaf_dir_name: str = get_datetime_str()
-    """Leaf directory name to SAVE checkpoints and run information."""
-
-    @property
-    def input_dir(self) -> Optional[pathlib.Path]:
-        """Input directory for checkpoints."""
-        return (
-            self.root_dir / self.input_leaf_dir_name
-            if self.input_leaf_dir_name is not None
-            else None
-        )
-
-    @property
-    def output_dir(self) -> pathlib.Path:
-        """Output directory for checkpoints."""
-        return self.root_dir / self.output_leaf_dir_name
+    output_dir: pathlib.Path = (
+        get_data_folder() / "models/NEW/nerf_evaluator_model" / get_datetime_str()
+    )
+    """Output directory to SAVE checkpoints and run information."""
 
     @property
     def input_checkpoint_paths(self) -> List[pathlib.Path]:
@@ -383,7 +368,6 @@ class NerfEvaluatorModelConfig:
     wandb: WandbConfig = field(
         default_factory=lambda: WandbConfig(project=DEFAULT_WANDB_PROJECT)
     )
-    name: Optional[str] = None
     plot: PlotConfig = field(default_factory=PlotConfig)
 
     random_seed: int = 42
@@ -406,16 +390,6 @@ class NerfEvaluatorModelConfig:
                 self.val_dataset_path is not None and self.test_dataset_path is not None
             )
         ), f"Must specify both val and test dataset paths, or neither. Got val: {self.val_dataset_path}, test: {self.test_dataset_path}"
-
-        # Set the name of the run if given, which updates both checkpoint_workspace and wandb
-        # HACK: don't want to overwrite these if we're loading this config from a file
-        #       can tell if loading by file if self.checkpoint_workspace.output_dir exists
-        if self.name is not None and not self.checkpoint_workspace.output_dir.exists():
-            name_with_date = f"{self.name}_{get_datetime_str()}"
-            self.checkpoint_workspace = CheckpointWorkspaceConfig(
-                output_leaf_dir_name=name_with_date
-            )
-            self.wandb = WandbConfig(project=DEFAULT_WANDB_PROJECT, name=name_with_date)
 
     @property
     def actual_train_dataset_path(self) -> pathlib.Path:

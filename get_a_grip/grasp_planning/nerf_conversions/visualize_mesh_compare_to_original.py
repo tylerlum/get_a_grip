@@ -14,7 +14,7 @@ from get_a_grip import get_data_folder
 class VisualizeMeshCompareToOriginalArgs:
     obj_filepath: pathlib.Path
     opacity: float = 1.0
-    original_meshdata_dir_path: pathlib.Path = get_data_folder() / "large/meshes"
+    original_meshdata_dir_path: pathlib.Path = get_data_folder() / "meshdata"
 
 
 def create_mesh_3d(

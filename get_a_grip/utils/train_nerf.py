@@ -3,6 +3,7 @@ import pathlib
 import subprocess
 from dataclasses import dataclass
 
+import tyro
 from nerfstudio.data.datamanagers.parallel_datamanager import ParallelDataManagerConfig
 from nerfstudio.data.dataparsers.nerfstudio_dataparser import NerfstudioDataParserConfig
 from nerfstudio.engine.trainer import Trainer, TrainerConfig
@@ -115,14 +116,7 @@ def train_nerf(
 
 
 def main() -> None:
-    args = TrainNerfArgs(
-        nerfdata_folder=pathlib.Path(
-            "experiments/2024-04-15_DEBUG/nerfdata/sem-Vase-3a275e00d69810c62600e861c93ad9cc_0_0846"
-        ),
-        nerfcheckpoints_folder=pathlib.Path(
-            "experiments/2024-04-15_DEBUG/nerfcheckpoints/"
-        ),
-    )
+    args = tyro.cli(tyro.conf.FlagConversionOff[TrainNerfArgs])
     train_nerf_return_trainer(args)
 
 

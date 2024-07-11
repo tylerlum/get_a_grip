@@ -26,15 +26,15 @@ from get_a_grip.dataset_generation.utils.hand_model import HandModel
 from get_a_grip.dataset_generation.utils.initializations import initialize_convex_hull
 from get_a_grip.dataset_generation.utils.object_model import ObjectModel
 from get_a_grip.dataset_generation.utils.optimizer import Annealing
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
-    object_code_and_scale_to_str,
-    parse_object_code_and_scale,
-)
 from get_a_grip.dataset_generation.utils.pose_conversion import pose_to_hand_config
 from get_a_grip.dataset_generation.utils.process_utils import (
     get_object_codes_and_scales_to_process,
 )
-from get_a_grip.dataset_generation.utils.seed import set_seed
+from get_a_grip.utils.parse_object_code_and_scale import (
+    object_code_and_scale_to_str,
+    parse_object_code_and_scale,
+)
+from get_a_grip.utils.seed import set_seed
 
 try:
     set_start_method("spawn")
@@ -49,12 +49,12 @@ np.seterr(all="raise")
 @dataclass
 class GenerateHandConfigDictsArgs:
     # experiment settings
-    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    meshdata_root_path: pathlib.Path = get_data_folder() / "meshdata"
     input_object_code_and_scales_txt_path: pathlib.Path = (
-        get_data_folder() / "NEW_DATASET/nerfdata_settled_successes.txt"
+        get_data_folder() / "dataset/NEW/nerfdata_settled_successes.txt"
     )
     output_hand_config_dicts_path: pathlib.Path = (
-        get_data_folder() / "NEW_DATASET/hand_config_dicts"
+        get_data_folder() / "dataset/NEW/hand_config_dicts"
     )
     seed: Optional[int] = None
     batch_size_each_object: int = 250

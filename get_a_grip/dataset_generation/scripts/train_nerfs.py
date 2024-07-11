@@ -6,10 +6,10 @@ import tyro
 from tqdm import tqdm
 
 from get_a_grip import get_data_folder
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+from get_a_grip.utils.parse_object_code_and_scale import (
     is_object_code_and_scale_str,
 )
-from get_a_grip.grasp_planning.utils.train_nerf import (
+from get_a_grip.utils.train_nerf import (
     TrainNerfArgs,
     train_nerf,
     train_nerf_return_trainer,
@@ -18,9 +18,9 @@ from get_a_grip.grasp_planning.utils.train_nerf import (
 
 @dataclass
 class TrainNerfsArgs:
-    input_nerfdata_path: pathlib.Path = get_data_folder() / "NEW_DATASET/nerfdata"
+    input_nerfdata_path: pathlib.Path = get_data_folder() / "dataset/NEW/nerfdata"
     output_nerfcheckpoints_path: pathlib.Path = (
-        get_data_folder() / "NEW_DATASET/nerfcheckpoints"
+        get_data_folder() / "dataset/NEW/nerfcheckpoints"
     )
     max_num_iterations: int = 400
     randomize_order_seed: Optional[int] = None

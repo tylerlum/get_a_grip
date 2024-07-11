@@ -89,6 +89,10 @@ class BpsRandomSamplingOptimizer(Optimizer):
         grasp_config = AllegroGraspConfig.from_grasp(
             grasp=g_O,
         )
+
+        assert (
+            len(grasp_config) == self.n_optimized_grasps
+        ), f"{len(grasp_config)} != {self.n_optimized_grasps}"
         return grasp_config, losses
 
     @torch.no_grad()
@@ -245,6 +249,11 @@ class NerfRandomSamplingOptimizer(Optimizer):
     def optimize(
         self, grasp_config: AllegroGraspConfig
     ) -> Tuple[AllegroGraspConfig, torch.Tensor]:
+        assert (
+            len(grasp_config) >= self.n_optimized_grasps
+        ), f"{len(grasp_config)} < {self.n_optimized_grasps}"
+        grasp_config = grasp_config[: self.n_optimized_grasps]
+
         self.joint_lower_limits, self.joint_upper_limits = get_joint_limits(
             device=grasp_config.device
         )
@@ -260,6 +269,10 @@ class NerfRandomSamplingOptimizer(Optimizer):
                 )
 
             grasp_config, losses = self._step(grasp_config)
+
+        assert (
+            len(grasp_config) == self.n_optimized_grasps
+        ), f"{len(grasp_config)} != {self.n_optimized_grasps}"
         return grasp_config, losses
 
     @torch.no_grad()
@@ -383,6 +396,11 @@ class NerfGradientOptimizer(nn.Module, Optimizer):
     def optimize(
         self, grasp_config: AllegroGraspConfig
     ) -> Tuple[AllegroGraspConfig, torch.Tensor]:
+        assert (
+            len(grasp_config) >= self.n_optimized_grasps
+        ), f"{len(grasp_config)} < {self.n_optimized_grasps}"
+        grasp_config = grasp_config[: self.n_optimized_grasps]
+
         self.grasp_config = grasp_config
 
         if self.opt_fingers:
@@ -452,6 +470,9 @@ class NerfGradientOptimizer(nn.Module, Optimizer):
                 )
 
             losses = self._step()
+        assert (
+            len(self.grasp_config) == self.n_optimized_grasps
+        ), f"{len(self.grasp_config)} != {self.n_optimized_grasps}"
         return self.grasp_config, losses
 
     def _step(self) -> torch.Tensor:

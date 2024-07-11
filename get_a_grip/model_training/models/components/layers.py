@@ -209,7 +209,7 @@ def main() -> None:
 if __name__ == "__main__":
     from ipdb import launch_ipdb_on_exception
 
-    from get_a_grip.dataset_generation.utils.seed import set_seed
+    from get_a_grip.utils.seed import set_seed
 
     set_seed(43)
 

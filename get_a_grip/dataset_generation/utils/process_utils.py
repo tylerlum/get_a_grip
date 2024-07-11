@@ -1,7 +1,7 @@
 import pathlib
 from typing import List
 
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+from get_a_grip.utils.parse_object_code_and_scale import (
     is_object_code_and_scale_str,
     parse_object_code_and_scale,
 )

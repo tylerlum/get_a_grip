@@ -9,7 +9,7 @@ from get_a_grip.grasp_planning.nerf_conversions.nerf_to_urdf import (
     NerfToUrdfArgs,
     nerf_to_urdf,
 )
-from get_a_grip.model_training.utils.nerf_load_utils import get_latest_nerf_config
+from get_a_grip.utils.nerf_load_utils import get_latest_nerf_config
 
 
 @dataclass

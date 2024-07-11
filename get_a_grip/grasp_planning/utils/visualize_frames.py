@@ -10,7 +10,7 @@ from get_a_grip.grasp_planning.utils.frames import (
     GraspMotionPlanningFrames,
     GraspPlanningFrames,
 )
-from get_a_grip.model_training.utils.point_utils import transform_point
+from get_a_grip.model_training.utils.plot_utils import add_transform_plot
 
 
 @dataclass
@@ -22,60 +22,6 @@ class VisualizeFramesArgs:
     nerf_frame_offset_W_x: Optional[float] = None
     nerf_frame_offset_W_y: Optional[float] = None
     nerf_frame_offset_W_z: Optional[float] = None
-
-
-def add_transform_plot(
-    fig: go.Figure,
-    X_A_B: np.ndarray,
-    A: str,
-    B: str,
-    length: float = 0.1,
-) -> None:
-    import plotly.graph_objects as go
-
-    assert X_A_B.shape == (4, 4), f"{X_A_B.shape}"
-
-    origin = np.array([0, 0, 0])
-    x_end = np.array([length, 0, 0])
-    y_end = np.array([0, length, 0])
-    z_end = np.array([0, 0, length])
-
-    transformed_origin = transform_point(T=X_A_B, point=origin)
-    transformed_x_end = transform_point(T=X_A_B, point=x_end)
-    transformed_y_end = transform_point(T=X_A_B, point=y_end)
-    transformed_z_end = transform_point(T=X_A_B, point=z_end)
-
-    fig.add_trace(
-        go.Scatter3d(
-            x=[transformed_origin[0], transformed_x_end[0]],
-            y=[transformed_origin[1], transformed_x_end[1]],
-            z=[transformed_origin[2], transformed_x_end[2]],
-            mode="lines",
-            line=dict(color="red"),
-            name=f"X_{A}_{B}_x",
-        )
-    )
-    fig.add_trace(
-        go.Scatter3d(
-            x=[transformed_origin[0], transformed_y_end[0]],
-            y=[transformed_origin[1], transformed_y_end[1]],
-            z=[transformed_origin[2], transformed_y_end[2]],
-            mode="lines",
-            line=dict(color="green"),
-            name=f"X_{A}_{B}_y",
-        )
-    )
-    fig.add_trace(
-        go.Scatter3d(
-            x=[transformed_origin[0], transformed_z_end[0]],
-            y=[transformed_origin[1], transformed_z_end[1]],
-            z=[transformed_origin[2], transformed_z_end[2]],
-            mode="lines",
-            line=dict(color="blue"),
-            name=f"X_{A}_{B}_z",
-        )
-    )
-    return
 
 
 def get_table_mesh(is_z_up: bool, W: float = 0.4, H: float = 0.4) -> trimesh.Trimesh:

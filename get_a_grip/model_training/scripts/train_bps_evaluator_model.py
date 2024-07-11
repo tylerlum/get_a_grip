@@ -24,10 +24,10 @@ from wandb.util import generate_id
 class TrainBpsEvaluatorModelConfig:
     # dataset paths
     train_dataset_path: Path = (
-        get_data_folder() / "large/bps_grasp_dataset/train_dataset.h5"
+        get_data_folder() / "dataset/NEW/bps_grasp_dataset/train_dataset.h5"
     )
     val_dataset_path: Path = (
-        get_data_folder() / "large/bps_grasp_dataset/val_dataset.h5"
+        get_data_folder() / "dataset/NEW/bps_grasp_dataset/val_dataset.h5"
     )
 
     # training parameters
@@ -39,9 +39,9 @@ class TrainBpsEvaluatorModelConfig:
 
     # validation, printing, and saving
     snapshot_freq: int = 5
-    log_path: Path = (
+    output_dir: Path = (
         get_data_folder()
-        / f"trained_models/bps_evaluator_model/{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+        / f"models/NEW/bps_evaluator_model/{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     )
 
     # wandb
@@ -160,7 +160,7 @@ def train(cfg: TrainBpsEvaluatorModelConfig, rank: int = 0) -> None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # make log path
-    cfg.log_path.mkdir(parents=True, exist_ok=True)
+    cfg.output_dir.mkdir(parents=True, exist_ok=True)
 
     # update tqdm bar with train and val loss
     val_loss = 0.0
@@ -238,16 +238,16 @@ def train(cfg: TrainBpsEvaluatorModelConfig, rank: int = 0) -> None:
                 print(f"Saving model at epoch {epoch}!")
                 torch.save(
                     getattr(model, "module", model).state_dict(),
-                    cfg.log_path / f"ckpt-{wandb_id}-step-{epoch}.pth",
+                    cfg.output_dir / f"ckpt-{wandb_id}-step-{epoch}.pth",
                 )
 
                 if epoch == cfg.num_epochs - 1:
                     print(
-                        f"Saving final model at path {cfg.log_path / f'ckpt-{wandb_id}-step-final.pth'}!"
+                        f"Saving final model at path {cfg.output_dir / f'ckpt-{wandb_id}-step-final.pth'}!"
                     )
                     torch.save(
                         getattr(model, "module", model).state_dict(),
-                        cfg.log_path / f"ckpt-{wandb_id}-step-final.pth",
+                        cfg.output_dir / f"ckpt-{wandb_id}-step-final.pth",
                     )
 
     if cfg.multigpu:

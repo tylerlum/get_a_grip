@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from get_a_grip.model_training.utils.point_utils import (
+from get_a_grip.utils.point_utils import (
     get_points_in_grid,
 )
 

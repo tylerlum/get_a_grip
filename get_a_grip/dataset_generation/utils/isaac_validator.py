@@ -1649,7 +1649,7 @@ class IsaacValidator:
         camera_props.height = CAMERA_IMG_HEIGHT
 
         # Sample num_cameras points on sphere with points away from table surface using phi_degrees
-        # May 2024: Radius is approximately 0.45, phi_degrees is 45 in real world
+        # Real-world trajectory: radius is approx 0.45, phi_degrees is approx 45
         xyz_vals = sample_points_on_sphere(N=num_cameras, radius=0.45, phi_degrees=45)
         x_vals, y_vals, z_vals = xyz_vals[:, 0], xyz_vals[:, 1], xyz_vals[:, 2]
 

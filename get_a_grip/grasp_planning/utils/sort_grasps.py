@@ -16,8 +16,9 @@ def get_sorted_grasps_from_file(
     dist_move_finger_backward: Optional[float] = None,
     error_if_no_loss: bool = True,
     check: bool = True,
-    print_best: bool = True,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[
+    np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, AllegroGraspConfig
+]:
     """
     This function processes optimized grasping configurations in preparation for hardware tests.
 
@@ -29,24 +30,25 @@ def get_sorted_grasps_from_file(
     dist_move_finger_backward (Optional[float]): The distance to move fingers backwards for pre joint angles. Defaults to None, which means default distance.
     error_if_no_loss (bool): Whether to raise an error if the loss is not found in the grasp config dict. Defaults to True.
     check (bool): Whether to check the validity of the grasp configurations (sometimes sensitive or off manifold from optimization?). Defaults to True.
-    print_best (bool): Whether to print the best grasp configurations. Defaults to True.
 
     Returns:
-    Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, AllegroGraspConfig]:
     - A batch of wrist transformations of object yup frame wrt nerf frame in a numpy array of shape (B, 4, 4), representing pose in nerf frame (avoid quat to be less ambiguous about order)
     - A batch of joint angles in a numpy array of shape (B, 16)
     - A batch of target joint angles in a numpy array of shape (B, 16)
     - A batch of pre joint angles in a numpy array of shape (B, 16)
     - A batch of sorted losses in a numpy array of shape (B,)
+    - A batch of grasp configs of batch size B
 
     Example:
-    >>> X_Oy_H_array, joint_angles_array, target_joint_angles_array, pre_joint_angles_array, sorted_losses = get_sorted_grasps_from_file(pathlib.Path("path/to/optimized_grasp_config.npy"))
+    >>> X_Oy_H_array, joint_angles_array, target_joint_angles_array, pre_joint_angles_array, sorted_losses, sorted_grasp_configs = get_sorted_grasps_from_file(pathlib.Path("path/to/optimized_grasp_config.npy"))
     >>> B = X_Oy_H_array.shape[0]
     >>> assert X_Oy_H_array.shape == (B, 4, 4)
     >>> assert joint_angles_array.shape == (B, 16)
     >>> assert target_joint_angles_array.shape == (B, 16)
     >>> assert pre_joint_angles_array.shape == (B, 16)
     >>> assert sorted_losses.shape == (B,)
+    >>> assert len(sorted_grasp_configs) == B
     """
     # Read in
     grasp_config_dict = np.load(
@@ -58,7 +60,6 @@ def get_sorted_grasps_from_file(
         dist_move_finger_backward=dist_move_finger_backward,
         error_if_no_loss=error_if_no_loss,
         check=check,
-        print_best=print_best,
     )
 
 
@@ -68,8 +69,9 @@ def get_sorted_grasps_from_dict(
     dist_move_finger_backward: Optional[float] = None,
     error_if_no_loss: bool = True,
     check: bool = True,
-    print_best: bool = True,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[
+    np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, AllegroGraspConfig
+]:
     grasp_configs = AllegroGraspConfig.from_grasp_config_dict(
         optimized_grasp_config_dict, check=check
     )
@@ -106,11 +108,6 @@ def get_sorted_grasps_from_dict(
     sorted_idxs = np.argsort(losses)
     sorted_losses = losses[sorted_idxs]
     sorted_grasp_configs = grasp_configs[sorted_idxs]
-
-    if print_best:
-        BEST_K = 2
-        print(f"Best grasp configs: {sorted_grasp_configs[:BEST_K]}")
-        print(f"Best grasp losses: {sorted_losses[:BEST_K]}")
 
     wrist_trans_array = (
         sorted_grasp_configs.wrist_pose.translation().detach().cpu().numpy()
@@ -153,4 +150,5 @@ def get_sorted_grasps_from_dict(
         target_joint_angles_array,
         pre_joint_angles_array,
         sorted_losses,
+        sorted_grasp_configs,
     )

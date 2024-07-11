@@ -57,7 +57,7 @@ class VisualizeBpsModelsConfig:
     dataset_path: Path = (
         get_data_folder() / "SMALL_DATASET/bps_grasp_dataset/train_dataset.h5"
     )
-    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    meshdata_root_path: pathlib.Path = get_data_folder() / "meshdata"
     grasp_idx: int = 0
 
 
@@ -108,7 +108,7 @@ print("=" * 80 + "\n")
 # loading bps sampler
 diffusion_cfg = DiffusionConfig(
     training=TrainingConfig(
-        log_path=cfg.sampler_ckpt_path.parent,
+        output_dir=cfg.sampler_ckpt_path.parent,
     )
 )
 model = BpsSamplerModel(

@@ -14,7 +14,7 @@ from nerfstudio.data.scene_box import SceneBox
 from nerfstudio.field_components.activations import trunc_exp
 from nerfstudio.fields.base_field import Field
 
-from get_a_grip.model_training.utils.point_utils import get_points_in_grid
+from get_a_grip.utils.point_utils import get_points_in_grid
 
 
 def get_densities_in_grid(

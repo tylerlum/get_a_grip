@@ -62,8 +62,7 @@ class NerfEvaluator(nn.Module, Evaluator):
 
     def forward(self, grasp_config: AllegroGraspConfig) -> torch.Tensor:
         batch_data_input = self.nerf_input.compute_batch_data_input(
-            grasp_frame_transforms=grasp_config.grasp_frame_transforms,
-            grasp_config_tensor=grasp_config.as_tensor(),
+            grasp_config=grasp_config,
             fingertip_config=self.fingertip_config,
         )
 

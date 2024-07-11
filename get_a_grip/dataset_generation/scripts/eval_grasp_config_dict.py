@@ -24,24 +24,24 @@ from get_a_grip.dataset_generation.utils.joint_angle_targets import (
     compute_init_joint_angles_given_grasp_orientations,
     compute_optimized_joint_angle_targets_given_grasp_orientations,
 )
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
-    parse_object_code_and_scale,
-)
 from get_a_grip.dataset_generation.utils.pose_conversion import (
     hand_config_np_to_pose,
 )
-from get_a_grip.dataset_generation.utils.seed import set_seed
 from get_a_grip.dataset_generation.utils.torch_quat_utils import matrix_to_quat_wxyz
+from get_a_grip.utils.parse_object_code_and_scale import (
+    parse_object_code_and_scale,
+)
+from get_a_grip.utils.seed import set_seed
 
 
 @dataclass
 class EvalGraspConfigDictArgs:
-    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    meshdata_root_path: pathlib.Path = get_data_folder() / "meshdata"
     input_grasp_config_dicts_path: pathlib.Path = (
-        get_data_folder() / "NEW_DATASET/grasp_config_dicts"
+        get_data_folder() / "dataset/NEW/grasp_config_dicts"
     )
     output_evaled_grasp_config_dicts_path: Optional[pathlib.Path] = (
-        get_data_folder() / "NEW_DATASET/evaled_grasp_config_dicts"
+        get_data_folder() / "dataset/NEW/evaled_grasp_config_dicts"
     )
     object_code_and_scale_str: str = (
         "core-bottle-2722bec1947151b86e22e2d2f64c8cef_0_1000"

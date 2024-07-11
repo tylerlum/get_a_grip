@@ -29,7 +29,7 @@ from get_a_grip.dataset_generation.utils.allegro_hand_info import (
 from get_a_grip.dataset_generation.utils.rot6d import (
     robust_compute_rotation_matrix_from_ortho6d,
 )
-from get_a_grip.model_training.utils.point_utils import transform_points
+from get_a_grip.utils.point_utils import transform_points
 
 
 class HandModel:

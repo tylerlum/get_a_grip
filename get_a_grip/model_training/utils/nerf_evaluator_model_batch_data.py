@@ -24,7 +24,7 @@ from get_a_grip.model_training.utils.nerf_ray_utils import (
     get_ray_origins_finger_frame,
     get_ray_samples,
 )
-from get_a_grip.model_training.utils.point_utils import (
+from get_a_grip.utils.point_utils import (
     get_points_in_grid,
 )
 

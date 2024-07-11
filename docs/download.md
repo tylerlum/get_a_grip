@@ -1,56 +1,88 @@
-# Dataset
+# Download
 
-The full dataset is quite large, so offer a small version and large version. We recommend using the small version for initial testing and visualization, and we recommend using the large version for model training.
+## Overview
 
-Each component of the dataset is contained in a zip file that can be accessed through a link.
+Fill out this [form](https://forms.gle/qERExXPn5wKrGr1G8) to download the Get a Grip dataset and pretrained models. After filling out this form, you will receive a URL <download_url>, which will be used next.
 
-To get the download url, please fill out this form (TODO: <download_url>: https://download.cs.stanford.edu/juno/get_a_grip).
+Next, we will download the small version of the dataset and the pretrained models. Change `<download_url>` to the URL you received, then run:
 
-Small:
+```
+python download.py \
+--download_url <download_url> \
+--include_meshdata True \
+--dataset_size small \
+--include_final_evaled_grasp_config_dicts True \
+--include_nerfdata True \
+--include_point_clouds True \
+--include_nerfcheckpoints True \
+--include_pretrained_models True \
+--include_fixed_sampler_grasp_config_dicts True \
+--include_real_world_nerfdata True \
+--include_real_world_nerfcheckpoints True
+```
 
-- <download_url>/small/grasps.zip
-
-- <download_url>/small/meshes.zip
-
-- <download_url>/small/nerfdata.zip
-
-- <download_url>/small/nerfcheckpoints.zip
-
-- <download_url>/small/point_clouds.zip
-
-Large:
-
-- <download_url>/large/grasps.zip
-
-- <download_url>/large/meshes.zip
-
-- <download_url>/large/nerfdata.zip
-
-- <download_url>/large/nerfcheckpoints.zip
-
-- <download_url>/large/point_clouds.zip
-
-Create a directories `data/small` and `data/large`, then unzip into these folder to get the following directory structure:
+The resulting directory structure should look like this:
 
 ```
 data
-├── small
-│   ├── final_evaled_grasp_config_dicts
-│   ├── meshes
-│   ├── nerfdata
-│   ├── nerfcheckpoints
-│   └── point_clouds
-└── large
-    ├── final_evaled_grasp_config_dicts
-    ├── meshes
-    ├── nerfdata
-    ├── nerfcheckpoints
-    └── point_clouds
+├── dataset
+│   └── small
+│       ├── final_evaled_grasp_config_dicts
+│       ├── nerfdata
+│       ├── nerfcheckpoints
+│       └── point_clouds
+├── fixed_sampler_grasp_config_dicts
+│   └── given
+│       ├── all_good_grasps.py
+│       └── one_good_grasp_per_object.py
+├── meshdata
+│   ├── <object_code>
+│   ├── ...
+│   └── <object_code>
+└── models
+    └── pretrained
+        ├── bps_evaluator_model
+        ├── bps_sampler_model
+        ├── nerf_evaluator_model
+        └── nerf_sampler_model
 ```
+
+You can change `small` to `large` for the large version, which is >1 TB (only recommended for model training).
+
+Additional details:
+
+- We recommend using the small version for testing and visualization, and we recommend using the large version for model training.
+
+- For dataset generation, you only need the `meshdata`.
+
+```
+python download.py \
+--download_url <download_url> \
+--include_meshdata True
+```
+
+- For model training, you only need the `meshdata`, `final_evaled_grasp_config_dicts`, `nerfdata`, `nerfcheckpoints`, and `point_clouds`.
+
+```
+python download.py \
+--download_url <download_url> \
+--include_meshdata True \
+--dataset_size large \
+--include_final_evaled_grasp_config_dicts True \
+--include_nerfdata True \
+--include_point_clouds True \
+--include_nerfcheckpoints True
+```
+
+- The largest part of the dataset is the nerfcheckpoints. This part contains trained NeRF model weights for each object at multiple scales. You can set `--include_nerfcheckpoints False` to exclude this part of the dataset, and then regenerate this yourself.
+
+- The second largest part of the dataset is the nerfdata. This part contains 100 posed RGB images of each object at multiple scales. You can set `--include_nerfdata False` to exclude this part of the dataset, and then regenerate this yourself.
+
+- Under the hood, each component of the dataset is contained in a zip file that can be accessed through a link. The download script will download these zip files and unzip them into the correct directory.
 
 ## Dataset Details
 
-### grasps
+### final_evaled_grasp_config_dicts
 
 Directory structure:
 
@@ -134,10 +166,10 @@ optimized_grasp_config_dict['loss'].shape == (batch_size,)
 
 Where loss refer to predicted failure probabilities (1 is bad, 0 is good)
 
-
 #### Grasps in Neural Networks
 
-When grasps are used as input to or output from neural networks, we need a good way to represent them. We choose to represent the grasps as a compact vector of (xyz, rot6d, theta, d_i, ..., d_n_f). This is 37D (3 + 6 + 16 + 4*3) for the Allegro hand.
+When grasps are used as input to or output from neural networks, we need a good way to represent them. We choose to represent the grasps as a compact vector of (xyz, rot6d, theta, d_i, ..., d_n_f). This is 37D (3 + 6 + 16 + 4\*3) for the Allegro hand.
+
 - xyz: The wrist position in Oy frame.
 - rot6d: The wrist rotation in Oy frame, represented as a 6D vector (first two columns of the rotation matrix)
 - theta: The pre-grasp joint configuration
@@ -145,12 +177,12 @@ When grasps are used as input to or output from neural networks, we need a good 
 
 We try to use the word "grasp config" or "grasp config dict" when referring to the information in the dicts described above, and "grasp" when referring to the compact vector representation.
 
-### meshes
+### meshdata
 
 Directory structure:
 
 ```
-meshes
+meshdata
 ├── <object_code>
 │   └── coacd
 │       ├── coacd_convex_piece_0.obj
@@ -238,7 +270,7 @@ nerfcheckpoints
 
 `step-000000399.ckpt` contains the NeRF model weights and `config.yml` contains the NeRF data and model configuration information.
 
-Note: (TODO) the `config.yml` files store absolute paths used during training. These may need to be updated to be used properly.
+Note: The `config.yml` files may store absolute paths depending on the exact parameters used for training. When used on a different machine with different paths, these absolute paths may need to be updated to relative paths to be used properly.
 
 View a NeRF with:
 
@@ -262,3 +294,49 @@ point_clouds
 ```
 
 `point_cloud.ply` can be read using Open3D (https://www.open3d.org/). It is generated using nerfstudio with a request of 5000 points. However, the number of points is not exactly 5000 due to nerfstudio's sampling method, so this can be handled downstream.
+
+## Model Details
+
+### bps_evaluator_model
+
+```
+bps_evaluator_model
+└── <datetime>
+    └── <filename>.pth
+```
+
+### bps_sampler_model
+
+```
+bps_sampler_model
+└── <datetime>
+    └── <filename>.pth
+```
+
+### nerf_evaluator_model
+
+```
+nerf_evaluator_model
+└── <datetime>
+    └── <filename>.pth
+    └── config.yaml
+```
+
+### nerf_sampler_model
+
+```
+nerf_sampler_model
+└── <datetime>
+    └── <filename>.pth
+```
+
+## Fixed Sampler Grasp Config Dicts
+
+Our fixed sampler requires a set of good grasps to sample from. We provide two types of fixed sampler grasp config dicts:
+
+```
+fixed_sampler_grasp_config_dicts
+└── given
+    ├── all_good_grasps.py
+    └── one_good_grasp_per_object.py
+```

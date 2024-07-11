@@ -28,10 +28,10 @@ from get_a_grip.model_training.utils.diffusion import (
 @dataclass
 class TrainBpsSamplerModelConfig:
     train_dataset_path: pathlib.Path = (
-        get_data_folder() / "large/bps_grasp_dataset/train_dataset.h5"
+        get_data_folder() / "dataset/NEW/bps_grasp_dataset/train_dataset.h5"
     )
     val_dataset_path: pathlib.Path = (
-        get_data_folder() / "large/bps_grasp_dataset/val_dataset.h5"
+        get_data_folder() / "dataset/NEW/bps_grasp_dataset/val_dataset.h5"
     )
     diffusion: DiffusionConfig = field(default_factory=DiffusionConfig)
 
@@ -47,10 +47,10 @@ def main() -> None:
                 training=TrainingConfig(
                     n_epochs=20000,
                     batch_size=16384,
-                    log_path=(
+                    output_dir=(
                         get_data_folder()
                         / (
-                            f"trained_models/bps_sampler_model/{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+                            f"models/NEW/bps_sampler_model/{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
                         )
                     ),
                 ),

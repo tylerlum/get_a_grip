@@ -14,7 +14,7 @@ from get_a_grip import get_data_folder
 
 @dataclass
 class VisualizeObjsPltArgs:
-    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    meshdata_root_path: pathlib.Path = get_data_folder() / "meshdata"
     max_num_objects_to_visualize: int = 10
 
 
