@@ -1,8 +1,7 @@
-import os
 import pathlib
 import random
-from dataclasses import dataclass, field
-from typing import Dict, List
+from dataclasses import dataclass
+from typing import Dict
 
 import numpy as np
 import torch
@@ -22,6 +21,9 @@ from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
 from get_a_grip.dataset_generation.utils.pose_conversion import (
     hand_config_np_to_pose,
 )
+from get_a_grip.dataset_generation.utils.process_utils import (
+    get_object_codes_and_scales_to_process,
+)
 from get_a_grip.dataset_generation.utils.seed import set_seed
 
 
@@ -35,9 +37,9 @@ class GenerateGraspConfigDictsArgs:
         get_data_folder() / "NEW_DATASET/grasp_config_dicts"
     )
     gpu: int = 0
-    mid_optimization_steps: List[int] = field(default_factory=list)
+    all_mid_optimization_steps: bool = False
     seed: int = 42
-    no_continue: bool = False
+    continue_ok: bool = True
 
 
 def compute_grasp_orientations(
@@ -81,43 +83,29 @@ def generate_grasp_config_dicts(
     input_hand_config_dicts_path: pathlib.Path,
     output_grasp_config_dicts_path: pathlib.Path,
 ) -> None:
-    hand_config_dict_filepaths = [
-        path for path in list(input_hand_config_dicts_path.glob("*.npy"))
+    input_object_code_and_scale_strs_from_folder = [
+        path.stem for path in list(input_hand_config_dicts_path.glob("*.npy"))
     ]
-    print(f"len(input_hand_config_dict_filepaths): {len(hand_config_dict_filepaths)}")
-    print(f"First 10: {[path for path in hand_config_dict_filepaths[:10]]}")
-    random.Random(args.seed).shuffle(hand_config_dict_filepaths)
-
-    existing_object_code_and_scale_strs = (
-        [pp.stem for pp in output_grasp_config_dicts_path.glob("*.npy")]
-        if output_grasp_config_dicts_path.exists()
-        else []
+    input_object_code_and_scale_strs = get_object_codes_and_scales_to_process(
+        input_object_code_and_scale_strs=input_object_code_and_scale_strs_from_folder,
+        meshdata_root_path=args.meshdata_root_path,
+        output_folder_path=output_grasp_config_dicts_path,
+        continue_ok=args.continue_ok,
     )
 
-    if len(existing_object_code_and_scale_strs) > 0 and args.no_continue:
-        raise ValueError(
-            f"Found {len(existing_object_code_and_scale_strs)} existing grasp config dicts in {output_grasp_config_dicts_path}."
-            + " Set no_continue to False to continue generating grasps for these objects, or change output path."
-        )
-    elif len(existing_object_code_and_scale_strs) > 0:
-        print(f"Found {len(existing_object_code_and_scale_strs)} existing objects.")
-        hand_config_dict_filepaths = [
-            pp
-            for pp in hand_config_dict_filepaths
-            if pp.stem not in existing_object_code_and_scale_strs
-        ]
-        print(
-            f"Continuing generating grasps on {len(hand_config_dict_filepaths)} objects."
-        )
+    random.Random(args.seed).shuffle(input_object_code_and_scale_strs)
 
     set_seed(42)  # Want this fixed so deterministic computation
     pbar = tqdm(
-        hand_config_dict_filepaths,
+        input_object_code_and_scale_strs,
         desc="Generating grasp_config_dicts",
         dynamic_ncols=True,
     )
-    for hand_config_dict_filepath in pbar:
-        object_code_and_scale_str = hand_config_dict_filepath.stem
+    for object_code_and_scale_str in pbar:
+        hand_config_dict_filepath = (
+            input_hand_config_dicts_path / f"{object_code_and_scale_str}.npy"
+        )
+
         assert is_object_code_and_scale_str(
             object_code_and_scale_str
         ), f"object_code_and_scale_str: {object_code_and_scale_str} is not valid."
@@ -144,23 +132,20 @@ def generate_grasp_config_dicts(
         )
 
         # Save grasp_config_dict
-
         output_grasp_config_dicts_path.mkdir(parents=True, exist_ok=True)
         np.save(
-            output_grasp_config_dicts_path / f"{object_code_and_scale_str}.npy",
-            grasp_config_dict,
+            file=output_grasp_config_dicts_path / f"{object_code_and_scale_str}.npy",
+            arr=grasp_config_dict,
             allow_pickle=True,
         )
 
 
 def main() -> None:
-    args = tyro.cli(GenerateGraspConfigDictsArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[GenerateGraspConfigDictsArgs])
 
     print("=" * 80)
     print(f"args = {args}")
     print("=" * 80 + "\n")
-
-    os.environ.pop("CUDA_VISIBLE_DEVICES")
 
     generate_grasp_config_dicts(
         args=args,
@@ -168,24 +153,38 @@ def main() -> None:
         output_grasp_config_dicts_path=args.output_grasp_config_dicts_path,
     )
 
-    for mid_optimization_step in args.mid_optimization_steps:
-        print("!" * 80)
+    if not args.all_mid_optimization_steps:
+        return
+
+    mid_optimization_steps = (
+        sorted(
+            [
+                int(pp.name)
+                for pp in args.input_hand_config_dicts_path.glob("mid_optimization/*")
+            ]
+        )
+        if (args.input_hand_config_dicts_path / "mid_optimization").exists()
+        else []
+    )
+    print(f"mid_optimization_steps: {mid_optimization_steps}")
+
+    for mid_optimization_step in mid_optimization_steps:
         print(f"Running mid_optimization_step: {mid_optimization_step}")
         print("!" * 80 + "\n")
-        mid_optimization_input_hand_config_dicts_path = (
+        mid_optimization_input_path = (
             args.input_hand_config_dicts_path
             / "mid_optimization"
             / f"{mid_optimization_step}"
         )
-        mid_optimization_output_grasp_config_dicts_path = (
+        mid_optimization_output_path = (
             args.output_grasp_config_dicts_path
             / "mid_optimization"
             / f"{mid_optimization_step}"
         )
         generate_grasp_config_dicts(
             args=args,
-            input_hand_config_dicts_path=mid_optimization_input_hand_config_dicts_path,
-            output_grasp_config_dicts_path=mid_optimization_output_grasp_config_dicts_path,
+            input_hand_config_dicts_path=mid_optimization_input_path,
+            output_grasp_config_dicts_path=mid_optimization_output_path,
         )
 
 

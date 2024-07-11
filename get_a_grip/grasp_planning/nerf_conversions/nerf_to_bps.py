@@ -26,7 +26,6 @@ def nerf_to_bps(
     X_N_By: np.ndarray,
     num_points: int = 5000,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    # TODO: This is slow because it loads NeRF from file and then outputs point cloud to file
     bounding_box = PointCloudBoundingBox(nerf_is_z_up=nerf_is_z_up)
     point_cloud_exporter = ExportPointCloud(
         normal_method="open3d",

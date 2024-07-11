@@ -103,7 +103,7 @@ def generate_point_clouds(args: GeneratePointCloudsArgs) -> pathlib.Path:
 
 
 def main() -> None:
-    args = tyro.cli(GeneratePointCloudsArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[GeneratePointCloudsArgs])
     print("=" * 80)
     print(f"{pathlib.Path(__file__).name} args: {args}")
     print("=" * 80 + "\n")

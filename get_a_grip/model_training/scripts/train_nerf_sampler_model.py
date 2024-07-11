@@ -43,7 +43,7 @@ class TrainNerfSamplerModelConfig:
 
 def main() -> None:
     config = tyro.cli(
-        TrainNerfSamplerModelConfig,
+        tyro.conf.FlagConversionOff[TrainNerfSamplerModelConfig],
         default=TrainNerfSamplerModelConfig(
             diffusion=DiffusionConfig(
                 data=DataConfig(
@@ -55,7 +55,7 @@ def main() -> None:
                     log_path=(
                         get_data_folder()
                         / (
-                            f"logs/nerf_sampler_model/{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+                            f"trained_models/nerf_sampler_model/{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
                         )
                     ),
                 ),

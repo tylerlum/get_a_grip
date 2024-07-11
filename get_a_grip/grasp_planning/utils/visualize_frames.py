@@ -177,7 +177,7 @@ def plot_frames(
 
 
 def main() -> None:
-    args = tyro.cli(VisualizeFramesArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[VisualizeFramesArgs])
     if (
         args.nerf_is_z_up
         and args.nerf_frame_offset_W_x is not None

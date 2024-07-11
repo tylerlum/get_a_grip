@@ -3,11 +3,10 @@ from __future__ import annotations
 import pathlib
 import time
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import transforms3d
-import trimesh
 from curobo.geom.types import WorldConfig
 from curobo.types.robot import RobotConfig
 from curobo.wrap.reacher.ik_solver import IKResult, IKSolver
@@ -43,7 +42,6 @@ class GraspMotionTimingConfig:
 
 @dataclass
 class GraspMotionPlannerConfig:
-    num_grasps: int  # Curobo's CUDAGraphs require a predefined number of grasps
     timing: GraspMotionTimingConfig = field(default_factory=GraspMotionTimingConfig)
     DEBUG_turn_off_object_collision: bool = False  # Turn off object collision for debugging why motion planning may be failing
 
@@ -97,8 +95,8 @@ class MotionPlanningComponents:
             ik_solver2=self.ik_solver2,
             motion_gen=self.motion_gen,
             motion_gen_config=self.motion_gen_config,
-            q_fr3s_start=q_fr3s_start[None, ...].repeat(n_grasps, axis=0),
-            q_algrs_start=q_algrs_start[None, ...].repeat(n_grasps, axis=0),
+            q_fr3s_start=q_fr3s_start,
+            q_algrs_start=q_algrs_start,
             enable_graph=True,
             enable_opt=False,
             timeout=timeout,
@@ -124,8 +122,10 @@ class GraspMotionPlanner:
         self.frames = frames
         self._prepared = False
 
-    def prepare(self, warmup: bool = False) -> None:
+    def prepare(self, num_grasps: int, warmup: bool = False) -> None:
         """Prepares Curobo's motion planning components
+
+        Curobo's CUDAGraphs require a predefined number of grasps to be planned in parallel.
 
         If warmup=True, the CUDA kernels are warmed up, so that subsequent motion planning calls are faster.
         This can be done before grasp planning to amortize the cost of motion planning (if done concurrently).
@@ -133,12 +133,10 @@ class GraspMotionPlanner:
         """
         # HACK: Need to include a mesh into the world for the motion_gen warmup or else it will not prepare mesh buffers
         # TODO: There should be another way to do this to tell it there will be a mesh without actually having to load it
-        dummy_mesh = trimesh.creation.box(extents=(0.1, 0.1, 0.1))
-        dummy_mesh.export("/tmp/DUMMY.obj")
         FAR_AWAY_OBJ_XYZ = (10.0, 0.0, 0.0)
         self.approach_motion_planning = MotionPlanningComponents.from_tuple(
             prepare_trajopt_batch(
-                n_grasps=self.cfg.num_grasps,
+                n_grasps=num_grasps,
                 collision_check_object=(
                     True if not self.cfg.DEBUG_turn_off_object_collision else False
                 ),
@@ -153,7 +151,7 @@ class GraspMotionPlanner:
         )
         self.lift_motion_planning = MotionPlanningComponents.from_tuple(
             prepare_trajopt_batch(
-                n_grasps=self.cfg.num_grasps,
+                n_grasps=num_grasps,
                 collision_check_object=(
                     True if not self.cfg.DEBUG_turn_off_object_collision else False
                 ),
@@ -169,6 +167,11 @@ class GraspMotionPlanner:
 
         self._prepared = True
 
+    def reset(self) -> None:
+        del self.approach_motion_planning
+        del self.lift_motion_planning
+        self._prepared = False
+
     def plan(
         self,
         X_W_Hs: np.ndarray,
@@ -176,9 +179,16 @@ class GraspMotionPlanner:
         q_algrs_postgrasp: np.ndarray,
         q_fr3_start: np.ndarray,
         q_algr_start: np.ndarray,
+        object_mesh_N_path: Optional[pathlib.Path] = None,
     ) -> Tuple[List[np.ndarray], List[np.ndarray], List[float], List[int], tuple, dict]:
+        n_grasps = X_W_Hs.shape[0]
+        assert X_W_Hs.shape == (n_grasps, 4, 4)
+        assert q_algrs_pregrasp.shape == (n_grasps, 16)
+        assert q_fr3_start.shape == (7,)
+        assert q_algr_start.shape == (16,)
+
         if not self._prepared:
-            self.prepare()
+            self.prepare(num_grasps=n_grasps, warmup=False)
 
         # Timing
         APPROACH_TIME = self.cfg.timing.approach_time
@@ -187,12 +197,6 @@ class GraspMotionPlanner:
         STAY_CLOSED_TIME = self.cfg.timing.stay_closed_time
         LIFT_TIME = self.cfg.timing.lift_time
 
-        n_grasps = X_W_Hs.shape[0]
-        assert X_W_Hs.shape == (n_grasps, 4, 4)
-        assert q_algrs_pregrasp.shape == (n_grasps, 16)
-        assert q_fr3_start.shape == (7,)
-        assert q_algr_start.shape == (16,)
-
         print("\n" + "=" * 80)
         print("Step 1: Solve approach motion gen")
         print("=" * 80 + "\n")
@@ -200,7 +204,7 @@ class GraspMotionPlanner:
             collision_check_object=(
                 True if not self.cfg.DEBUG_turn_off_object_collision else False
             ),
-            obj_filepath=pathlib.Path("/tmp/mesh_viz_object.obj"),
+            obj_filepath=object_mesh_N_path,
             obj_xyz=self.obj_xyz,
             obj_quat_wxyz=self.obj_quat_wxyz,
             collision_check_table=True,
@@ -216,7 +220,7 @@ class GraspMotionPlanner:
                 timeout=2.0,
             )
         )
-        approach_qs, approach_qds, dts = get_trajectories_from_result(
+        approach_qs, approach_qds, approach_dts = get_trajectories_from_result(
             result=approach_motion_gen_result,
             desired_trajectory_time=APPROACH_TIME,
         )
@@ -271,7 +275,7 @@ class GraspMotionPlanner:
 
         # Fix issue with going over limit
         over_limit_factors_approach_qds = compute_over_limit_factors(
-            qds=approach_qds, dts=dts
+            qds=approach_qds, dts=approach_dts
         )
         approach_qds = [
             approach_qd / over_limit_factor
@@ -279,36 +283,38 @@ class GraspMotionPlanner:
                 approach_qds, over_limit_factors_approach_qds
             )
         ]
-        dts = [
+        approach_dts = [
             dt * over_limit_factor
-            for dt, over_limit_factor in zip(dts, over_limit_factors_approach_qds)
+            for dt, over_limit_factor in zip(
+                approach_dts, over_limit_factors_approach_qds
+            )
         ]
 
         print("\n" + "=" * 80)
         print("Step 2: Add closing motion")
         print("=" * 80 + "\n")
         closing_qs, closing_qds = [], []
-        for i, (approach_q, approach_qd, dt) in enumerate(
-            zip(approach_qs, approach_qds, dts)
+        for i, (approach_q, approach_qd, approach_dt) in enumerate(
+            zip(approach_qs, approach_qds, approach_dts)
         ):
             # Keep arm joints same, change hand joints
             open_q = approach_q[-1]
             close_q = np.concatenate([open_q[:7], q_algrs_postgrasp[i]])
 
             # Stay open
-            N_STAY_OPEN_STEPS = int(STAY_OPEN_TIME / dt)
+            N_STAY_OPEN_STEPS = int(STAY_OPEN_TIME / approach_dt)
             interpolated_qs0 = interpolate(
                 start=open_q, end=open_q, N=N_STAY_OPEN_STEPS
             )
             assert interpolated_qs0.shape == (N_STAY_OPEN_STEPS, 23)
 
             # Close
-            N_CLOSE_STEPS = int(CLOSE_TIME / dt)
+            N_CLOSE_STEPS = int(CLOSE_TIME / approach_dt)
             interpolated_qs1 = interpolate(start=open_q, end=close_q, N=N_CLOSE_STEPS)
             assert interpolated_qs1.shape == (N_CLOSE_STEPS, 23)
 
             # Stay closed
-            N_STAY_CLOSED_STEPS = int(STAY_CLOSED_TIME / dt)
+            N_STAY_CLOSED_STEPS = int(STAY_CLOSED_TIME / approach_dt)
             interpolated_qs2 = interpolate(
                 start=close_q, end=close_q, N=N_STAY_CLOSED_STEPS
             )
@@ -322,7 +328,7 @@ class GraspMotionPlanner:
                 23,
             )
 
-            closing_qd = np.diff(closing_q, axis=0) / dt
+            closing_qd = np.diff(closing_q, axis=0) / approach_dt
             closing_qd = np.concatenate([closing_qd, closing_qd[-1:]], axis=0)
 
             closing_qs.append(closing_q)
@@ -354,7 +360,7 @@ class GraspMotionPlanner:
         # Update world to remove object collision check
         no_object_world_cfg = get_world_cfg(
             collision_check_object=False,
-            obj_filepath=pathlib.Path("/tmp/mesh_viz_object.obj"),
+            obj_filepath=object_mesh_N_path,
             obj_xyz=self.obj_xyz,
             obj_quat_wxyz=self.obj_quat_wxyz,
             collision_check_table=True,
@@ -417,31 +423,31 @@ class GraspMotionPlanner:
 
         # Need to adjust raw_lift_qs, raw_lift_qds, raw_lift_dts to match dts from trajopt
         new_raw_lift_qs, new_raw_lift_qds, new_raw_lift_dts = [], [], []
-        for i, (raw_lift_q, raw_lift_qd, raw_lift_dt, dt) in enumerate(
-            zip(raw_lift_qs, raw_lift_qds, raw_lift_dts, dts)
+        for i, (raw_lift_q, raw_lift_qd, raw_lift_dt, approach_dt) in enumerate(
+            zip(raw_lift_qs, raw_lift_qds, raw_lift_dts, approach_dts)
         ):
             n_timepoints = raw_lift_q.shape[0]
             assert raw_lift_q.shape == (n_timepoints, 23)
             total_time = n_timepoints * raw_lift_dt
 
             # Interpolate with new timepoints
-            n_new_timepoints = int(total_time / dt)
+            n_new_timepoints = int(total_time / approach_dt)
             new_raw_lift_q = np.zeros((n_new_timepoints, 23))
             for j in range(23):
                 new_raw_lift_q[:, j] = np.interp(
-                    np.arange(n_new_timepoints) * dt,
+                    np.arange(n_new_timepoints) * approach_dt,
                     np.linspace(0, total_time, n_timepoints),
                     raw_lift_q[:, j],
                 )
 
-            new_raw_lift_qd = np.diff(new_raw_lift_q, axis=0) / dt
+            new_raw_lift_qd = np.diff(new_raw_lift_q, axis=0) / approach_dt
             new_raw_lift_qd = np.concatenate(
                 [new_raw_lift_qd, new_raw_lift_qd[-1:]], axis=0
             )
 
             new_raw_lift_qs.append(new_raw_lift_q)
             new_raw_lift_qds.append(new_raw_lift_qd)
-            new_raw_lift_dts.append(dt)
+            new_raw_lift_dts.append(approach_dt)
 
         raw_lift_qs, raw_lift_qds, raw_lift_dts = (
             new_raw_lift_qs,
@@ -496,15 +502,24 @@ class GraspMotionPlanner:
         for i, (
             closing_q,
             closing_qd,
-            dt,
+            approach_dt,
             raw_lift_q,
             raw_lift_qd,
             raw_lift_dt,
         ) in enumerate(
-            zip(closing_qs, closing_qds, dts, raw_lift_qs, raw_lift_qds, raw_lift_dts)
+            zip(
+                closing_qs,
+                closing_qds,
+                approach_dts,
+                raw_lift_qs,
+                raw_lift_qds,
+                raw_lift_dts,
+            )
         ):
             # TODO: Figure out how to handle if lift_qs has different dt, only a problem if set enable_opt=True
-            assert dt == raw_lift_dt, f"dt: {dt}, lift_dt: {raw_lift_dt}"
+            assert (
+                approach_dt == raw_lift_dt
+            ), f"dt: {approach_dt}, lift_dt: {raw_lift_dt}"
 
             # Only want the arm position of the lift closing_q (keep same hand position as before)
             adjusted_lift_q = raw_lift_q.copy()
@@ -521,17 +536,25 @@ class GraspMotionPlanner:
         print("Step 4: Aggregate qs and qds")
         print("=" * 80 + "\n")
         q_trajs, qd_trajs = [], []
-        for approach_q, approach_qd, closing_q, closing_qd, lift_q, lift_qd, dt in zip(
+        for (
+            approach_q,
+            approach_qd,
+            closing_q,
+            closing_qd,
+            lift_q,
+            lift_qd,
+            approach_dt,
+        ) in zip(
             approach_qs,
             approach_qds,
             closing_qs,
             closing_qds,
             adjusted_lift_qs,
             adjusted_lift_qds,
-            dts,
+            approach_dts,
         ):
             q_traj = np.concatenate([approach_q, closing_q, lift_q], axis=0)
-            qd_traj = np.diff(q_traj, axis=0) / dt
+            qd_traj = np.diff(q_traj, axis=0) / approach_dt
             qd_traj = np.concatenate([qd_traj, qd_traj[-1:]], axis=0)
             q_trajs.append(q_traj)
             qd_trajs.append(qd_traj)
@@ -540,9 +563,9 @@ class GraspMotionPlanner:
         print("Step 5: Compute T_trajs")
         print("=" * 80 + "\n")
         T_trajs = []
-        for q_traj, dt in zip(q_trajs, dts):
+        for q_traj, approach_dt in zip(q_trajs, approach_dts):
             n_timesteps = q_traj.shape[0]
-            T_trajs.append(n_timesteps * dt)
+            T_trajs.append(n_timesteps * approach_dt)
 
         over_limit_factors_qd_trajs = compute_over_limit_factors(
             qds=qd_trajs, dts=raw_lift_dts
@@ -581,7 +604,7 @@ class GraspMotionPlanner:
         log_dict = {
             "approach_qs": approach_qs,
             "approach_qds": approach_qds,
-            "dts": dts,
+            "dts": approach_dts,
             "closing_qs": closing_qs,
             "closing_qds": closing_qds,
             "raw_lift_qs": raw_lift_qs,
@@ -619,6 +642,7 @@ class GraspMotionPlanner:
         success_idxs: List[int],
         sorted_losses: np.ndarray,
         DEBUG_TUPLE: tuple,
+        object_mesh_N_path: Optional[pathlib.Path] = None,
     ) -> None:
         # Import here to avoid pybullet build time if visualizer isn't used
         from get_a_grip.grasp_motion_planning.utils.visualizer import (
@@ -635,8 +659,10 @@ class GraspMotionPlanner:
         print("Visualizing")
         print("=" * 80 + "\n")
 
-        OBJECT_URDF_PATH = create_urdf(
-            obj_path=pathlib.Path("/tmp/mesh_viz_object.obj")
+        OBJECT_URDF_PATH = (
+            create_urdf(obj_path=object_mesh_N_path)
+            if object_mesh_N_path is not None
+            else None
         )
         pb_robot = start_visualizer(
             object_urdf_path=OBJECT_URDF_PATH,
@@ -699,7 +725,7 @@ class GraspMotionPlanner:
                 d_world, d_self = max_penetration_from_q(
                     q=ik_q,
                     include_object=True,
-                    obj_filepath=pathlib.Path("/tmp/mesh_viz_object.obj"),
+                    obj_filepath=object_mesh_N_path,
                     obj_xyz=self.obj_xyz,
                     obj_quat_wxyz=self.obj_quat_wxyz,
                     include_table=True,
@@ -732,14 +758,14 @@ class GraspMotionPlanner:
 
     @property
     def obj_xyz(self) -> Tuple[float, float, float]:
-        X_W_O = self.frames.X_("W", "O")
-        obj_xyz = X_W_O[:3, 3]
+        X_W_N = self.frames.X_("W", "N")
+        obj_xyz = X_W_N[:3, 3]
         return (obj_xyz[0], obj_xyz[1], obj_xyz[2])
 
     @property
     def obj_quat_wxyz(self) -> Tuple[float, float, float, float]:
-        X_W_O = self.frames.X_("W", "O")
-        obj_quat_wxyz = transforms3d.quaternions.mat2quat(X_W_O[:3, :3])
+        X_W_N = self.frames.X_("W", "N")
+        obj_quat_wxyz = transforms3d.quaternions.mat2quat(X_W_N[:3, :3])
         return (obj_quat_wxyz[0], obj_quat_wxyz[1], obj_quat_wxyz[2], obj_quat_wxyz[3])
 
 

@@ -36,7 +36,7 @@ EVALED_GRASP_CONFIG_DICT_KEYS = [
 
 
 def main() -> None:
-    args = tyro.cli(MergeEvaledGraspConfigDictsArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[MergeEvaledGraspConfigDictsArgs])
 
     # Create dir
     args.output_evaled_grasp_config_dicts_path.mkdir(parents=True, exist_ok=True)
@@ -79,7 +79,7 @@ def main() -> None:
 
         new_filepath = args.output_evaled_grasp_config_dicts_path / filename
         print(f"Saving {num_grasps} grasps to {new_filepath}")
-        np.save(new_filepath, combined_grasp_config_dict, allow_pickle=True)
+        np.save(file=new_filepath, arr=combined_grasp_config_dict, allow_pickle=True)
 
 
 if __name__ == "__main__":

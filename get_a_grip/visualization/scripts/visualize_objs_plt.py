@@ -26,7 +26,7 @@ def load_obj_mesh(path: pathlib.Path) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def main() -> None:
-    args = tyro.cli(VisualizeObjsPltArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[VisualizeObjsPltArgs])
     print("=" * 80)
     print(f"{pathlib.Path(__file__).name} args: {args}")
     print("=" * 80 + "\n")

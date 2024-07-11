@@ -47,11 +47,12 @@ from get_a_grip.model_training.utils.plot_utils import (
 @dataclass
 class VisualizeBpsModelsConfig:
     sampler_ckpt_path: pathlib.Path = (
-        get_data_folder() / "logs/bps_sampler_model/20240705003721/ckpt_100.pth"
+        get_data_folder()
+        / "trained_models/bps_sampler_model/20240705003721/ckpt_100.pth"
     )
     evaluator_ckpt_path: pathlib.Path = (
         get_data_folder()
-        / "logs/bps_grasp_evaluator/20240705_002442/ckpt-cyzuv30d-step-0.pth"
+        / "trained_models/bps_grasp_evaluator/20240705_002442/ckpt-cyzuv30d-step-0.pth"
     )
     dataset_path: Path = (
         get_data_folder() / "SMALL_DATASET/bps_grasp_dataset/train_dataset.h5"
@@ -98,7 +99,7 @@ else:
 
 
 # %%
-cfg = tyro.cli(VisualizeBpsModelsConfig, args=arguments)
+cfg = tyro.cli(tyro.conf.FlagConversionOff[VisualizeBpsModelsConfig], args=arguments)
 print("=" * 80)
 print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
 print("=" * 80 + "\n")

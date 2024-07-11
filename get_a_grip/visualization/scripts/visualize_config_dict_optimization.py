@@ -148,7 +148,7 @@ def create_config_dict_figs_from_folder(
 
 
 def main() -> None:
-    args = tyro.cli(VisualizeConfigDictOptimizationArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[VisualizeConfigDictOptimizationArgs])
 
     print("=" * 80)
     print(f"args = {args}")

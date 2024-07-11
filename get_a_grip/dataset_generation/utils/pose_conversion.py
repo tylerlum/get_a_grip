@@ -33,9 +33,9 @@ def hand_config_np_to_pose(
     joint_angles: np.ndarray,
 ) -> torch.Tensor:
     return hand_config_to_pose(
-        trans=torch.from_numpy(trans),
-        rot=torch.from_numpy(rot),
-        joint_angles=torch.from_numpy(joint_angles),
+        trans=torch.from_numpy(trans).float(),
+        rot=torch.from_numpy(rot).float(),
+        joint_angles=torch.from_numpy(joint_angles).float(),
     )
 
 

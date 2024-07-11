@@ -1,6 +1,5 @@
 """
 Utils for working with NeRFs, including:
-* rendering depth / uncertainty images from the NeRF
 * getting densities in a grid
 * computing the centroid of the field
 """
@@ -35,7 +34,7 @@ def get_densities_in_grid(
     )
     assert query_points_in_region_np.shape == (num_pts_x, num_pts_y, num_pts_z, 3)
 
-    query_points_in_region = torch.from_numpy(query_points_in_region_np).cuda()
+    query_points_in_region = torch.from_numpy(query_points_in_region_np).float().cuda()
 
     nerf_densities_in_region = (
         get_density(

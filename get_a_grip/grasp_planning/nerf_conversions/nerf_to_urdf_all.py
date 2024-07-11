@@ -57,7 +57,7 @@ def nerf_to_urdf_all(args: NerfToUrdfAllArgs) -> None:
 
 
 def main() -> None:
-    args = tyro.cli(NerfToUrdfAllArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[NerfToUrdfAllArgs])
     nerf_to_urdf_all(args)
 
 

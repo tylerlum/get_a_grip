@@ -7,7 +7,6 @@ from get_a_grip.dataset_generation.utils.isaac_validator import (
 import torch  # isort: skip
 
 import math
-import os
 import pathlib
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -41,7 +40,7 @@ class EvalGraspConfigDictArgs:
     input_grasp_config_dicts_path: pathlib.Path = (
         get_data_folder() / "NEW_DATASET/grasp_config_dicts"
     )
-    output_evaled_grasp_config_dicts_path: pathlib.Path = (
+    output_evaled_grasp_config_dicts_path: Optional[pathlib.Path] = (
         get_data_folder() / "NEW_DATASET/evaled_grasp_config_dicts"
     )
     object_code_and_scale_str: str = (
@@ -58,6 +57,7 @@ class EvalGraspConfigDictArgs:
     start_with_step_mode: bool = False  # with use_gui, starts sim paused in step mode, press S to step 1 sim step, press space to toggle pause
     use_gui: bool = False
     use_cpu: bool = False  # GPU is faster. NOTE: there can be discrepancies between using GPU vs CPU, likely different slightly physics
+    save_to_file: bool = True
     record_indices: List[int] = field(default_factory=list)
 
 
@@ -116,7 +116,11 @@ def compute_init_joint_angles(
 
 
 def eval_grasp_config_dict(args: EvalGraspConfigDictArgs) -> dict:
-    os.environ.pop("CUDA_VISIBLE_DEVICES")
+    if args.save_to_file:
+        assert (
+            args.output_evaled_grasp_config_dicts_path is not None
+        ), "output_evaled_grasp_config_dicts_path must be set if save_to_file is True"
+
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     N_NOISY = args.num_random_pose_noise_samples_per_grasp  # alias
     add_random_pose_noise = N_NOISY is not None
@@ -358,13 +362,20 @@ def eval_grasp_config_dict(args: EvalGraspConfigDictArgs) -> dict:
         "object_states_before_grasp": object_states_before_grasp_array,
     }
 
-    args.output_evaled_grasp_config_dicts_path.mkdir(parents=True, exist_ok=True)
-    np.save(
-        args.output_evaled_grasp_config_dicts_path
-        / f"{args.object_code_and_scale_str}.npy",
-        evaled_grasp_config_dict,
-        allow_pickle=True,
-    )
+    if args.save_to_file:
+        assert args.output_evaled_grasp_config_dicts_path is not None
+        print(
+            f"Saving evaled grasp config dicts to: {args.output_evaled_grasp_config_dicts_path}"
+        )
+        args.output_evaled_grasp_config_dicts_path.mkdir(parents=True, exist_ok=True)
+        np.save(
+            file=(
+                args.output_evaled_grasp_config_dicts_path
+                / f"{args.object_code_and_scale_str}.npy"
+            ),
+            arr=evaled_grasp_config_dict,
+            allow_pickle=True,
+        )
 
     sim.destroy()
     return evaled_grasp_config_dict
@@ -374,7 +385,7 @@ def eval_grasp_config_dict(args: EvalGraspConfigDictArgs) -> dict:
 
 
 def main() -> None:
-    args = tyro.cli(EvalGraspConfigDictArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[EvalGraspConfigDictArgs])
     print("=" * 80)
     print(f"args = {args}")
     print("=" * 80 + "\n")

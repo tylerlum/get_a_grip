@@ -19,7 +19,6 @@ python get_a_grip/dataset_generation/scripts/generate_object_code_and_scales_txt
 For each object, drop it on a table, wait for it to settle upright, then capture posed images of it on a table. If the object doesn't settle upright on the table, it is filtered out with a new txt file (<output_nerfdata_path_data>_settled_successes.txt).
 
 ```
-CUDA_VISIBLE_DEVICES=0 \
 python get_a_grip/dataset_generation/scripts/generate_nerfdata.py \
 --meshdata_root_path data/large/meshes \
 --input_object_code_and_scales_txt_path data/NEW_DATASET/object_code_and_scales.txt \
@@ -37,7 +36,6 @@ python get_a_grip/dataset_generation/scripts/generate_nerfdata.py \
 Generate pre-grasp pose for each object and scale:
 
 ```
-CUDA_VISIBLE_DEVICES=0 \
 python get_a_grip/dataset_generation/scripts/generate_hand_config_dicts.py \
 --meshdata_root_path data/large/meshes \
 --input_object_code_and_scales_txt_path data/NEW_DATASET/nerfdata_settled_successes.txt \
@@ -47,7 +45,6 @@ python get_a_grip/dataset_generation/scripts/generate_hand_config_dicts.py \
 Generate grasp directions for each grasp:
 
 ```
-CUDA_VISIBLE_DEVICES=0 \
 python get_a_grip/dataset_generation/scripts/generate_grasp_config_dicts.py \
 --meshdata_root_path data/large/meshes \
 --input_hand_config_dicts_path data/NEW_DATASET/hand_config_dicts \
@@ -63,7 +60,6 @@ python get_a_grip/dataset_generation/scripts/generate_grasp_config_dicts.py \
 Evaluate grasps in simulation:
 
 ```
-CUDA_VISIBLE_DEVICES=0 \
 python get_a_grip/dataset_generation/scripts/eval_all_grasp_config_dicts.py \
 --meshdata_root_path data/large/meshes \
 --input_grasp_config_dicts_path data/NEW_DATASET/grasp_config_dicts \
@@ -90,7 +86,6 @@ python get_a_grip/dataset_generation/scripts/augment_grasp_config_dicts.py \
 Evaluate augmented grasps in simulation:
 
 ```
-CUDA_VISIBLE_DEVICES=0 \
 python get_a_grip/dataset_generation/scripts/eval_all_grasp_config_dicts.py \
 --meshdata_root_path data/large/meshes \
 --input_grasp_config_dicts_path data/NEW_DATASET/augmented_grasp_config_dicts \

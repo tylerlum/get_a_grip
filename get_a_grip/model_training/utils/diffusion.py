@@ -4,7 +4,7 @@ Implementation based on: https://github.com/ermongroup/ddim/blob/main/runners/di
 
 import os
 import time
-from typing import Optional
+from typing import Literal, Optional
 
 import numpy as np
 import torch
@@ -12,15 +12,15 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as data
-import wandb
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-from wandb.util import generate_id
 
+import wandb
 from get_a_grip.model_training.config.diffusion_config import (
     DiffusionConfig,
 )
+from wandb.util import generate_id
 
 
 def get_beta_schedule(beta_schedule, *, beta_start, beta_end, num_diffusion_timesteps):
@@ -291,20 +291,20 @@ class Diffusion(object):
         self.model.eval()
 
         with torch.no_grad():
-            x = self.sample_image(xT, cond, self.model)
+            x = self._sample(xT, cond, self.model).to(xT.device)
             return x
 
-    def sample_image(
+    def _sample(
         self,
-        x,
-        cond,
-        model,
-        last=True,
-        sample_type="generalized",
-        skip_type="uniform",
-        skip=1,
-        timesteps=1000,
-        eta=0.0,
+        x: torch.Tensor,
+        cond: torch.Tensor,
+        model: nn.Module,
+        last: bool = True,
+        sample_type: Literal["generalized", "ddpm_noisy"] = "generalized",
+        skip_type: Literal["uniform", "quad"] = "quad",
+        skip: int = 1,
+        timesteps: int = 1000,
+        eta: float = 0.0,
     ) -> torch.Tensor:
         if skip_type == "uniform":
             skip = self.num_timesteps // timesteps

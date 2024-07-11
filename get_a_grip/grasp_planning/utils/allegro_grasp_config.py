@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import pathlib
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -25,6 +24,7 @@ from get_a_grip.dataset_generation.utils.pose_conversion import (
     hand_config_to_pose,
 )
 from get_a_grip.grasp_planning.utils.joint_limit_utils import (
+    clamp_in_limits,
     get_joint_limits_np,
 )
 
@@ -55,7 +55,6 @@ class AllegroHandConfig(torch.nn.Module):
         chain: Chain = load_allegro(),
         requires_grad: bool = True,
     ) -> None:
-        # TODO(pculbert): add device/dtype kwargs.
         super().__init__()
         self.chain = chain
         self.wrist_pose = pp.Parameter(
@@ -108,8 +107,8 @@ class AllegroHandConfig(torch.nn.Module):
             check=check,
             # Set atol and rtol to be a bit larger than default to handle large matrices
             # (numerical errors larger affect the sanity checking)
-            atol=1e-4,
-            rtol=1e-4,
+            atol=1e-3,
+            rtol=1e-3,
         )
         wrist_pose = pp.SE3(torch.cat([wrist_translation, wrist_quat], dim=1))
 
@@ -164,7 +163,6 @@ class AllegroHandConfig(torch.nn.Module):
         )
 
     def get_fingertip_transforms(self) -> pp.LieTensor:
-        # Pretty hacky -- need to cast chain to the same device as the wrist pose.
         self.chain = self.chain.to(device=self.device)
 
         # Run batched FK from current hand config.
@@ -261,9 +259,6 @@ class AllegroGraspConfig(torch.nn.Module):
         requires_grad: bool = True,
         num_fingers: int = 4,
     ) -> None:
-        # TODO(pculbert): refactor for arbitrary batch sizes.
-        # TODO(pculbert): add device/dtype kwargs.
-
         self.batch_size = batch_size
         super().__init__()
         self.hand_config = AllegroHandConfig(batch_size, chain, requires_grad)
@@ -277,17 +272,6 @@ class AllegroGraspConfig(torch.nn.Module):
             requires_grad=requires_grad,
         )
         self.num_fingers = num_fingers
-
-    @classmethod
-    def from_path(cls, path: pathlib.Path) -> AllegroGraspConfig:
-        """
-        Factory method to create an AllegroGraspConfig from a path to a saved state dict.
-        """
-        state_dict = torch.load(str(path))
-        batch_size = state_dict["hand_config.wrist_pose"].shape[0]
-        grasp_config = cls(batch_size)
-        grasp_config.load_state_dict(state_dict)
-        return grasp_config
 
     @classmethod
     def from_values(
@@ -349,7 +333,7 @@ class AllegroGraspConfig(torch.nn.Module):
             # Set atol and rtol to be a bit larger than default to handle large matrices
             # (numerical errors larger affect the sanity checking)
             pp.from_matrix(
-                grasp_orientations, pp.SO3_type, atol=1e-4, rtol=1e-4, check=check
+                grasp_orientations, pp.SO3_type, atol=1e-3, rtol=1e-3, check=check
             )
         )
 
@@ -604,7 +588,9 @@ class AllegroGraspConfig(torch.nn.Module):
         return new_grasp_configs
 
     def target_joint_angles(
-        self, dist_move_finger: Optional[float] = None
+        self,
+        dist_move_finger: Optional[float] = None,
+        clamp_to_limits: bool = True,
     ) -> torch.Tensor:
         device = self.device
 
@@ -626,10 +612,19 @@ class AllegroGraspConfig(torch.nn.Module):
             hand_model.batch_size,
             num_joints,
         )
-        return optimized_joint_angle_targets.to(device)
+
+        optimized_joint_angle_targets = optimized_joint_angle_targets.to(device)
+        if clamp_to_limits:
+            optimized_joint_angle_targets = clamp_in_limits(
+                optimized_joint_angle_targets
+            )
+
+        return optimized_joint_angle_targets
 
     def pre_joint_angles(
-        self, dist_move_finger_backwards: Optional[float] = None
+        self,
+        dist_move_finger_backwards: Optional[float] = None,
+        clamp_to_limits: bool = True,
     ) -> torch.Tensor:
         device = self.device
 
@@ -648,7 +643,12 @@ class AllegroGraspConfig(torch.nn.Module):
 
         num_joints = len(ALLEGRO_HAND_JOINT_NAMES)
         assert pre_joint_angle_targets.shape == (hand_model.batch_size, num_joints)
-        return pre_joint_angle_targets.to(device)
+
+        pre_joint_angle_targets = pre_joint_angle_targets.to(device)
+        if clamp_to_limits:
+            pre_joint_angle_targets = clamp_in_limits(pre_joint_angle_targets)
+
+        return pre_joint_angle_targets
 
     def get_target_hand_config(
         self, dist_move_finger: Optional[float] = None
@@ -729,7 +729,11 @@ def validate_rotation_matrices(
     ), f"Expected shape ({B}, 3, 3), got {rotation_matrices.shape}"
 
     # Check orthogonality: mat.T @ mat should be close to identity
-    identity_matrices: torch.Tensor = torch.eye(3).unsqueeze(0).repeat(B, 1, 1)
+    identity_matrices: torch.Tensor = (
+        torch.eye(3, device=rotation_matrices.device, dtype=rotation_matrices.dtype)
+        .unsqueeze(0)
+        .repeat(B, 1, 1)
+    )
     orthogonality_check: bool = torch.allclose(
         torch.einsum(
             "bij,bjk->bik", rotation_matrices.transpose(1, 2), rotation_matrices
@@ -740,7 +744,11 @@ def validate_rotation_matrices(
 
     # Check determinant: det(mat) should be close to 1
     determinants: torch.Tensor = torch.linalg.det(rotation_matrices)
-    determinant_check: bool = torch.allclose(determinants, torch.ones(B), atol=atol)
+    determinant_check: bool = torch.allclose(
+        determinants,
+        torch.ones(B, device=determinants.device, dtype=determinants.dtype),
+        atol=atol,
+    )
 
     assert orthogonality_check, "One or more matrices are not orthogonal."
     assert determinant_check, "One or more matrices do not have determinant 1."
@@ -828,7 +836,7 @@ def sample_random_rotate_transforms_only_around_y(N: int) -> pp.LieTensor:
     PP_MATRIX_ATOL, PP_MATRIX_RTOL = 1e-4, 1e-4
     # Sample big rotations in tangent space of SO(3).
     # Choose 4 * \pi as a heuristic to get pretty evenly spaced rotations.
-    # TODO: Figure out better uniform sampling on SO(3).
+    # Consider finding a better uniform sampling on SO(3).
     x_rotations = torch.zeros(N)
     y_rotations = 4 * torch.pi * (2 * torch.rand(N) - 1)
     z_rotations = torch.zeros(N)

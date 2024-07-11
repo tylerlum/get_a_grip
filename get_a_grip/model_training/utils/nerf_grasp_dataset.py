@@ -26,9 +26,9 @@ class NerfGraspDataset(data.Dataset):
             grasp_configs_tensor = torch.from_numpy(
                 hdf5_file["/grasp_configs"][()]
             ).float()
-            self.grasps = AllegroGraspConfig.from_tensor(
-                grasp_configs_tensor
-            ).as_grasp()
+            self.grasps = (
+                AllegroGraspConfig.from_tensor(grasp_configs_tensor).as_grasp().detach()
+            )  # Need .detach() since we don't want requires_grad=True here
             if self.grasps.shape[0] != self.num_grasps:
                 print(
                     f"WARNING: Expected {self.num_grasps} grasps, got {self.grasps.shape[0]}! Truncating data..."
@@ -49,7 +49,7 @@ class NerfGraspDataset(data.Dataset):
             )[: self.num_grasps, ...]
             self.global_grid_idxs = torch.from_numpy(
                 hdf5_file["/nerf_densities_global_idx"][()]
-            )[: self.num_grasps, ...]
+            ).long()[: self.num_grasps, ...]
             self.y_PGSs = torch.from_numpy(hdf5_file["/y_PGS"][()]).float()[
                 : self.num_grasps, ...
             ]

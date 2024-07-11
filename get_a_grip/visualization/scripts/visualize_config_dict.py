@@ -16,6 +16,8 @@ from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
 )
 from get_a_grip.visualization.utils.visualize_config_dict_helper import (
     create_config_dict_fig,
+    get_scene_dict,
+    get_yup_camera,
 )
 
 
@@ -38,7 +40,7 @@ class VisualizeConfigDictArgs:
 
 
 def main() -> None:
-    args = tyro.cli(VisualizeConfigDictArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[VisualizeConfigDictArgs])
 
     # load results
     config_dict: Dict[str, np.ndarray] = np.load(
@@ -98,9 +100,6 @@ def main() -> None:
             subplot_titles=titles,
             specs=[[{"type": "mesh3d"} for _ in range(ncols)] for _ in range(nrows)],
         )
-        fig.update_layout(
-            title=f"{args.object_code_and_scale_str} (all)",
-        )
 
         # Adding each element to the main figure
         for i, individual_fig in enumerate(individual_figs):
@@ -108,6 +107,21 @@ def main() -> None:
                 row = (i // ncols) + 1
                 col = (i % ncols) + 1
                 fig.add_trace(trace, row=row, col=col)
+
+        # plotly uses scene, scene2, scene3, ...
+        new_scene_dict = {}
+        for i in range(len(individual_figs)):
+            scene_name = f"scene{i+1}" if i > 0 else "scene"
+            new_scene_dict[scene_name] = {
+                **get_scene_dict(),
+                "camera": get_yup_camera(),
+            }
+
+        fig.update_layout(
+            title=f"{args.object_code_and_scale_str} (all)",
+            showlegend=True,
+            **new_scene_dict,
+        )
     else:
         fig = create_config_dict_fig(
             config_dict=config_dict,

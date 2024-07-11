@@ -8,16 +8,16 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import tyro
-import wandb
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-from wandb.util import generate_id
 
+import wandb
 from get_a_grip import get_data_folder
 from get_a_grip.model_training.models.bps_evaluator_model import BpsEvaluatorModel
 from get_a_grip.model_training.utils.bps_grasp_dataset import BpsGraspEvalDataset
+from wandb.util import generate_id
 
 
 @dataclass
@@ -41,7 +41,7 @@ class TrainBpsEvaluatorModelConfig:
     snapshot_freq: int = 5
     log_path: Path = (
         get_data_folder()
-        / f"logs/bps_evaluator_model/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        / f"trained_models/bps_evaluator_model/{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     )
 
     # wandb
@@ -259,7 +259,7 @@ def _train_multigpu(rank, cfg):
 
 
 def main() -> None:
-    cfg = tyro.cli(TrainBpsEvaluatorModelConfig)
+    cfg = tyro.cli(tyro.conf.FlagConversionOff[TrainBpsEvaluatorModelConfig])
     if cfg.multigpu:
         mp.spawn(_train_multigpu, args=(cfg,), nprocs=cfg.num_gpus, join=True)
     else:

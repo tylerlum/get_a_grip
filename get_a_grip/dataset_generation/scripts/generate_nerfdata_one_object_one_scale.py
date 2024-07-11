@@ -1,4 +1,3 @@
-import os
 import pathlib
 from dataclasses import dataclass
 
@@ -33,7 +32,6 @@ def generate_nerfdata_one_object_one_scale(
     args: GenerateNerfDataOneObjectOneScaleArgs,
 ) -> None:
     set_seed(42)
-    os.environ.pop("CUDA_VISIBLE_DEVICES")
 
     object_code_and_scale_str = object_code_and_scale_to_str(
         args.object_code, args.object_scale
@@ -48,7 +46,6 @@ def generate_nerfdata_one_object_one_scale(
     with loop_timer.add_section_timer("create sim"):
         sim = IsaacValidator(
             gpu=args.gpu,
-            # validation_type=ValidationType.NO_GRAVITY_SHAKING,  # Floating object, no table
             validation_type=ValidationType.GRAVITY_AND_TABLE,  # Object on table
             mode="gui" if args.debug_with_gui else "headless",
         )
@@ -58,7 +55,7 @@ def generate_nerfdata_one_object_one_scale(
         sim.set_obj_asset(
             obj_root=str(args.meshdata_root_path / args.object_code / "coacd"),
             obj_file="coacd.urdf",
-            vhacd_enabled=False,  # Disable vhacd because it should be faster and not needed
+            vhacd_enabled=False,  # Disable vhacd because it should be faster and not needed for nerfdata generation
         )
 
     with loop_timer.add_section_timer("add env"):
@@ -106,7 +103,7 @@ def generate_nerfdata_one_object_one_scale(
 
 
 def main() -> None:
-    args = tyro.cli(GenerateNerfDataOneObjectOneScaleArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[GenerateNerfDataOneObjectOneScaleArgs])
     generate_nerfdata_one_object_one_scale(args)
 
 

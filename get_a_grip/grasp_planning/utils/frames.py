@@ -135,18 +135,15 @@ class GraspMotionPlanningFrames(GraspPlanningFrames):
 
     Frames
     * W: World frame, only used for grasp_motion_planning. The origin is at the robot base with z-up.
-    * N: Nerf frame. For grasp_motion_planning, the origin is defined at <nerf_frame_offset_W> wrt W with z-up
+    * Nz: Nerf frame with z-up. the origin is defined at <nerf_frame_offset_W> wrt W with z-up
 
     Transforms: X_A_B = X_A_C @ X_C_B, p_A = X_A_B @ p_B
-    * X_W_N: N frame wrt W frame. These have the same 0 orientation. The translation is simply the <nerf_frame_offset_W>
+    * X_W_Nz: Nz frame wrt W frame. These have the same 0 orientation. The translation is simply the <nerf_frame_offset_W>
     """
 
     nerf_frame_offset_W_x: float
     nerf_frame_offset_W_y: float
     nerf_frame_offset_W_z: float
-
-    def __post_init__(self):
-        assert self.nerf_is_z_up, "For grasp_motion_planning, nerf_is_z_up must be True"
 
     @property
     def nerf_frame_offset_W(self) -> np.ndarray:
@@ -160,20 +157,33 @@ class GraspMotionPlanningFrames(GraspPlanningFrames):
 
     ############### TRANSLATION START ###############
     @cached_property
-    def X_W_N(self) -> np.ndarray:
-        X_W_N = trimesh.transformations.translation_matrix(self.nerf_frame_offset_W)
-        return X_W_N
+    def X_W_Nz(self) -> np.ndarray:
+        X_W_Nz = trimesh.transformations.translation_matrix(self.nerf_frame_offset_W)
+        return X_W_Nz
+
+    @cached_property
+    def X_Nz_N(self) -> np.ndarray:
+        return (
+            np.eye(4)
+            if self.nerf_is_z_up
+            else trimesh.transformations.rotation_matrix(np.pi / 2, [1, 0, 0])
+        )
 
     ############### TRANSLATION END ###############
 
     ############### FROM O TRANSFORMS START ###############
     @cached_property
+    def X_O_Nz(self) -> np.ndarray:
+        X_N_Nz = np.linalg.inv(self.X_Nz_N)
+        return self.X_O_N @ X_N_Nz
+
+    @cached_property
     def X_O_W(self) -> np.ndarray:
-        X_N_W = np.linalg.inv(self.X_W_N)
-        return self.X_O_N @ X_N_W
+        X_Nz_W = np.linalg.inv(self.X_W_Nz)
+        return self.X_O_Nz @ X_Nz_W
 
     ############### FROM O TRANSFORMS END ###############
 
     @cached_property
     def available_frames(self) -> list:
-        return ["W"] + super().available_frames
+        return ["W", "Nz"] + super().available_frames

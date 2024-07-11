@@ -29,11 +29,11 @@ class FroggerAllArgs:
         "./output_grasp_config_dicts"
     )
     max_time: float = 60.0
-    no_continue: bool = False
+    continue_ok: bool = True
 
 
 def main() -> None:
-    args = tyro.cli(FroggerAllArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[FroggerAllArgs])
 
     # Read in object codes and scales
     if not args.input_object_code_and_scales_txt_path.exists():
@@ -46,7 +46,7 @@ def main() -> None:
         input_object_code_and_scale_strs=input_object_code_and_scale_strs_from_file,
         meshdata_root_path=args.meshdata_root_path,
         output_folder_path=args.output_grasp_config_dicts_path,
-        no_continue=args.no_continue,
+        continue_ok=args.continue_ok,
     )
     assert len(input_object_code_and_scale_strs) > 0
 

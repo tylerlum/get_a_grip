@@ -23,7 +23,7 @@ class VisualizeOptimizationFromWandbArgs:
 
 
 def main() -> None:
-    args = tyro.cli(VisualizeOptimizationFromWandbArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[VisualizeOptimizationFromWandbArgs])
 
     # Specify run
     run_path = f"{args.wandb_entity}/{args.wandb_project}/{args.wandb_run_id}"

@@ -33,6 +33,7 @@ class AugmentGraspConfigDictsArgs:
     joint_pos_rad_max_noise = 0.05
     grasp_orientation_deg_max_noise = 10
 
+    all_mid_optimization_steps: bool = False
     noise_type: Literal["uniform", "normal", "halton"] = "halton"
     debug_plot: bool = False
 
@@ -219,7 +220,6 @@ def add_noise(
     hand_model.set_parameters(hand_pose)
 
     # grasp_orientations
-    # TODO: Update this to use compute_grasp_orientations
     orig_z_dirs = orig_grasp_orientations[:, :, :, 2]
     new_z_dirs = orig_z_dirs[:, None, ...].repeat(N_noisy, axis=1)
     new_z_dirs = add_noise_to_dirs(
@@ -244,18 +244,19 @@ def add_noise(
     return new_data_dict
 
 
-def main() -> None:
-    args = tyro.cli(AugmentGraspConfigDictsArgs)
-    OUTPUT_PATH = args.output_augmented_grasp_config_dicts_path
+def augment_grasp_config_dicts(
+    args: AugmentGraspConfigDictsArgs,
+    input_evaled_grasp_config_dicts_path: pathlib.Path,
+    output_augmented_grasp_config_dicts_path: pathlib.Path,
+) -> None:
+    OUTPUT_PATH = output_augmented_grasp_config_dicts_path
     OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 
     device = "cuda"
     hand_model = HandModel(device=device)
 
     # Step 0: Get all data paths
-    all_data_paths = sorted(
-        list(args.input_evaled_grasp_config_dicts_path.glob("*.npy"))
-    )
+    all_data_paths = sorted(list(input_evaled_grasp_config_dicts_path.glob("*.npy")))
     print(f"Found {len(all_data_paths)} data_paths")
 
     # Step 1: Get obj_to_all_grasps
@@ -406,7 +407,7 @@ def main() -> None:
 
     # Step 5: Save
     for obj, new_dict in tqdm(obj_to_new_grasps.items()):
-        np.save(OUTPUT_PATH / f"{obj}.npy", new_dict)
+        np.save(file=OUTPUT_PATH / f"{obj}.npy", arr=new_dict)
 
     # Step 6: Count
     n_grasps = 0
@@ -415,6 +416,56 @@ def main() -> None:
     print(
         f"n_grasps: {n_grasps} across {len(obj_to_new_grasps)} objects in {OUTPUT_PATH}"
     )
+
+
+def main() -> None:
+    args = tyro.cli(tyro.conf.FlagConversionOff[AugmentGraspConfigDictsArgs])
+
+    print("=" * 80)
+    print(f"args = {args}")
+    print("=" * 80 + "\n")
+
+    augment_grasp_config_dicts(
+        args=args,
+        input_evaled_grasp_config_dicts_path=args.input_evaled_grasp_config_dicts_path,
+        output_augmented_grasp_config_dicts_path=args.output_augmented_grasp_config_dicts_path,
+    )
+
+    if not args.all_mid_optimization_steps:
+        return
+
+    mid_optimization_steps = (
+        sorted(
+            [
+                int(pp.name)
+                for pp in args.input_evaled_grasp_config_dicts_path.glob(
+                    "mid_optimization/*"
+                )
+            ]
+        )
+        if (args.input_evaled_grasp_config_dicts_path / "mid_optimization").exists()
+        else []
+    )
+    print(f"mid_optimization_steps: {mid_optimization_steps}")
+
+    for mid_optimization_step in mid_optimization_steps:
+        print(f"Running mid_optimization_step: {mid_optimization_step}")
+        print("!" * 80 + "\n")
+        mid_optimization_input_path = (
+            args.input_evaled_grasp_config_dicts_path
+            / "mid_optimization"
+            / f"{mid_optimization_step}"
+        )
+        mid_optimization_output_path = (
+            args.output_augmented_grasp_config_dicts_path
+            / "mid_optimization"
+            / f"{mid_optimization_step}"
+        )
+        augment_grasp_config_dicts(
+            args=args,
+            input_evaled_grasp_config_dicts_path=mid_optimization_input_path,
+            output_augmented_grasp_config_dicts_path=mid_optimization_output_path,
+        )
 
 
 if __name__ == "__main__":

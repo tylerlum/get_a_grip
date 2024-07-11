@@ -305,7 +305,9 @@ hand_handle = gym.create_actor(
     envs[IDX], hand_asset, hand_pose, None, IDX, collision_filter
 )
 
-gym.viewer_camera_look_at(viewer, None, gymapi.Vec3(20, 5, 20), gymapi.Vec3(0, 1, 0))
+cam_pos = gymapi.Vec3(-2, 2, 0)
+cam_target = gymapi.Vec3(1.5, 0, 0)
+gym.viewer_camera_look_at(viewer, envs[IDX], cam_pos, cam_target)
 
 # create a local copy of initial state, which we can send back for reset
 initial_state = np.copy(gym.get_sim_rigid_body_states(sim, gymapi.STATE_ALL))

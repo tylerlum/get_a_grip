@@ -3,14 +3,15 @@ from __future__ import annotations
 import multiprocessing
 import pathlib
 import random
-from dataclasses import dataclass, field
+import subprocess
+from dataclasses import dataclass
 from functools import partial
-from typing import List, Optional
+from typing import Optional
 
 import tyro
 from tqdm import tqdm
 
-from get_a_grip import get_data_folder
+from get_a_grip import get_data_folder, get_package_folder
 from get_a_grip.dataset_generation.scripts.eval_grasp_config_dict import (
     EvalGraspConfigDictArgs,
     eval_grasp_config_dict,
@@ -35,52 +36,12 @@ class EvalAllGraspConfigDictsArgs:
     gpu: int = 0
     max_grasps_per_batch: int = 5000
     move_fingers_back_at_init: bool = False
-
     use_cpu: bool = False
+
     randomize_order_seed: Optional[int] = None
-    mid_optimization_steps: List[int] = field(default_factory=list)
+    all_mid_optimization_steps: bool = False
     use_multiprocess: bool = True
     num_workers: int = 3
-
-
-def get_object_code_and_scale_strs_to_process(
-    input_grasp_config_dicts_path: pathlib.Path,
-    output_evaled_grasp_config_dicts_path: pathlib.Path,
-) -> List[str]:
-    input_object_code_and_scale_strs = [
-        path.stem for path in list(input_grasp_config_dicts_path.glob("*.npy"))
-    ]
-    print(
-        f"Found {len(input_object_code_and_scale_strs)} object codes in input_grasp_config_dicts_path ({input_grasp_config_dicts_path})"
-    )
-
-    # Compare input and output directories
-    existing_object_code_and_scale_strs = (
-        [
-            path.stem
-            for path in list(output_evaled_grasp_config_dicts_path.glob("*.npy"))
-        ]
-        if output_evaled_grasp_config_dicts_path.exists()
-        else []
-    )
-    print(
-        f"Found {len(existing_object_code_and_scale_strs)} object codes in {output_evaled_grasp_config_dicts_path}"
-    )
-
-    # Sanity check that we are going into the right folder
-    only_in_output = set(existing_object_code_and_scale_strs) - set(
-        input_object_code_and_scale_strs
-    )
-    print(f"Num only in output: {len(only_in_output)}")
-    assert len(only_in_output) == 0, f"Object codes only in output: {only_in_output}"
-
-    # Don't redo old work
-    only_in_input = set(input_object_code_and_scale_strs) - set(
-        existing_object_code_and_scale_strs
-    )
-    print(f"Num codes only in input: {len(only_in_input)}")
-
-    return list(only_in_input)
 
 
 def run_eval_grasp_config_dict(
@@ -109,6 +70,39 @@ def run_eval_grasp_config_dict(
         print(f"Skipping {object_code_and_scale_str} and continuing")
 
 
+def run_eval_grasp_config_dict_multiprocess(
+    object_code_and_scale_str: str,
+    args: EvalAllGraspConfigDictsArgs,
+    input_grasp_config_dicts_path: pathlib.Path,
+    output_evaled_grasp_config_dicts_path: pathlib.Path,
+):
+    # HACK: Should do the same thing as run_eval_grasp_config_dict
+    # However, cannot start multiple isaacgym instances unless use subprocess
+    # This code is more brittle because the strings cannot be auto-updated if we rename
+    script_path = (
+        get_package_folder() / "dataset_generation/scripts/eval_grasp_config_dict.py"
+    )
+    assert script_path.exists(), f"Script path {script_path} doesn't exist"
+    command = (
+        f"python {script_path} "
+        + f"--meshdata_root_path {args.meshdata_root_path} "
+        + f"--input_grasp_config_dicts_path {input_grasp_config_dicts_path} "
+        + f"--output_evaled_grasp_config_dicts_path {output_evaled_grasp_config_dicts_path} "
+        + f"--object_code_and_scale_str {object_code_and_scale_str} "
+        + f"--validation_type {args.validation_type} "
+        + f"--num_random_pose_noise_samples_per_grasp {args.num_random_pose_noise_samples_per_grasp} "
+        + f"--gpu {args.gpu} "
+        + f"--max_grasps_per_batch {args.max_grasps_per_batch} "
+        + f"--move_fingers_back_at_init {args.move_fingers_back_at_init} "
+        + f"--use_cpu {args.use_cpu}"
+    )
+    try:
+        subprocess.run(command, shell=True, check=True)
+    except Exception as e:
+        print(f"Exception: {e}")
+        print(f"Skipping {object_code_and_scale_str} and continuing")
+
+
 def eval_all_grasp_config_dicts(
     args: EvalAllGraspConfigDictsArgs,
     input_grasp_config_dicts_path: pathlib.Path,
@@ -122,7 +116,7 @@ def eval_all_grasp_config_dicts(
         input_object_code_and_scale_strs=input_object_code_and_scale_strs_from_folder,
         meshdata_root_path=args.meshdata_root_path,
         output_folder_path=output_evaled_grasp_config_dicts_path,
-        no_continue=False,
+        continue_ok=True,
     )
 
     if args.randomize_order_seed is not None:
@@ -134,7 +128,7 @@ def eval_all_grasp_config_dicts(
     print(f"First 10 object codes: {input_object_code_and_scale_strs[:10]}")
 
     map_fn = partial(
-        run_eval_grasp_config_dict,
+        run_eval_grasp_config_dict_multiprocess,
         args=args,
         input_grasp_config_dicts_path=input_grasp_config_dicts_path,
         output_evaled_grasp_config_dicts_path=output_evaled_grasp_config_dicts_path,
@@ -160,7 +154,7 @@ def eval_all_grasp_config_dicts(
 
 
 def main() -> None:
-    args = tyro.cli(EvalAllGraspConfigDictsArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[EvalAllGraspConfigDictsArgs])
     print("=" * 80)
     print(f"args = {args}")
     print("=" * 80 + "\n")
@@ -171,24 +165,38 @@ def main() -> None:
         output_evaled_grasp_config_dicts_path=args.output_evaled_grasp_config_dicts_path,
     )
 
-    for mid_optimization_step in args.mid_optimization_steps:
-        print("!" * 80)
+    if not args.all_mid_optimization_steps:
+        return
+
+    mid_optimization_steps = (
+        sorted(
+            [
+                int(pp.name)
+                for pp in args.input_grasp_config_dicts_path.glob("mid_optimization/*")
+            ]
+        )
+        if (args.input_grasp_config_dicts_path / "mid_optimization").exists()
+        else []
+    )
+    print(f"mid_optimization_steps: {mid_optimization_steps}")
+
+    for mid_optimization_step in mid_optimization_steps:
         print(f"Running mid_optimization_step: {mid_optimization_step}")
         print("!" * 80 + "\n")
-        mid_optimization_input_grasp_config_dicts_path = (
+        mid_optimization_input_path = (
             args.input_grasp_config_dicts_path
             / "mid_optimization"
             / f"{mid_optimization_step}"
         )
-        mid_optimization_output_grasp_config_dicts_path = (
+        mid_optimization_output_path = (
             args.output_evaled_grasp_config_dicts_path
             / "mid_optimization"
             / f"{mid_optimization_step}"
         )
         eval_all_grasp_config_dicts(
             args=args,
-            input_grasp_config_dicts_path=mid_optimization_input_grasp_config_dicts_path,
-            output_evaled_grasp_config_dicts_path=mid_optimization_output_grasp_config_dicts_path,
+            input_grasp_config_dicts_path=mid_optimization_input_path,
+            output_evaled_grasp_config_dicts_path=mid_optimization_output_path,
         )
 
 

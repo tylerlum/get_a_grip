@@ -82,7 +82,9 @@ else:
 
 
 # %%
-cfg = tyro.cli(VisualizeBpsGraspDatasetConfig, args=arguments)
+cfg = tyro.cli(
+    tyro.conf.FlagConversionOff[VisualizeBpsGraspDatasetConfig], args=arguments
+)
 print("=" * 80)
 print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
 print("=" * 80 + "\n")

@@ -1,97 +1,90 @@
 import pathlib
 from dataclasses import dataclass
-from typing import Literal, Optional
 
 import tyro
 from tqdm import tqdm
 
-from get_a_grip.grasp_planning.utils import bps_sampler_utils
+from get_a_grip import get_data_folder
+from get_a_grip.grasp_planning.config.evaluator_config import NerfEvaluatorConfig
+from get_a_grip.grasp_planning.config.optimizer_config import (
+    NerfRandomSamplingOptimizerConfig,
+)
+from get_a_grip.grasp_planning.config.planner_config import PlannerConfig
+from get_a_grip.grasp_planning.config.sampler_config import BpsSamplerConfig
+from get_a_grip.grasp_planning.scripts.run_grasp_planning import (
+    GraspPlanningArgs,
+    run_grasp_planning,
+)
+from get_a_grip.grasp_planning.utils.nerf_args import NerfArgs
 from get_a_grip.model_training.utils.nerf_load_utils import (
-    get_nerf_configs_through_symlinks,
+    get_nerf_configs,
 )
 
 
 @dataclass
-class CommandlineArgs:
-    output_folder: pathlib.Path
-    ckpt_path: pathlib.Path = pathlib.Path(
-        "/juno/u/tylerlum/github_repos/nerf_grasping/2024-06-03_ALBERT_DexDiffuser_models/ckpt_final.pth"
-    )
-    nerfdatas_path: Optional[pathlib.Path] = None
-    nerfcheckpoints_path: Optional[pathlib.Path] = None
-    num_grasps: int = 32
-    max_num_iterations: int = 400
-    overwrite: bool = False
-
-    nerf_evaluator_config_path: pathlib.Path = pathlib.Path(
-        "/juno/u/tylerlum/github_repos/nerf_grasping/Train_DexGraspNet_NeRF_Grasp_Metric_workspaces/2024-06-02_FINAL_LABELED_GRASPS_NOISE_AND_NONOISE_cnn-3d-xyz-global-cnn-cropped_CONTINUE/config.yaml"
-    )
-    optimizer_type: Literal["sgd", "random-sampling"] = "random-sampling"
-    num_steps: int = 50
-    n_random_rotations_per_grasp: int = 0
-    eval_batch_size: int = 32
+class Args:
+    bps_sampler_ckpt_path: pathlib.Path
+    nerf_evaluator_model_config_path: pathlib.Path
+    nerfcheckpoints_path: pathlib.Path
+    output_folder: pathlib.Path = get_data_folder() / "sim_eval_script_outputs"
 
     def __post_init__(self) -> None:
-        if self.nerfdatas_path is not None and self.nerfcheckpoints_path is None:
-            assert self.nerfdatas_path.exists(), f"{self.nerfdatas_path} does not exist"
-        elif self.nerfdatas_path is None and self.nerfcheckpoints_path is not None:
-            assert (
-                self.nerfcheckpoints_path.exists()
-            ), f"{self.nerfcheckpoints_path} does not exist"
-        else:
-            raise ValueError(
-                "Exactly one of nerfdatas_path or nerfcheckpoints_path must be specified"
-            )
+        assert (
+            self.bps_sampler_ckpt_path.exists()
+        ), f"{self.bps_sampler_ckpt_path} does not exist"
+        assert self.bps_sampler_ckpt_path.suffix in [
+            ".pt",
+            ".pth",
+        ], f"{self.bps_sampler_ckpt_path} does not have a .pt or .pth suffix"
+        assert (
+            self.nerf_evaluator_model_config_path.exists()
+        ), f"{self.nerf_evaluator_model_config_path} does not exist"
+        assert (
+            self.nerf_evaluator_model_config_path.suffix
+            in [
+                ".yml",
+                ".yaml",
+            ]
+        ), f"{self.nerf_evaluator_model_config_path} does not have a .yml or .yaml suffix"
+        assert (
+            self.nerfcheckpoints_path.exists()
+        ), f"{self.nerfcheckpoints_path} does not exist"
 
 
 def main() -> None:
-    args = tyro.cli(CommandlineArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[Args])
 
-    if args.nerfdatas_path is not None:
-        nerfdata_paths = sorted(list(args.nerfdatas_path.iterdir()))
-        print(f"Found {len(nerfdata_paths)} nerfdata paths")
-        for nerfdata_path in tqdm(nerfdata_paths, desc="nerfdata_paths"):
-            bps_sampler_utils.run_bps_sampler_sim_eval(
-                args=bps_sampler_utils.CommandlineArgs(
-                    output_folder=args.output_folder,
-                    ckpt_path=args.ckpt_path,
-                    nerfdata_path=nerfdata_path,
-                    nerf_config=None,
-                    num_grasps=args.num_grasps,
-                    max_num_iterations=args.max_num_iterations,
-                    overwrite=args.overwrite,
-                    optimize=True,
-                    nerf_evaluator_config_path=args.nerf_evaluator_config_path,
-                    optimizer_type=args.optimizer_type,
-                    num_steps=args.num_steps,
-                    n_random_rotations_per_grasp=args.n_random_rotations_per_grasp,
-                    eval_batch_size=args.eval_batch_size,
-                )
-            )
-    elif args.nerfcheckpoints_path is not None:
-        nerf_configs = get_nerf_configs_through_symlinks(args.nerfcheckpoints_path)
-        print(f"Found {len(nerf_configs)} NERF configs")
-        for nerf_config in tqdm(nerf_configs, desc="nerf_configs"):
-            bps_sampler_utils.run_bps_sampler_sim_eval(
-                args=bps_sampler_utils.CommandlineArgs(
-                    output_folder=args.output_folder,
-                    ckpt_path=args.ckpt_path,
-                    nerfdata_path=None,
+    nerf_configs = get_nerf_configs(args.nerfcheckpoints_path)
+    assert (
+        len(nerf_configs) > 0
+    ), f"No NERF configs found in {args.nerfcheckpoints_path}"
+    print(f"Found {len(nerf_configs)} NERF configs")
+
+    # Set up the config
+    planner_cfg = PlannerConfig(
+        sampler=BpsSamplerConfig(
+            ckpt_path=args.bps_sampler_ckpt_path,
+            num_grasps=500,
+        ),
+        evaluator=NerfEvaluatorConfig(
+            nerf_evaluator_model_config_path=args.nerf_evaluator_model_config_path,
+        ),
+        optimizer=NerfRandomSamplingOptimizerConfig(
+            num_grasps=5,
+        ),
+    )
+
+    for nerf_config in tqdm(nerf_configs, desc="nerf_configs"):
+        run_grasp_planning(
+            GraspPlanningArgs(
+                nerf=NerfArgs(
+                    nerf_is_z_up=False,
                     nerf_config=nerf_config,
-                    num_grasps=args.num_grasps,
-                    max_num_iterations=args.max_num_iterations,
-                    overwrite=args.overwrite,
-                    optimize=True,
-                    nerf_evaluator_config_path=args.nerf_evaluator_config_path,
-                    optimizer_type=args.optimizer_type,
-                    num_steps=args.num_steps,
-                    n_random_rotations_per_grasp=args.n_random_rotations_per_grasp,
-                    eval_batch_size=args.eval_batch_size,
-                )
+                ),
+                planner=planner_cfg,
+                output_folder=args.output_folder,
+                overwrite=True,
             )
-    else:
-        raise ValueError(
-            "Exactly one of nerfdatas_path or nerfcheckpoints_path must be specified"
         )
 
 

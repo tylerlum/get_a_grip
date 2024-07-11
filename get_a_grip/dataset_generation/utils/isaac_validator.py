@@ -52,6 +52,9 @@ CAMERA_VERTICAL_FOV_DEG = (
 OBJ_SEGMENTATION_ID = 1
 TABLE_SEGMENTATION_ID = 2
 
+
+CAM_TARGET = gymapi.Vec3(0, 0.1, 0)
+CAM_POS = CAM_TARGET + gymapi.Vec3(0.3, 0.3, 0.0)
 ISAAC_DATETIME_STR = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 
@@ -108,16 +111,13 @@ def get_link_idx_to_name_dict(env, actor_handle) -> Dict[int, str]:
     return link_idx_to_name_dict
 
 
-class AutoName(Enum):
-    # https://docs.python.org/3.9/library/enum.html#using-automatic-values
-    def _generate_next_value_(name, start, count, last_values):
-        return name
-
-
-class ValidationType(AutoName):
-    NO_GRAVITY_SHAKING = auto()
+class ValidationType(Enum):
     GRAVITY_AND_TABLE = auto()
     GRAVITY_AND_TABLE_AND_SHAKING = auto()
+    NO_GRAVITY_SHAKING = auto()
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class IsaacValidator:
@@ -126,7 +126,7 @@ class IsaacValidator:
         mode: str = "headless",
         gpu: int = 0,
         start_with_step_mode: bool = False,
-        validation_type: ValidationType = ValidationType.NO_GRAVITY_SHAKING,
+        validation_type: ValidationType = ValidationType.GRAVITY_AND_TABLE,
         use_cpu: bool = True,
     ) -> None:
         self.gpu = gpu
@@ -141,7 +141,7 @@ class IsaacValidator:
         self.hand_root = str(get_assets_folder())
         self.hand_file = ALLEGRO_HAND_ROOT_HAND_FILE_WITH_VIRTUAL_JOINTS
 
-        # HACK: Hardcoded virtual joint names
+        # BRITTLE: Hardcoded virtual joint names to match the urdf
         self.virtual_joint_names = [
             "virtual_joint_translation_x",
             "virtual_joint_translation_y",
@@ -152,13 +152,13 @@ class IsaacValidator:
         ]
 
         # Try to keep num_sim_steps as small as possible to save sim time, but not so short to not lift and shake well
-        if self.validation_type == ValidationType.NO_GRAVITY_SHAKING:
-            self.num_sim_steps = 200
-        elif self.validation_type == ValidationType.GRAVITY_AND_TABLE:
+        if self.validation_type == ValidationType.GRAVITY_AND_TABLE:
             self.num_sim_steps = 200
         elif self.validation_type == ValidationType.GRAVITY_AND_TABLE_AND_SHAKING:
             # Need more steps to shake
             self.num_sim_steps = 400
+        elif self.validation_type == ValidationType.NO_GRAVITY_SHAKING:
+            self.num_sim_steps = 200
         else:
             raise ValueError(f"Unknown validation type: {validation_type}")
 
@@ -194,18 +194,14 @@ class IsaacValidator:
         self.camera_props = gymapi.CameraProperties()
         self.camera_props.width = 800
         self.camera_props.height = 600
-        self.camera_props.use_collision_geometry = (
-            True  # TODO: Maybe change this to see true visual
-        )
+        self.camera_props.use_collision_geometry = True
 
         # set viewer
         self.viewer = None
         if mode == "gui":
             self.has_viewer = True
             self.viewer = gym.create_viewer(self.sim, self.camera_props)
-            gym.viewer_camera_look_at(
-                self.viewer, None, gymapi.Vec3(0, 0, 1), gymapi.Vec3(0, 0, 0)
-            )
+            gym.viewer_camera_look_at(self.viewer, None, CAM_POS, CAM_TARGET)
             self.subscribe_to_keyboard_events()
         else:
             self.has_viewer = False
@@ -227,13 +223,13 @@ class IsaacValidator:
         self.obj_asset_options.override_inertia = True
         self.obj_asset_options.density = 500
 
-        if self.validation_type == ValidationType.NO_GRAVITY_SHAKING:
-            self.obj_asset_options.disable_gravity = True
-        elif self.validation_type in [
+        if self.validation_type in [
             ValidationType.GRAVITY_AND_TABLE,
             ValidationType.GRAVITY_AND_TABLE_AND_SHAKING,
         ]:
             self.obj_asset_options.disable_gravity = False
+        elif self.validation_type == ValidationType.NO_GRAVITY_SHAKING:
+            self.obj_asset_options.disable_gravity = True
         else:
             raise ValueError(f"Unknown validation type: {validation_type}")
 
@@ -289,16 +285,7 @@ class IsaacValidator:
             add_random_pose_noise=add_random_pose_noise,
         )
 
-        if self.validation_type == ValidationType.NO_GRAVITY_SHAKING:
-            obj_pose = gymapi.Transform()
-
-            self._setup_obj(
-                env,
-                obj_pose=obj_pose,
-                obj_scale=obj_scale,
-                collision_idx=collision_idx,
-            )
-        elif self.validation_type in [
+        if self.validation_type in [
             ValidationType.GRAVITY_AND_TABLE,
             ValidationType.GRAVITY_AND_TABLE_AND_SHAKING,
         ]:
@@ -314,6 +301,15 @@ class IsaacValidator:
                 env=env,
                 collision_idx=collision_idx,
             )
+        elif self.validation_type == ValidationType.NO_GRAVITY_SHAKING:
+            obj_pose = gymapi.Transform()
+
+            self._setup_obj(
+                env,
+                obj_pose=obj_pose,
+                obj_scale=obj_scale,
+                collision_idx=collision_idx,
+            )
         else:
             raise ValueError(f"Unknown validation type: {self.validation_type}")
 
@@ -323,15 +319,16 @@ class IsaacValidator:
     def _compute_init_obj_pose_above_table(self, obj_scale: float) -> gymapi.Transform:
         USE_HARDCODED_MAX_EXTENT = False
         if USE_HARDCODED_MAX_EXTENT:
-            # All objs are assumed to be centered in a bounding box, with the max width being 2.0m (unscaled)
+            # In this method, all objs are assumed to be centered in a bounding box, with the max width being 2.0m (unscaled)
             # Thus max extent from origin is 1.0m (unscaled)
             # So we want to place the obj above the table a bit more then rescale
-            # TODO: Make this better by reading bounding box
             OBJ_MAX_EXTENT_FROM_ORIGIN = 1.0
             BUFFER_SCALE = 1.2
             y_above_table = OBJ_MAX_EXTENT_FROM_ORIGIN * obj_scale * BUFFER_SCALE
         else:
+            # Read in object mesh, use bounding box to place the object above the table with small gap
             assert self.obj_root is not None
+
             assert self.obj_file is not None
             obj_root = pathlib.Path(self.obj_root)
             assert obj_root.exists()
@@ -471,8 +468,6 @@ class IsaacValidator:
 
         # Set hand dof props
         hand_props = gym.get_actor_dof_properties(env, hand_actor_handle)
-
-        # TODO: Consider making finger joints pos controlled and virtual joints vel controlled
         hand_props["driveMode"].fill(gymapi.DOF_MODE_POS)
 
         # Finger joints
@@ -866,15 +861,15 @@ class IsaacValidator:
 
         while sim_step_idx < self.num_sim_steps:
             # Phase 1: Do nothing, hand far away
-            #   * For NO_GRAVITY_SHAKING: object should stay in place
             #   * For GRAVITY_AND_TABLE and GRAVITY_AND_TABLE_AND_SHAKING: object should fall to table and settle
+            #   * For NO_GRAVITY_SHAKING: object should stay in place
             # Phase 2: Move hand to object
-            #   * For NO_GRAVITY_SHAKING: check if hand collides with object
             #   * For GRAVITY_AND_TABLE and GRAVITY_AND_TABLE_AND_SHAKING: check if hand collides with object AND if hand collides with table
+            #   * For NO_GRAVITY_SHAKING: check if hand collides with object
             # Phase 3: Close hand
             # Phase 4: Shake hand
-            #   * For NO_GRAVITY_SHAKING: shake from this position
             #   * For GRAVITY_AND_TABLE and GRAVITY_AND_TABLE_AND_SHAKING: lift from table first, then shake
+            #   * For NO_GRAVITY_SHAKING: shake from this position
             PHASE_1_LAST_STEP = (
                 50  # From analysis, takes about 40 steps for ball to settle
             )
@@ -953,7 +948,7 @@ class IsaacValidator:
                             video_frame_rgba, np.ndarray
                         ), f"{type(video_frame_rgba)}"
                         video_frame = video_frame_rgba[:, :, :3]
-                        self.video_frames[ii].append(video_frame)
+                        self.env_to_video_frames[ii].append(video_frame)
 
                 sim_step_idx += 1
                 pbar.update(1)
@@ -986,12 +981,16 @@ class IsaacValidator:
 
                 # Update progress bar text
                 desc = default_desc
-                desc += ". 'KEY_SPACE' = toggle pause. 'KEY_S' = toggle step mode"
-                if self.is_paused:
-                    desc += ". Paused"
                 if self.is_step_mode:
-                    desc += ". Step mode on"
+                    desc += ". STEP MODE: Press SPACE to take 1 sim step"
+                else:
+                    desc += ". NORMAL MODE: Press SPACE to toggle pause"
+                desc += ". Press S to toggle step mode"
+                if self.is_paused:
+                    desc += ". (Paused)"
                 pbar.set_description(desc)
+
+        assert object_states_before_grasp is not None
 
         return (
             hand_not_penetrate_object_list,
@@ -1076,7 +1075,7 @@ class IsaacValidator:
         assert_equals(len(envs), len(actors))
         actor_indices = torch_utils.to_torch(
             [
-                gym.get_actor_index(env, actor, gymapi.DOMAIN_SIM)  # type: ignore
+                gym.get_actor_index(env, actor, gymapi.DOMAIN_SIM)
                 for env, actor in zip(envs, actors)
             ],
             dtype=torch.long,
@@ -1101,7 +1100,7 @@ class IsaacValidator:
 
     ########## VIDEO START ##########
     def _setup_camera(self, env) -> None:
-        camera_properties = gymapi.CameraProperties()  # type: ignore
+        camera_properties = gymapi.CameraProperties()
 
         camera_properties.width = int(
             CAMERA_IMG_WIDTH / RESOLUTION_REDUCTION_FACTOR_TO_SAVE_SPACE
@@ -1119,12 +1118,7 @@ class IsaacValidator:
 
         self.camera_envs.append(env)
 
-        cam_target = gymapi.Vec3(0, 0.1, 0)  # type: ignore  # where object s
-
-        cam_pos = cam_target + gymapi.Vec3(0.3, 0.3, 0.0)  # Define offset
-
-        self.video_frames.append([])
-        gym.set_camera_location(camera_handle, env, cam_pos, cam_target)
+        gym.set_camera_location(camera_handle, env, CAM_POS, CAM_TARGET)
 
     def _save_video_if_needed(self) -> None:
         if self.camera_handles:
@@ -1132,18 +1126,18 @@ class IsaacValidator:
                 video_path = pathlib.Path(f"videos/{ISAAC_DATETIME_STR}_video_{ii}.mp4")
                 if not video_path.parent.exists():
                     video_path.parent.mkdir(parents=True)
-                print(f"Rendering camera {ii} to video at path {video_path}.")
+                print(
+                    f"Rendering camera {ii} to video at path {video_path} with {len(self.env_to_video_frames[ii])} frames."
+                )
                 self._render_video(
-                    video_frames=self.video_frames[ii],
+                    video_frames=self.env_to_video_frames[ii],
                     video_path=video_path,
                     fps=int(1 / self.sim_params.dt),
                 )
-                print(f"Done rendering camera {ii}.")
 
     def _render_video(
         self, video_frames: List[np.ndarray], video_path: pathlib.Path, fps: int
     ):
-        print(f"number of frames: {len(video_frames)}")
         imageio.v3.imwrite(uri=video_path, image=video_frames, fps=fps, codec="libx264")
 
     ########## VIDEO END ##########
@@ -1160,17 +1154,7 @@ class IsaacValidator:
         # Set dof pos targets [+x, -x]*N, 0, [+y, -y]*N, 0, [+z, -z]*N
         dist_to_move = 0.03
         N_SHAKES = 1
-        if self.validation_type == ValidationType.NO_GRAVITY_SHAKING:
-            targets_sequence = [
-                *([[dist_to_move, 0.0, 0.0], [-dist_to_move, 0.0, 0.0]] * N_SHAKES),
-                [0.0, 0.0, 0.0],
-                *([[0.0, dist_to_move, 0.0], [0.0, -dist_to_move, 0.0]] * N_SHAKES),
-                [0.0, 0.0, 0.0],
-                *([[0.0, 0.0, dist_to_move], [0.0, 0.0, -dist_to_move]] * N_SHAKES),
-                [0.0, 0.0, 0.0],
-                [0.0, 0.0, 0.0],
-            ]
-        elif self.validation_type in [
+        if self.validation_type in [
             ValidationType.GRAVITY_AND_TABLE,
             ValidationType.GRAVITY_AND_TABLE_AND_SHAKING,
         ]:
@@ -1240,6 +1224,16 @@ class IsaacValidator:
             targets_sequence = [
                 [target[0], target[1] + Y_LIFT, target[2]]
                 for target in targets_sequence
+            ]
+        elif self.validation_type == ValidationType.NO_GRAVITY_SHAKING:
+            targets_sequence = [
+                *([[dist_to_move, 0.0, 0.0], [-dist_to_move, 0.0, 0.0]] * N_SHAKES),
+                [0.0, 0.0, 0.0],
+                *([[0.0, dist_to_move, 0.0], [0.0, -dist_to_move, 0.0]] * N_SHAKES),
+                [0.0, 0.0, 0.0],
+                *([[0.0, 0.0, dist_to_move], [0.0, 0.0, -dist_to_move]] * N_SHAKES),
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
             ]
         else:
             raise ValueError(f"Unknown validation_type: {self.validation_type}")
@@ -1464,7 +1458,7 @@ class IsaacValidator:
         self.camera_handles = []
         self.camera_envs = []
         self.camera_properties_list = []
-        self.video_frames = []
+        self.env_to_video_frames = defaultdict(list)
         self.obj_asset = None
         self.obj_root = None
         self.obj_file = None
@@ -1513,20 +1507,11 @@ class IsaacValidator:
             self.sim,
             gymapi.Vec3(-spacing, -spacing, 0.0),
             gymapi.Vec3(spacing, spacing, spacing),
-            0,  # TODO: Should it be 0?
+            0,
         )
         self.envs.append(env)
 
-        if self.validation_type == ValidationType.NO_GRAVITY_SHAKING:
-            obj_pose = gymapi.Transform()
-
-            self._setup_obj(
-                env,
-                obj_pose=obj_pose,
-                obj_scale=obj_scale,
-                collision_idx=0,
-            )
-        elif self.validation_type in [
+        if self.validation_type in [
             ValidationType.GRAVITY_AND_TABLE,
             ValidationType.GRAVITY_AND_TABLE_AND_SHAKING,
         ]:
@@ -1540,6 +1525,15 @@ class IsaacValidator:
             )
             self._setup_table(
                 env=env,
+                collision_idx=0,
+            )
+        elif self.validation_type == ValidationType.NO_GRAVITY_SHAKING:
+            obj_pose = gymapi.Transform()
+
+            self._setup_obj(
+                env,
+                obj_pose=obj_pose,
+                obj_scale=obj_scale,
                 collision_idx=0,
             )
         else:
@@ -1733,7 +1727,7 @@ class IsaacValidator:
                 CAMERA_IMG_HEIGHT, CAMERA_IMG_WIDTH
             )
             if numpy_depth:
-                np.save(path / f"dep_{ii}.npy", depth_image)
+                np.save(file=path / f"dep_{ii}.npy", arr=depth_image)
             else:
                 depth_image = (depth_image).astype(np.uint8)
                 Image.fromarray(depth_image).convert("L").save(path / f"dep_{ii}.png")

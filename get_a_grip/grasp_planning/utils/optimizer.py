@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Tuple, Union
+from typing import Tuple
 
 import numpy as np
 import pypose as pp
@@ -13,108 +12,9 @@ from tqdm import tqdm
 from get_a_grip.grasp_planning.utils.allegro_grasp_config import AllegroGraspConfig
 from get_a_grip.grasp_planning.utils.evaluator import (
     BpsEvaluator,
-    Evaluator,
     NerfEvaluator,
 )
 from get_a_grip.grasp_planning.utils.joint_limit_utils import get_joint_limits
-
-
-@dataclass
-class OptimizerConfig(ABC):
-    num_grasps: int = 32
-
-    @abstractmethod
-    def create(self, evaluator: Evaluator) -> Optimizer:
-        raise NotImplementedError
-
-
-@dataclass
-class BpsRandomSamplingOptimizerConfig(OptimizerConfig):
-    num_steps: int = 100
-    trans_noise: float = 0.005
-    rot_noise: float = 0.05
-    joint_angle_noise: float = 0.01
-    grasp_orientation_noise: float = 0.05
-
-    def create(self, evaluator: Evaluator) -> Optimizer:
-        assert isinstance(evaluator, BpsEvaluator), f"{evaluator} is not a BpsEvaluator"
-        return BpsRandomSamplingOptimizer(
-            bps_evaluator=evaluator,
-            num_grasps=self.num_grasps,
-            num_steps=self.num_steps,
-            trans_noise=self.trans_noise,
-            rot_noise=self.rot_noise,
-            joint_angle_noise=self.joint_angle_noise,
-            grasp_orientation_noise=self.grasp_orientation_noise,
-        )
-
-
-@dataclass
-class NerfRandomSamplingOptimizerConfig(OptimizerConfig):
-    num_steps: int = 100
-    trans_noise: float = 0.005
-    rot_noise: float = 0.05
-    joint_angle_noise: float = 0.1
-    grasp_orientation_noise: float = 0.05
-
-    def create(self, evaluator: Evaluator) -> Optimizer:
-        assert isinstance(
-            evaluator, NerfEvaluator
-        ), f"{evaluator} is not a NerfEvaluator"
-        return NerfRandomSamplingOptimizer(
-            nerf_evaluator=evaluator,
-            num_grasps=self.num_grasps,
-            num_steps=self.num_steps,
-            trans_noise=self.trans_noise,
-            rot_noise=self.rot_noise,
-            joint_angle_noise=self.joint_angle_noise,
-            grasp_orientation_noise=self.grasp_orientation_noise,
-        )
-
-
-@dataclass
-class NerfGradientOptimizerConfig(OptimizerConfig):
-    num_steps: int = 100
-    finger_lr: float = 1e-4
-    grasp_dir_lr: float = 1e-4
-    wrist_lr: float = 1e-4
-    momentum: float = 0.9
-    opt_fingers: bool = True
-    opt_grasp_dirs: bool = True
-    opt_wrist_pose: bool = True
-    use_adamw: bool = True
-
-    def create(self, evaluator: Evaluator) -> Optimizer:
-        assert isinstance(
-            evaluator, NerfEvaluator
-        ), f"{evaluator} is not a NerfEvaluator"
-        return NerfGradientOptimizer(
-            nerf_evaluator=evaluator,
-            num_grasps=self.num_grasps,
-            num_steps=self.num_steps,
-            finger_lr=self.finger_lr,
-            grasp_dir_lr=self.grasp_dir_lr,
-            wrist_lr=self.wrist_lr,
-            momentum=self.momentum,
-            opt_fingers=self.opt_fingers,
-            opt_grasp_dirs=self.opt_grasp_dirs,
-            opt_wrist_pose=self.opt_wrist_pose,
-            use_adamw=self.use_adamw,
-        )
-
-
-@dataclass
-class NoOptimizerConfig(OptimizerConfig):
-    def create(self, evaluator: Evaluator) -> Optimizer:
-        return NoOptimizer(num_grasps=self.num_grasps)
-
-
-OptimizerConfigUnion = Union[
-    BpsRandomSamplingOptimizerConfig,
-    NerfRandomSamplingOptimizerConfig,
-    NerfGradientOptimizerConfig,
-    NoOptimizerConfig,
-]
 
 
 class Optimizer(ABC):
@@ -154,6 +54,7 @@ class BpsRandomSamplingOptimizer(Optimizer):
     def n_optimized_grasps(self) -> int:
         return self.num_grasps
 
+    @torch.no_grad()
     def optimize(
         self, grasp_config: AllegroGraspConfig
     ) -> Tuple[AllegroGraspConfig, torch.Tensor]:
@@ -190,6 +91,7 @@ class BpsRandomSamplingOptimizer(Optimizer):
         )
         return grasp_config, losses
 
+    @torch.no_grad()
     def _step(self, grasps: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         B = grasps.shape[0]
         assert grasps.shape == (B, 3 + 6 + 16 + 4 * 3)
@@ -339,6 +241,7 @@ class NerfRandomSamplingOptimizer(Optimizer):
     def n_optimized_grasps(self) -> int:
         return self.num_grasps
 
+    @torch.no_grad()
     def optimize(
         self, grasp_config: AllegroGraspConfig
     ) -> Tuple[AllegroGraspConfig, torch.Tensor]:
@@ -359,6 +262,7 @@ class NerfRandomSamplingOptimizer(Optimizer):
             grasp_config, losses = self._step(grasp_config)
         return grasp_config, losses
 
+    @torch.no_grad()
     def _step(
         self, grasp_config: AllegroGraspConfig
     ) -> Tuple[AllegroGraspConfig, torch.Tensor]:
@@ -456,7 +360,9 @@ class NerfGradientOptimizer(nn.Module, Optimizer):
         opt_grasp_dirs: bool,
         opt_wrist_pose: bool,
         use_adamw: bool,
+        print_freq: int = 10,
     ) -> None:
+        super().__init__()
         self.nerf_evaluator = nerf_evaluator
         self.num_grasps = num_grasps
         self.num_steps = num_steps
@@ -468,8 +374,17 @@ class NerfGradientOptimizer(nn.Module, Optimizer):
         self.opt_grasp_dirs = opt_grasp_dirs
         self.opt_wrist_pose = opt_wrist_pose
         self.use_adamw = use_adamw
+        self.print_freq = print_freq
 
-        USE_ADAMW = True
+    @property
+    def n_optimized_grasps(self) -> int:
+        return self.num_grasps
+
+    def optimize(
+        self, grasp_config: AllegroGraspConfig
+    ) -> Tuple[AllegroGraspConfig, torch.Tensor]:
+        self.grasp_config = grasp_config
+
         if self.opt_fingers:
             self.joint_optimizer = (
                 torch.optim.SGD(
@@ -477,7 +392,7 @@ class NerfGradientOptimizer(nn.Module, Optimizer):
                     lr=self.finger_lr,
                     momentum=self.momentum,
                 )
-                if not USE_ADAMW
+                if not self.use_adamw
                 else torch.optim.AdamW(
                     [self.grasp_config.joint_angles],
                     lr=self.finger_lr,
@@ -491,7 +406,7 @@ class NerfGradientOptimizer(nn.Module, Optimizer):
                     lr=self.wrist_lr,
                     momentum=self.momentum,
                 )
-                if not USE_ADAMW
+                if not self.use_adamw
                 else torch.optim.AdamW(
                     [self.grasp_config.wrist_pose],
                     lr=self.wrist_lr,
@@ -505,48 +420,41 @@ class NerfGradientOptimizer(nn.Module, Optimizer):
                     lr=self.grasp_dir_lr,
                     momentum=self.momentum,
                 )
-                if not USE_ADAMW
+                if not self.use_adamw
                 else torch.optim.AdamW(
                     [self.grasp_config.grasp_orientations],
                     lr=self.grasp_dir_lr,
                 )
             )
 
-    @property
-    def n_optimized_grasps(self) -> int:
-        return self.num_grasps
-
-    def optimize(
-        self, grasp_config: AllegroGraspConfig
-    ) -> Tuple[AllegroGraspConfig, torch.Tensor]:
         self.joint_lower_limits, self.joint_upper_limits = get_joint_limits(
-            device=grasp_config.device
+            device=self.grasp_config.device
         )
         assert self.joint_lower_limits.shape == (16,)
         assert self.joint_upper_limits.shape == (16,)
 
-        grasp_config.joint_angles.data = torch.clamp(
-            grasp_config.joint_angles,
+        self.grasp_config.joint_angles.data = torch.clamp(
+            self.grasp_config.joint_angles,
             min=self.joint_lower_limits,
             max=self.joint_upper_limits,
         )
 
         for iter in tqdm(range(self.num_steps), desc="Optimizing grasps"):
-            losses_np = (
-                self.nerf_evaluator.evaluate(self.grasp_config).detach().cpu().numpy()
-            )
-
             if iter % self.print_freq == 0:
+                losses_np = (
+                    self.nerf_evaluator.evaluate(self.grasp_config)
+                    .detach()
+                    .cpu()
+                    .numpy()
+                )
                 print(
                     f"Iter: {iter} | Losses: {np.round(losses_np.tolist(), decimals=3)} | Min loss: {losses_np.min():.3f} | Max loss: {losses_np.max():.3f} | Mean loss: {losses_np.mean():.3f} | Std dev: {losses_np.std():.3f}"
                 )
 
-            grasp_config, losses = self._step(grasp_config)
-        return grasp_config, losses
+            losses = self._step()
+        return self.grasp_config, losses
 
-    def _step(
-        self, grasp_config: AllegroGraspConfig
-    ) -> Tuple[AllegroGraspConfig, torch.Tensor]:
+    def _step(self) -> torch.Tensor:
         if self.opt_fingers:
             self.joint_optimizer.zero_grad()
         if self.opt_wrist_pose:
@@ -554,8 +462,8 @@ class NerfGradientOptimizer(nn.Module, Optimizer):
         if self.opt_grasp_dirs:
             self.grasp_dir_optimizer.zero_grad()
 
-        losses = self.compute_grasp_losses()
-        assert losses.shape == (len(grasp_config),)
+        losses = self.nerf_evaluator.evaluate(self.grasp_config)
+        assert losses.shape == (len(self.grasp_config),)
 
         losses.sum().backward()  # Should be sum so gradient magnitude per parameter is invariant to batch size.
 
@@ -567,12 +475,12 @@ class NerfGradientOptimizer(nn.Module, Optimizer):
             self.grasp_dir_optimizer.step()
 
         # Clip joint angles to feasible range.
-        grasp_config.joint_angles.data = torch.clamp(
-            grasp_config.joint_angles,
+        self.grasp_config.joint_angles.data = torch.clamp(
+            self.grasp_config.joint_angles,
             min=self.joint_lower_limits,
             max=self.joint_upper_limits,
         )
-        return grasp_config, losses
+        return losses
 
 
 class NoOptimizer(Optimizer):

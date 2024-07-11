@@ -14,6 +14,23 @@ from get_a_grip.dataset_generation.utils.object_model import ObjectModel
 from get_a_grip.dataset_generation.utils.pose_conversion import hand_config_np_to_pose
 
 
+def get_scene_dict() -> Dict[str, Any]:
+    return dict(
+        xaxis=dict(title="X"),
+        yaxis=dict(title="Y"),
+        zaxis=dict(title="Z"),
+        aspectmode="data",
+    )
+
+
+def get_yup_camera() -> Dict[str, Any]:
+    return dict(
+        up=dict(x=0, y=1, z=0),
+        center=dict(x=0, y=0, z=0),
+        eye=dict(x=1.0, y=1.0, z=0.0),
+    )
+
+
 def get_hand_config_dict_plotly_data_list(
     hand_model: HandModel,
     hand_pose: torch.Tensor,
@@ -306,21 +323,9 @@ def create_config_dict_fig(
         )
         title += f" | {predicted_score_str}"
 
-    # yup
-    yup_camera = dict(
-        up=dict(x=0, y=1, z=0),
-        center=dict(x=0, y=0, z=0),
-        eye=dict(x=1.0, y=1.0, z=0.0),
-    )
-
     fig.update_layout(
         title=title,
-        scene=dict(
-            xaxis=dict(title="X"),
-            yaxis=dict(title="Y"),
-            zaxis=dict(title="Z"),
-            aspectmode="data",
-        ),
-        scene_camera=yup_camera,
+        scene=get_scene_dict(),
+        scene_camera=get_yup_camera(),
     )
     return fig

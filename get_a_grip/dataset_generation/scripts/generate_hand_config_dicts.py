@@ -11,11 +11,11 @@ import numpy as np
 import plotly.graph_objects as go
 import torch
 import tyro
-import wandb
 from clean_loop_timer import LoopTimer
 from torch.multiprocessing import set_start_method
 from tqdm import tqdm
 
+import wandb
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.energy import (
     ENERGY_NAME_TO_SHORTHAND_DICT,
@@ -88,9 +88,6 @@ class GenerateHandConfigDictsArgs:
     w_ff: float = 3.0
     w_fp: float = 0.0
     w_tpen: float = 100.0
-    penetration_iters_frac: float = (
-        0.0  # Fraction of iterations to perform penetration energy calculation
-    )
     object_num_surface_samples: int = 5000
     object_num_samples_calc_penetration_energy: int = 500
 
@@ -110,7 +107,7 @@ class GenerateHandConfigDictsArgs:
     store_grasps_mid_optimization_iters: Optional[List[int]] = None
 
     # Continue from previous run
-    no_continue: bool = False
+    continue_ok: bool = True
 
 
 def create_visualization_figure(
@@ -245,8 +242,8 @@ def save_hand_config_dicts(
         }
 
         np.save(
-            output_folder_path / f"{object_code_and_scale_str}.npy",
-            hand_config_dict,
+            file=output_folder_path / f"{object_code_and_scale_str}.npy",
+            arr=hand_config_dict,
             allow_pickle=True,
         )
 
@@ -487,12 +484,14 @@ def generate(
 
 
 def main() -> None:
-    args = tyro.cli(GenerateHandConfigDictsArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[GenerateHandConfigDictsArgs])
 
     print("=" * 80)
     print(f"args = {args}")
     print("=" * 80 + "\n")
 
+    if "CUDA_VISIBLE_DEVICES" not in os.environ:
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     gpu_list = os.environ["CUDA_VISIBLE_DEVICES"].split(",")
     print(f"gpu_list: {gpu_list}")
 
@@ -512,7 +511,7 @@ def main() -> None:
         input_object_code_and_scale_strs=input_object_code_and_scale_strs_from_file,
         meshdata_root_path=args.meshdata_root_path,
         output_folder_path=args.output_hand_config_dicts_path,
-        no_continue=args.no_continue,
+        continue_ok=args.continue_ok,
     )
 
     if args.seed is not None:

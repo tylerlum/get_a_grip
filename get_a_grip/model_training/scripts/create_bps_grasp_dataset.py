@@ -294,7 +294,7 @@ def crop_single_point_cloud(
 
 
 def main() -> None:
-    cfg = tyro.cli(BpsGraspDatasetConfig)
+    cfg = tyro.cli(tyro.conf.FlagConversionOff[BpsGraspDatasetConfig])
     print("=" * 80)
     print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
     print("=" * 80 + "\n")

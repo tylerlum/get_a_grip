@@ -23,8 +23,8 @@ from get_a_grip.model_training.config.nerf_grasp_dataset_config import (
 )
 from get_a_grip.model_training.config.wandb_config import WandbConfig
 from get_a_grip.model_training.models.nerf_evaluator_model import (
-    CNN_3D_XYZ_Global_CNN_NerfEvaluator,
-    CNN_3D_XYZ_NerfEvaluator,
+    CnnXyzGlobalCnnNerfEvaluatorModel,
+    CnnXyzNerfEvaluatorModel,
     NerfEvaluatorModel,
 )
 
@@ -155,7 +155,7 @@ class TrainingConfig:
 class CheckpointWorkspaceConfig:
     """Parameters for paths to checkpoints."""
 
-    root_dir: pathlib.Path = get_data_folder() / "logs/nerf_evaluator_model"
+    root_dir: pathlib.Path = get_data_folder() / "trained_models/nerf_evaluator_model"
     """Root directory for checkpoints."""
 
     input_leaf_dir_name: Optional[str] = None
@@ -245,8 +245,8 @@ class ModelConfig(ABC):
 
 
 @dataclass(frozen=True)
-class CNN_3D_XYZ_ModelConfig(ModelConfig):
-    """Parameters for the CNN_3D_XYZ_NerfEvaluator."""
+class CnnXyzModelConfig(ModelConfig):
+    """Parameters for the CnnXyzNerfEvaluatorModel."""
 
     conv_channels: Tuple[int, ...] = (32, 64, 128)
     """List of channels for each convolutional layer. Length specifies number of layers."""
@@ -277,7 +277,7 @@ class CNN_3D_XYZ_ModelConfig(ModelConfig):
         """Helper method to return the correct nerf_evaluator from config."""
 
         input_shape = self.input_shape_from_fingertip_config(fingertip_config)
-        return CNN_3D_XYZ_NerfEvaluator(
+        return CnnXyzNerfEvaluatorModel(
             input_shape=input_shape,
             n_fingers=fingertip_config.n_fingers,
             n_tasks=n_tasks,
@@ -287,8 +287,8 @@ class CNN_3D_XYZ_ModelConfig(ModelConfig):
 
 
 @dataclass(frozen=True)
-class CNN_3D_XYZ_Global_CNN_ModelConfig(ModelConfig):
-    """Parameters for the CNN_3D_XYZ_Global_CNN_NerfEvaluator."""
+class CnnXyzGlobalCnnModelConfig(ModelConfig):
+    """Parameters for the CnnXyzGlobalCnnNerfEvaluatorModel."""
 
     conv_channels: Tuple[int, ...] = (32, 64, 128)
     """List of channels for each convolutional layer. Length specifies number of layers."""
@@ -333,7 +333,7 @@ class CNN_3D_XYZ_Global_CNN_ModelConfig(ModelConfig):
 
         input_shape = self.input_shape_from_fingertip_config(fingertip_config)
         global_input_shape = self.global_input_shape()
-        return CNN_3D_XYZ_Global_CNN_NerfEvaluator(
+        return CnnXyzGlobalCnnNerfEvaluatorModel(
             input_shape=input_shape,
             n_fingers=fingertip_config.n_fingers,
             n_tasks=n_tasks,
@@ -363,8 +363,8 @@ class PlotConfig:
 
 @dataclass
 class NerfEvaluatorModelConfig:
-    model_config: Union[CNN_3D_XYZ_ModelConfig, CNN_3D_XYZ_Global_CNN_ModelConfig] = (
-        field(default_factory=CNN_3D_XYZ_Global_CNN_ModelConfig)
+    model_config: Union[CnnXyzModelConfig, CnnXyzGlobalCnnModelConfig] = field(
+        default_factory=CnnXyzGlobalCnnModelConfig
     )
     nerf_grasp_dataset_config: NerfGraspDatasetConfig = field(
         default_factory=NerfGraspDatasetConfig
@@ -442,5 +442,5 @@ class NerfEvaluatorModelConfig:
 
 
 if __name__ == "__main__":
-    cfg = tyro.cli(NerfEvaluatorModelConfig)
+    cfg = tyro.cli(tyro.conf.FlagConversionOff[NerfEvaluatorModelConfig])
     print(cfg)

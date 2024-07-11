@@ -50,7 +50,6 @@ def _compute_link_name_to_contact_candidates(
 def _compute_fingertip_name_to_contact_candidates(
     link_name_to_contact_candidates: Dict[str, torch.Tensor],
 ) -> Dict[str, torch.Tensor]:
-    # HACK: hardcoded
     # Merge links associated with same fingertip
     fingertip_keywords = FINGERTIP_KEYWORDS
     fingertip_name_to_contact_candidates = {}

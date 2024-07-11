@@ -38,7 +38,7 @@ class TrainBpsSamplerModelConfig:
 
 def main() -> None:
     config = tyro.cli(
-        TrainBpsSamplerModelConfig,
+        tyro.conf.FlagConversionOff[TrainBpsSamplerModelConfig],
         default=TrainBpsSamplerModelConfig(
             diffusion=DiffusionConfig(
                 data=DataConfig(
@@ -50,7 +50,7 @@ def main() -> None:
                     log_path=(
                         get_data_folder()
                         / (
-                            f"logs/bps_sampler_model/{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+                            f"trained_models/bps_sampler_model/{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
                         )
                     ),
                 ),

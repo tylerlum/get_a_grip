@@ -77,7 +77,9 @@ else:
 
 
 # %%
-cfg = tyro.cli(VisualizeNerfGraspDatasetV2Config, args=arguments)
+cfg = tyro.cli(
+    tyro.conf.FlagConversionOff[VisualizeNerfGraspDatasetV2Config], args=arguments
+)
 print("=" * 80)
 print(f"Config:\n{tyro.extras.to_yaml(cfg)}")
 print("=" * 80 + "\n")

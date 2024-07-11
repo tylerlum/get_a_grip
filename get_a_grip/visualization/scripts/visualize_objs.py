@@ -1,7 +1,7 @@
 import math
 import pathlib
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Any, Dict, Tuple
 
 import numpy as np
 import plotly.graph_objects as go
@@ -25,6 +25,23 @@ def load_obj_mesh(path: pathlib.Path) -> Tuple[np.ndarray, np.ndarray]:
     return vertices, faces
 
 
+def get_scene_dict() -> Dict[str, Any]:
+    return dict(
+        xaxis=dict(title="X"),
+        yaxis=dict(title="Y"),
+        zaxis=dict(title="Z"),
+        aspectmode="data",
+    )
+
+
+def get_yup_camera() -> Dict[str, Any]:
+    return dict(
+        up=dict(x=0, y=1, z=0),
+        center=dict(x=0, y=0, z=0),
+        eye=dict(x=2.0, y=2.0, z=0.0),
+    )
+
+
 def create_mesh_3d(
     vertices: np.ndarray, faces: np.ndarray, opacity: float = 1.0
 ) -> go.Mesh3d:
@@ -40,7 +57,7 @@ def create_mesh_3d(
 
 
 def main() -> None:
-    args = tyro.cli(VisualizeObjsArgs)
+    args = tyro.cli(tyro.conf.FlagConversionOff[VisualizeObjsArgs])
     print("=" * 80)
     print(f"{pathlib.Path(__file__).name} args: {args}")
     print("=" * 80 + "\n")
@@ -78,9 +95,20 @@ def main() -> None:
             col=col + 1,
         )
 
+    # plotly uses scene, scene2, scene3, ...
+    new_scene_dict = {}
+    for i in range(len(obj_files)):
+        scene_name = f"scene{i+1}" if i > 0 else "scene"
+        new_scene_dict[scene_name] = {
+            **get_scene_dict(),
+            "camera": get_yup_camera(),
+        }
+
     # Update layout and show figure
     fig.update_layout(
-        title=f"3D Models in {args.meshdata_root_path.name}", showlegend=False
+        title=f"3D Models in {args.meshdata_root_path.name}",
+        showlegend=False,
+        **new_scene_dict,
     )
     fig.show()
 

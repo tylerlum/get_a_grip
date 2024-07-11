@@ -34,6 +34,7 @@ from get_a_grip.model_training.utils.nerf_utils import (
 
 @dataclass
 class NerfInput:
+    # Nerf inputs used for grasp planning
     nerf_pipeline: Pipeline
     nerf_is_z_up: bool
 
@@ -59,6 +60,16 @@ class NerfInput:
         if not hasattr(self, "_nerf_global_coords"):
             self._nerf_global_coords = self._compute_nerf_densities_global()
         return self._nerf_global_coords
+
+    def nerf_densities_global_repeated(self, N: int) -> torch.Tensor:
+        if (
+            not hasattr(self, "_nerf_global_coords_repeated")
+            or self._nerf_global_coords_repeated.shape[0] != N
+        ):
+            self._nerf_global_coords_repeated = self.nerf_densities_global.unsqueeze(
+                dim=0
+            ).repeat_interleave(N, dim=0)
+        return self._nerf_global_coords_repeated
 
     @property
     def mesh_N(self) -> trimesh.Trimesh:
@@ -98,15 +109,33 @@ class NerfInput:
         grasp_config_tensor: torch.Tensor,
         fingertip_config: EvenlySpacedFingertipConfig,
     ) -> BatchDataInput:
+        B = grasp_frame_transforms.shape[0]
+
+        nerf_densities = self.compute_nerf_densities_at_fingertips(
+            grasp_frame_transforms=grasp_frame_transforms,
+            fingertip_config=fingertip_config,
+        )
+        nerf_densities_global_repeated = self.nerf_densities_global_repeated(N=B)
+
+        assert (
+            nerf_densities.shape[0] == B
+        ), f"Expected batch size {B}, got {nerf_densities.shape[0]}, shape: {nerf_densities.shape}"
+        assert (
+            grasp_frame_transforms.shape[0] == B
+        ), f"Expected batch size {B}, got {grasp_frame_transforms.shape[0]}, shape: {grasp_frame_transforms.shape}"
+        assert (
+            grasp_config_tensor.shape[0] == B
+        ), f"Expected batch size {B}, got {grasp_config_tensor.shape[0]}, shape: {grasp_config_tensor.shape}"
+        assert (
+            nerf_densities_global_repeated.shape[0] == B
+        ), f"Expected batch size {B}, got {nerf_densities_global_repeated.shape[0]}, shape: {nerf_densities_global_repeated.shape}"
+
         batch_data_input = BatchDataInput(
-            nerf_densities=self.compute_nerf_densities_at_fingertips(
-                grasp_frame_transforms=grasp_frame_transforms,
-                fingertip_config=fingertip_config,
-            ),
+            nerf_densities=nerf_densities,
             grasp_transforms=grasp_frame_transforms,
             fingertip_config=fingertip_config,
             grasp_configs=grasp_config_tensor,
-            nerf_densities_global=self.nerf_densities_global,
+            nerf_densities_global=nerf_densities_global_repeated,
         ).to(grasp_frame_transforms.device)
         return batch_data_input
 
@@ -115,6 +144,8 @@ class NerfInput:
             del self._bps_values
         if hasattr(self, "_nerf_global_coords"):
             del self._nerf_global_coords
+        if hasattr(self, "_nerf_global_coords_repeated"):
+            del self._nerf_global_coords_repeated
         if hasattr(self, "_mesh_N"):
             del self._mesh_N
         if hasattr(self, "_centroid_N"):

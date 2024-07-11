@@ -6,8 +6,8 @@ import torch
 import torch.nn as nn
 
 from get_a_grip.model_training.models.components.models import (
-    CNN_3D_CNN_3D_Model,
-    CNN_3D_Model,
+    CNN3D_CNN3D_Model,
+    CNN3D_Model,
 )
 from get_a_grip.model_training.utils.nerf_evaluator_model_batch_data import (
     BatchDataInput,
@@ -78,7 +78,7 @@ class NerfEvaluatorModel(nn.Module, ABC):
         return 2
 
 
-class CNN_3D_XYZ_NerfEvaluator(NerfEvaluatorModel):
+class CnnXyzNerfEvaluatorModel(NerfEvaluatorModel):
     def __init__(
         self,
         input_shape: Tuple[int, int, int, int],
@@ -88,7 +88,7 @@ class CNN_3D_XYZ_NerfEvaluator(NerfEvaluatorModel):
         n_tasks: int,
     ) -> None:
         super().__init__()
-        self.model = CNN_3D_Model(
+        self.model = CNN3D_Model(
             input_shape=input_shape,
             conv_channels=conv_channels,
             mlp_hidden_layers=mlp_hidden_layers,
@@ -104,7 +104,7 @@ class CNN_3D_XYZ_NerfEvaluator(NerfEvaluatorModel):
         return all_logits
 
 
-class CNN_3D_XYZ_Global_CNN_NerfEvaluator(NerfEvaluatorModel):
+class CnnXyzGlobalCnnNerfEvaluatorModel(NerfEvaluatorModel):
     def __init__(
         self,
         input_shape: Tuple[int, int, int, int],
@@ -116,7 +116,7 @@ class CNN_3D_XYZ_Global_CNN_NerfEvaluator(NerfEvaluatorModel):
         n_tasks: int,
     ) -> None:
         super().__init__()
-        self.model = CNN_3D_CNN_3D_Model(
+        self.model = CNN3D_CNN3D_Model(
             input_shape=input_shape,
             conv_channels=conv_channels,
             mlp_hidden_layers=mlp_hidden_layers,
@@ -180,7 +180,7 @@ def main() -> None:
     # Create model
     input_shape = batch_data_input.nerf_alphas_with_augmented_coords.shape[-4:]
     assert len(input_shape) == 4
-    cnn_3d_nerf_evaluator = CNN_3D_XYZ_NerfEvaluator(
+    cnn_xyz_nerf_evaluator = CnnXyzNerfEvaluatorModel(
         input_shape=(input_shape[0], input_shape[1], input_shape[2], input_shape[3]),
         conv_channels=(32, 64, 128),
         mlp_hidden_layers=(256, 256),
@@ -189,11 +189,11 @@ def main() -> None:
     ).to(DEVICE)
 
     # Run model
-    cnn_3d_all_logits = cnn_3d_nerf_evaluator.get_all_logits(batch_data_input)
-    cnn_3d_scores = cnn_3d_nerf_evaluator.get_failure_probability(batch_data_input)
-    print(f"cnn_3d_all_logits.shape = {cnn_3d_all_logits.shape}")
-    print(f"cnn_3d_scores: {cnn_3d_scores}")
-    print(f"cnn_3d_scores.shape: {cnn_3d_scores.shape}" + "\n")
+    cnn_xyz_all_logits = cnn_xyz_nerf_evaluator.get_all_logits(batch_data_input)
+    cnn_xyz_scores = cnn_xyz_nerf_evaluator.get_failure_probability(batch_data_input)
+    print(f"cnn_xyz_all_logits.shape = {cnn_xyz_all_logits.shape}")
+    print(f"cnn_xyz_scores: {cnn_xyz_scores}")
+    print(f"cnn_xyz_scores.shape: {cnn_xyz_scores.shape}" + "\n")
 
 
 if __name__ == "__main__":

@@ -108,10 +108,10 @@ class NerfSamplerModel(nn.Module):
                 assert f_O.shape[0] <= B, f"Expected batch size <= {B}, got {f_O}"
                 f_O = f_O[:B]
 
-            # Print only a max of 10 times
+            # Print only a max of 3 times
             if not hasattr(self, "_HACK_PRINT_COUNT"):
                 self._HACK_PRINT_COUNT = 0
-            if self._HACK_PRINT_COUNT < 10:
+            if self._HACK_PRINT_COUNT < 3:
                 print("_HACK_MODE_FOR_PERFORMANCE")
                 self._HACK_PRINT_COUNT += 1
         else:
