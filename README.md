@@ -44,7 +44,7 @@ TODO: Note that we used 4090
 
 ### 1. Dataset Download
 
-TODO
+Fill out this [form](https://forms.gle/qERExXPn5wKrGr1G8) to download the Get a Grip dataset and pretrained models. After filling out this form, you will receive a URL, which will be used next.
 
 ### 2. Dataset Visualization
 
