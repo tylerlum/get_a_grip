@@ -106,3 +106,33 @@ planner.evaluator:nerf-evaluator-config \
 planner.optimizer:nerf-random-sampling-optimizer-config \
   --planner.optimizer.num_grasps 32
 ```
+
+## Grasp Evaluation
+
+You can evaluate the saved grasps with the following:
+
+```
+python get_a_grip/dataset_generation/scripts/eval_grasp_config_dicts.py \
+--meshdata_root_path data/meshdata \
+--input_grasp_config_dicts_path data/grasp_planning_outputs/fixed_sampler_nerf_evaluator/grasp_config_dicts \
+--output_evaled_grasp_config_dicts_path data/grasp_planning_outputs/fixed_sampler_nerf_evaluator/evaled_grasp_config_dicts \
+--object_code_and_scale_str mug_0_1000 \
+--num_random_pose_noise_samples_per_grasp 5
+```
+
+Then analyze the results like so:
+
+```
+import numpy as np
+
+evaled_grasp_config_dict = np.load('data/grasp_planning_outputs/fixed_sampler_nerf_evaluator/evaled_grasp_config_dicts/mug_0_1000.npy', allow_pickle=True)
+
+y_PGS = evaled_grasp_config_dict['y_PGS']
+n_grasps = y_PGS.shape[0]
+assert y_PGS.shape == (n_grasps,)
+print(f"Found {n_grasps} grasps.")
+print(f"y_PGS: {y_PGS}")
+print(f"Best grasp has PGS {y_PGS.max()}.")
+```
+
+See [here](docs/visualization.md) for more visualization details.
