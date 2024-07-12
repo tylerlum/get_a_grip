@@ -66,7 +66,9 @@ class NerfSamplerConfig(SamplerConfig):
         ], f"{self.ckpt_path} does not have a .pt or .pth suffix"
 
     def create(self, nerf_input: NerfInput) -> NerfSampler:
-        nerf_densities_global = nerf_input.nerf_densities_global.unsqueeze(dim=0)
+        nerf_densities_global = nerf_input.nerf_densities_global_with_coords.unsqueeze(
+            dim=0
+        )
         assert nerf_densities_global.shape == (
             1,
             NERF_DENSITIES_GLOBAL_NUM_X,

@@ -9,16 +9,16 @@ from get_a_grip.dataset_generation.utils.isaac_validator import (
     IsaacValidator,
     ValidationType,
 )
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+from get_a_grip.utils.parse_object_code_and_scale import (
     object_code_and_scale_to_str,
 )
-from get_a_grip.dataset_generation.utils.seed import set_seed
+from get_a_grip.utils.seed import set_seed
 
 
 @dataclass
 class GenerateNerfDataOneObjectOneScaleArgs:
-    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
-    output_nerfdata_path: pathlib.Path = get_data_folder() / "NEW_DATASET/nerfdata"
+    meshdata_root_path: pathlib.Path = get_data_folder() / "meshdata"
+    output_nerfdata_path: pathlib.Path = get_data_folder() / "dataset/NEW/nerfdata"
     object_code: str = "sem-Camera-7bff4fd4dc53de7496dece3f86cb5dd5"
     object_scale: float = 0.1
     num_cameras: int = 100

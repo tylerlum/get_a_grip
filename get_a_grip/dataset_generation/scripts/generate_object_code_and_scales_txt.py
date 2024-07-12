@@ -7,20 +7,21 @@ import tyro
 from tqdm import tqdm
 
 from get_a_grip import get_data_folder
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+from get_a_grip.utils.parse_object_code_and_scale import (
     object_code_and_scale_to_str,
 )
 
 
 @dataclass
 class GenerateObjectCodeAndScalesTxtArgs:
-    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    meshdata_root_path: pathlib.Path = get_data_folder() / "meshdata"
     output_object_code_and_scales_txt_path: pathlib.Path = (
-        get_data_folder() / "NEW_DATASET/object_code_and_scales.txt"
+        get_data_folder() / "dataset/NEW/object_code_and_scales.txt"
     )
     min_object_scale: float = 0.05
     max_object_scale: float = 0.10
-    max_num_objects: Optional[int] = None
+    num_scales_per_object: int = 3
+    max_num_object_codes: Optional[int] = None
     overwrite: bool = False
 
 
@@ -31,21 +32,24 @@ def main() -> None:
     print(f"First 10 in object_codes: {object_codes[:10]}")
     print(f"len(object_codes): {len(object_codes)} in {args.meshdata_root_path}")
 
-    if args.max_num_objects is not None:
-        print(f"Reducing number of objects to at most {args.max_num_objects}")
-        object_codes = object_codes[: args.max_num_objects]
+    if args.max_num_object_codes is not None:
+        print(f"Reducing number of object codes to at most {args.max_num_object_codes}")
+        object_codes = object_codes[: args.max_num_object_codes]
         print(f"len(object_codes): {len(object_codes)}")
 
-    object_scales = np.random.uniform(
-        low=args.min_object_scale,
-        high=args.max_object_scale,
-        size=(len(object_codes),),
-    )
-
-    object_code_and_scale_strs = [
-        object_code_and_scale_to_str(object_code, object_scale)
-        for object_code, object_scale in zip(object_codes, object_scales)
-    ]
+    object_code_and_scale_strs = []
+    for object_code in object_codes:
+        object_scales_for_object = np.random.uniform(
+            low=args.min_object_scale,
+            high=args.max_object_scale,
+            size=args.num_scales_per_object,
+        )
+        for object_scale in object_scales_for_object:
+            object_code_and_scale_strs.append(
+                object_code_and_scale_to_str(
+                    object_code=object_code, object_scale=object_scale
+                )
+            )
 
     if args.output_object_code_and_scales_txt_path.exists():
         print(f"{args.output_object_code_and_scales_txt_path} already exists.")

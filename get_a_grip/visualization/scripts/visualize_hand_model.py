@@ -8,7 +8,7 @@ from get_a_grip.dataset_generation.utils.allegro_hand_info import (
     ALLEGRO_HAND_ROTATION,
 )
 from get_a_grip.dataset_generation.utils.hand_model import HandModel
-from get_a_grip.dataset_generation.utils.seed import set_seed
+from get_a_grip.utils.seed import set_seed
 
 set_seed(1)
 

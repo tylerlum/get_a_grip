@@ -5,9 +5,6 @@ from typing import Tuple
 import numpy as np
 from nerfstudio.pipelines.base_pipeline import Pipeline
 
-from get_a_grip.grasp_planning.utils.generate_point_cloud import (
-    PointCloudBoundingBox,
-)
 from get_a_grip.grasp_planning.utils.nerfstudio_point_cloud import ExportPointCloud
 from get_a_grip.model_training.scripts.create_bps_grasp_dataset import (
     crop_single_point_cloud,
@@ -15,7 +12,10 @@ from get_a_grip.model_training.scripts.create_bps_grasp_dataset import (
     get_fixed_basis_points,
     process_single_point_cloud,
 )
-from get_a_grip.model_training.utils.point_utils import (
+from get_a_grip.utils.generate_point_cloud import (
+    PointCloudBoundingBox,
+)
+from get_a_grip.utils.point_utils import (
     transform_points,
 )
 
@@ -61,5 +61,5 @@ def nerf_to_bps(
     ), f"Expected shape (4096,), got {bps_values.shape}"
 
     X_By_N = np.linalg.inv(X_N_By)
-    final_points_By = transform_points(T=X_By_N, points=final_points_N)
-    return bps_values, basis_points_By, final_points_By
+    _final_points_By = transform_points(T=X_By_N, points=final_points_N)
+    return bps_values, basis_points_N, final_points_N

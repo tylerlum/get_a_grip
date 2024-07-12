@@ -262,7 +262,7 @@ class Diffusion(object):
     def load_checkpoint(self, config: DiffusionConfig, filename: str) -> None:
         # Use given filename
         assert filename.endswith(".pth"), f"Invalid filename: {filename}"
-        checkpoint_path = config.training.log_path / filename
+        checkpoint_path = config.training.output_dir / filename
         assert checkpoint_path.exists(), f"Checkpoint not found: {checkpoint_path}"
 
         states = torch.load(
@@ -273,11 +273,11 @@ class Diffusion(object):
         self.model.load_state_dict(model_state_dict)
 
     def load_latest_checkpoint(self, config: DiffusionConfig) -> None:
-        pth_filepaths = list(config.training.log_path.glob("*.pth"))
+        pth_filepaths = list(config.training.output_dir.glob("*.pth"))
 
         if len(pth_filepaths) == 0:
             raise FileNotFoundError(
-                f"No checkpoints found in {config.training.log_path}"
+                f"No checkpoints found in {config.training.output_dir}"
             )
 
         # Sort by created time
@@ -523,12 +523,12 @@ def train(
                 if runner.config.model.ema:
                     states.append(ema_helper.state_dict())
 
-                log_path = config.training.log_path
-                log_path.mkdir(parents=True, exist_ok=True)
+                output_dir = config.training.output_dir
+                output_dir.mkdir(parents=True, exist_ok=True)
                 if is_last_epoch:
-                    torch.save(states, log_path / "ckpt_final.pth")
+                    torch.save(states, output_dir / "ckpt_final.pth")
                 else:
-                    torch.save(states, log_path / f"ckpt_{step}.pth")
+                    torch.save(states, output_dir / f"ckpt_{step}.pth")
 
     if config.multigpu:
         dist.destroy_process_group()

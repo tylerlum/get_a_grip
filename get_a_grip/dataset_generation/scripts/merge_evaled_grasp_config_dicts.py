@@ -13,12 +13,12 @@ from get_a_grip import get_data_folder
 class MergeEvaledGraspConfigDictsArgs:
     input_evaled_grasp_config_dicts_paths: List[pathlib.Path] = field(
         default_factory=lambda: [
-            get_data_folder() / "NEW_DATASET/evaled_grasp_config_dicts",
-            get_data_folder() / "NEW_DATASET/augmented_evaled_grasp_config_dicts",
+            get_data_folder() / "dataset/NEW/evaled_grasp_config_dicts",
+            get_data_folder() / "dataset/NEW/augmented_evaled_grasp_config_dicts",
         ]
     )
     output_evaled_grasp_config_dicts_path: pathlib.Path = (
-        get_data_folder() / "NEW_DATASET/final_evaled_grasp_config_dicts"
+        get_data_folder() / "dataset/NEW/final_evaled_grasp_config_dicts"
     )
 
 

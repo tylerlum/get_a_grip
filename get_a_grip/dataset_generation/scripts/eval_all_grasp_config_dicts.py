@@ -24,12 +24,12 @@ from get_a_grip.dataset_generation.utils.process_utils import (
 
 @dataclass
 class EvalAllGraspConfigDictsArgs:
-    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    meshdata_root_path: pathlib.Path = get_data_folder() / "meshdata"
     input_grasp_config_dicts_path: pathlib.Path = (
-        get_data_folder() / "NEW_DATASET/grasp_config_dicts"
+        get_data_folder() / "dataset/NEW/grasp_config_dicts"
     )
     output_evaled_grasp_config_dicts_path: pathlib.Path = (
-        get_data_folder() / "NEW_DATASET/evaled_grasp_config_dicts"
+        get_data_folder() / "dataset/NEW/evaled_grasp_config_dicts"
     )
     validation_type: ValidationType = ValidationType.GRAVITY_AND_TABLE
     num_random_pose_noise_samples_per_grasp: Optional[int] = None

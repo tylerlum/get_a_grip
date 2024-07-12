@@ -15,10 +15,9 @@ from get_a_grip.grasp_motion_planning.utils.trajopt import (
     DEFAULT_Q_ALGR,
     DEFAULT_Q_FR3,
 )
-from get_a_grip.grasp_planning.config.planner_config import PlannerConfig
-from get_a_grip.grasp_planning.scripts.run_grasp_planning import (
-    GraspPlanningArgs,
-    run_grasp_planning,
+from get_a_grip.grasp_planning.scripts.run_frogger_grasp_planning import (
+    FroggerGraspPlanningArgs,
+    run_frogger_grasp_planning,
 )
 from get_a_grip.grasp_planning.utils.frames import GraspMotionPlanningFrames
 from get_a_grip.grasp_planning.utils.joint_limit_utils import (
@@ -30,12 +29,11 @@ from get_a_grip.grasp_planning.utils.sort_grasps import get_sorted_grasps_from_d
 
 
 @dataclass
-class GraspMotionPlanningArgs:
-    # Mostly same args as GraspPlanningArgs
+class FroggerGraspMotionPlanningArgs:
+    # Mostly same args as FroggerGraspPlanningArgs
     nerf: NerfArgs
-    planner: PlannerConfig
-    output_folder: pathlib.Path = get_data_folder() / "grasp_planning_outputs"
-    overwrite: bool = False
+    num_grasps: int = 32
+    output_folder: pathlib.Path = get_data_folder() / "frogger_outputs"
 
     grasp_motion_planner: GraspMotionPlannerConfig = field(
         default_factory=GraspMotionPlannerConfig
@@ -43,11 +41,13 @@ class GraspMotionPlanningArgs:
     skip_grasp_planning_config_dict: Optional[pathlib.Path] = (
         None  # If not None, skip grasp planning and use these grasps instead
     )
-    visualize_loop: bool = True
+    visualize: bool = True
 
 
-def run_grasp_motion_planning(
-    args: GraspMotionPlanningArgs, q_fr3_start: np.ndarray, q_algr_start: np.ndarray
+def run_frogger_grasp_motion_planning(
+    args: FroggerGraspMotionPlanningArgs,
+    q_fr3_start: np.ndarray,
+    q_algr_start: np.ndarray,
 ) -> None:
     assert q_fr3_start.shape == (7,)
     assert q_algr_start.shape == (16,)
@@ -55,12 +55,12 @@ def run_grasp_motion_planning(
     # Run grasp planning
     if args.skip_grasp_planning_config_dict is None:
         start_grasp_planning = time.time()
-        _, nerf_input, _, planned_grasp_config_dict = run_grasp_planning(
-            GraspPlanningArgs(
+
+        _, nerf_input, _, planned_grasp_config_dict = run_frogger_grasp_planning(
+            FroggerGraspPlanningArgs(
                 nerf=args.nerf,
-                planner=args.planner,
+                num_grasps=args.num_grasps,
                 output_folder=args.output_folder,
-                overwrite=args.overwrite,
                 visualize_idx=None,  # Disable visualization at this stage
                 visualize_loop=False,  # Disable visualization at this stage
             )
@@ -68,7 +68,7 @@ def run_grasp_motion_planning(
         end_grasp_planning = time.time()
         print("@" * 80)
         print(
-            f"Time to run_grasp_planning: {end_grasp_planning - start_grasp_planning:.2f}s"
+            f"Time to run_frogger_grasp_motion_planning: {end_grasp_planning - start_grasp_planning:.2f}s"
         )
         print("@" * 80 + "\n")
     else:
@@ -186,7 +186,7 @@ def run_grasp_motion_planning(
     print("@" * 80 + "\n")
 
     # Visualize
-    if args.visualize_loop:
+    if args.visualize:
         grasp_motion_planner.visualize_loop(
             qs=q_trajs,
             T_trajs=T_trajs,
@@ -200,11 +200,11 @@ def run_grasp_motion_planning(
 
 
 def main() -> None:
-    args = tyro.cli(tyro.conf.FlagConversionOff[GraspMotionPlanningArgs])
+    args = tyro.cli(tyro.conf.FlagConversionOff[FroggerGraspMotionPlanningArgs])
     print("=" * 80)
     print(f"args: {args}")
     print("=" * 80 + "\n")
-    run_grasp_motion_planning(
+    run_frogger_grasp_motion_planning(
         args=args, q_fr3_start=DEFAULT_Q_FR3, q_algr_start=DEFAULT_Q_ALGR
     )
 

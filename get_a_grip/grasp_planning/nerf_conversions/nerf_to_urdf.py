@@ -5,11 +5,11 @@ from typing import Optional, Tuple
 import numpy as np
 import tyro
 
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+from get_a_grip.grasp_planning.nerf_conversions.nerf_to_mesh import nerf_to_mesh
+from get_a_grip.utils.nerf_load_utils import load_nerf_field
+from get_a_grip.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
-from get_a_grip.grasp_planning.nerf_conversions.nerf_to_mesh import nerf_to_mesh
-from get_a_grip.model_training.utils.nerf_load_utils import load_nerf_field
 
 # Hardcoded intentionally for consistency
 NERF_TO_MESH_MIN_HEIGHT = 0

@@ -8,24 +8,24 @@ import tyro
 from tqdm import tqdm
 
 from get_a_grip import get_data_folder
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
-    is_object_code_and_scale_str,
-)
-from get_a_grip.grasp_planning.utils.generate_point_cloud import (
+from get_a_grip.utils.generate_point_cloud import (
     GeneratePointCloudArgs,
     generate_point_cloud,
 )
-from get_a_grip.model_training.utils.nerf_load_utils import get_latest_nerf_config
+from get_a_grip.utils.nerf_load_utils import get_latest_nerf_config
+from get_a_grip.utils.parse_object_code_and_scale import (
+    is_object_code_and_scale_str,
+)
 
 
 @dataclass
 class GeneratePointCloudsArgs:
     nerf_is_z_up: bool
     input_nerfcheckpoints_path: pathlib.Path = (
-        get_data_folder() / "NEW_DATASET/nerfcheckpoints"
+        get_data_folder() / "dataset/NEW/nerfcheckpoints"
     )
     output_point_clouds_path: pathlib.Path = (
-        get_data_folder() / "NEW_DATASET/point_clouds"
+        get_data_folder() / "dataset/NEW/point_clouds"
     )
     randomize_order_seed: Optional[int] = None
     num_points: int = 5000

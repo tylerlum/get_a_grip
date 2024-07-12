@@ -14,7 +14,7 @@ from kaolin.metrics.trianglemesh import (
     compute_sdf,
 )
 
-from get_a_grip.model_training.utils.point_utils import transform_points
+from get_a_grip.utils.point_utils import transform_points
 
 
 class ObjectModel:

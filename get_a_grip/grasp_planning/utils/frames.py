@@ -134,8 +134,8 @@ class GraspMotionPlanningFrames(GraspPlanningFrames):
     * nerf_is_z_up = True
 
     Frames
-    * W: World frame, only used for grasp_motion_planning. The origin is at the robot base with z-up.
-    * Nz: Nerf frame with z-up. the origin is defined at <nerf_frame_offset_W> wrt W with z-up
+    * W: World frame, only used for grasp_motion_planning. The origin is at the robot base with z-up and x-forward from robot.
+    * Nz: Nerf frame with z-up. the origin is defined at <nerf_frame_offset_W> wrt W with z-up and x-forward from robot.
 
     Transforms: X_A_B = X_A_C @ X_C_B, p_A = X_A_B @ p_B
     * X_W_Nz: Nz frame wrt W frame. These have the same 0 orientation. The translation is simply the <nerf_frame_offset_W>

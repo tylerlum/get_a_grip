@@ -6,16 +6,7 @@ from get_a_grip.grasp_planning.config.evaluator_config import EvaluatorConfigUni
 from get_a_grip.grasp_planning.config.optimizer_config import OptimizerConfigUnion
 from get_a_grip.grasp_planning.config.sampler_config import SamplerConfigUnion
 from get_a_grip.grasp_planning.utils.nerf_input import NerfInput
-from get_a_grip.grasp_planning.utils.planner import (
-    Planner,
-)
-
-
-@dataclass
-class FilterConfig:
-    enable: bool = True
-    fingers_forward_theta_deg: float = 60.0
-    palm_upwards_theta_deg: float = 60.0
+from get_a_grip.grasp_planning.utils.planner import FilterConfig, Planner
 
 
 @dataclass
@@ -41,7 +32,8 @@ class PlannerConfig:
             sampler=sampler,
             evaluator=evaluator,
             optimizer=optimizer,
-            cfg=self,
+            filter_cfg=self.filter,
+            n_random_rotations_per_grasp=self.n_random_rotations_per_grasp,
         )
 
         return grasp_planner

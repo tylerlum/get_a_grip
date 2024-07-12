@@ -11,7 +11,7 @@ from get_a_grip import get_data_folder
 @dataclass
 class CreateFixedSamplerGraspConfigDict:
     input_evaled_grasp_config_dicts_path: pathlib.Path = (
-        get_data_folder() / "NEW_DATASET/final_evaled_grasp_config_dicts_train"
+        get_data_folder() / "dataset/NEW/final_evaled_grasp_config_dicts_train"
     )
     output_grasp_config_dict_path: pathlib.Path = (
         get_data_folder() / "fixed_sampler_grasp_config_dicts/all_good_grasps.npy"

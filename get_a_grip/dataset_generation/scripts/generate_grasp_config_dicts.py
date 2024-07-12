@@ -14,27 +14,27 @@ from get_a_grip.dataset_generation.utils.joint_angle_targets import (
     compute_grasp_orientations as compute_grasp_orientations_external,
 )
 from get_a_grip.dataset_generation.utils.object_model import ObjectModel
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
-    is_object_code_and_scale_str,
-    parse_object_code_and_scale,
-)
 from get_a_grip.dataset_generation.utils.pose_conversion import (
     hand_config_np_to_pose,
 )
 from get_a_grip.dataset_generation.utils.process_utils import (
     get_object_codes_and_scales_to_process,
 )
-from get_a_grip.dataset_generation.utils.seed import set_seed
+from get_a_grip.utils.parse_object_code_and_scale import (
+    is_object_code_and_scale_str,
+    parse_object_code_and_scale,
+)
+from get_a_grip.utils.seed import set_seed
 
 
 @dataclass
 class GenerateGraspConfigDictsArgs:
-    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    meshdata_root_path: pathlib.Path = get_data_folder() / "meshdata"
     input_hand_config_dicts_path: pathlib.Path = (
-        get_data_folder() / "NEW_DATASET/hand_config_dicts"
+        get_data_folder() / "dataset/NEW/hand_config_dicts"
     )
     output_grasp_config_dicts_path: pathlib.Path = (
-        get_data_folder() / "NEW_DATASET/grasp_config_dicts"
+        get_data_folder() / "dataset/NEW/grasp_config_dicts"
     )
     gpu: int = 0
     all_mid_optimization_steps: bool = False

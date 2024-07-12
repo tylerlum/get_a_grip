@@ -73,9 +73,7 @@ tqdm = partial(std_tqdm, dynamic_ncols=True)
 if is_notebook():
     # Manually insert arguments here
     arguments = [
-        # TODO: Figure out why having this first arg doesn't work
-        # "cnn-3d-xyz-global-cnn",
-        "--train-dataset-filepath",
+        "--train-dataset-path",
         "data/SMALL_DATASET/nerf_grasp_dataset/train_dataset.h5",
         "--task-type",
         "Y_PICK_AND_Y_COLL_AND_Y_PGS",
@@ -90,6 +88,7 @@ if is_notebook():
         "l2",
         "--training.save_checkpoint_freq",
         "1",
+        "model-config:cnn-xyz-global-cnn-model-config",
     ]
 else:
     arguments = sys.argv[1:]

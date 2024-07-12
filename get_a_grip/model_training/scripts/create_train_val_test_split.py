@@ -10,7 +10,7 @@ import tyro
 from tqdm import tqdm
 
 from get_a_grip import get_data_folder
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
+from get_a_grip.utils.parse_object_code_and_scale import (
     object_code_and_scale_to_str,
     parse_object_code_and_scale,
 )
@@ -19,7 +19,7 @@ from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
 @dataclass
 class CreateTrainValTestSplitArgs:
     input_evaled_grasp_config_dicts_path: pathlib.Path = (
-        get_data_folder() / "large/final_evaled_grasp_config_dicts"
+        get_data_folder() / "dataset/NEW/final_evaled_grasp_config_dicts"
     )
     frac_train: float = 0.9
     frac_val: float = 0.025

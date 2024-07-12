@@ -22,10 +22,10 @@ from get_a_grip.dataset_generation.utils.pose_conversion import (
 @dataclass
 class AugmentGraspConfigDictsArgs:
     input_evaled_grasp_config_dicts_path: pathlib.Path = pathlib.Path(
-        get_data_folder() / "NEW_DATASET/evaled_grasp_config_dicts"
+        get_data_folder() / "dataset/NEW/evaled_grasp_config_dicts"
     )
     output_augmented_grasp_config_dicts_path: pathlib.Path = pathlib.Path(
-        get_data_folder() / "NEW_DATASET/augmented_grasp_config_dicts"
+        get_data_folder() / "dataset/NEW/augmented_grasp_config_dicts"
     )
 
     trans_max_noise = 0.005

@@ -1,24 +1,25 @@
 # Model Training
 
-Follow these instructions if you want to train models yourself instead of using the given models. To do this, you will still need a dataset like the following:
+Follow these instructions if you want to train models yourself instead of using the given models in `data/models/pretrained`. To do this, you will still need a dataset like the following:
 
 ```
-data
-└── large
-    ├── final_evaled_grasp_config_dicts
-    ├── meshes
-    ├── nerfdata
-    ├── nerfs
-    └── point_clouds
+data/dataset/large
+├── final_evaled_grasp_config_dicts
+├── meshes
+├── nerfdata
+├── nerfcheckpoints
+└── point_clouds
 ```
+
+For these next steps, we will be creating new models in `data/models/NEW` and creating new fixed sampler grasp config dicts in `data/fixed_sampler_grasp_config_dicts/NEW`.
 
 ## Train Val Test Split Across Objects
 
-Create train val test split across objects (creates symlinks to <input*evaled_grasp_config_dicts_path>*_, where _ is train, val, or test):
+Create train val test split across objects (creates symlinks to `<input_evaled_grasp_config_dicts_path>_train`, `<input_evaled_grasp_config_dicts_path>_val`, `<input_evaled_grasp_config_dicts_path>_test`):
 
 ```
 python get_a_grip/model_training/scripts/create_train_val_test_split.py \
---input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts \
+--input_evaled_grasp_config_dicts_path data/dataset/large/final_evaled_grasp_config_dicts \
 --frac_train 0.8 \
 --frac_val 0.1
 ```
@@ -29,23 +30,23 @@ Create BPS dataset:
 
 ```
 python get_a_grip/model_training/scripts/create_bps_grasp_dataset.py \
---input_point_clouds_path data/NEW_DATASET/point_clouds \
---input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts_train \
---output_filepath data/NEW_DATASET/bps_grasp_dataset/train_dataset.h5
+--input_point_clouds_path data/dataset/large/point_clouds \
+--input_evaled_grasp_config_dicts_path data/dataset/large/final_evaled_grasp_config_dicts_train \
+--output_filepath data/dataset/large/bps_grasp_dataset/train_dataset.h5
 ```
 
 ```
 python get_a_grip/model_training/scripts/create_bps_grasp_dataset.py \
---input_point_clouds_path data/NEW_DATASET/point_clouds \
---input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts_val \
---output_filepath data/NEW_DATASET/bps_grasp_dataset/val_dataset.h5
+--input_point_clouds_path data/dataset/large/point_clouds \
+--input_evaled_grasp_config_dicts_path data/dataset/large/final_evaled_grasp_config_dicts_val \
+--output_filepath data/dataset/large/bps_grasp_dataset/val_dataset.h5
 ```
 
 ```
 python get_a_grip/model_training/scripts/create_bps_grasp_dataset.py \
---input_point_clouds_path data/NEW_DATASET/point_clouds \
---input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts_test \
---output_filepath data/NEW_DATASET/bps_grasp_dataset/test_dataset.h5
+--input_point_clouds_path data/dataset/large/point_clouds \
+--input_evaled_grasp_config_dicts_path data/dataset/large/final_evaled_grasp_config_dicts_test \
+--output_filepath data/dataset/large/bps_grasp_dataset/test_dataset.h5
 ```
 
 <p align="center">
@@ -58,31 +59,32 @@ Create NeRF dataset:
 
 ```
 python get_a_grip/model_training/scripts/create_nerf_grasp_dataset.py \
---input_nerfcheckpoints_path data/NEW_DATASET/nerfcheckpoints \
---input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts_train \
---output_filepath data/NEW_DATASET/nerf_grasp_dataset/train_dataset.h5
+--input_nerfcheckpoints_path data/dataset/large/nerfcheckpoints \
+--input_evaled_grasp_config_dicts_path data/dataset/large/final_evaled_grasp_config_dicts_train \
+--output_filepath data/dataset/large/nerf_grasp_dataset/train_dataset.h5
 ```
 
 ```
 python get_a_grip/model_training/scripts/create_nerf_grasp_dataset.py \
---input_nerfcheckpoints_path data/NEW_DATASET/nerfcheckpoints \
---input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts_val \
---output_filepath data/NEW_DATASET/nerf_grasp_dataset/val_dataset.h5
+--input_nerfcheckpoints_path data/dataset/large/nerfcheckpoints \
+--input_evaled_grasp_config_dicts_path data/dataset/large/final_evaled_grasp_config_dicts_val \
+--output_filepath data/dataset/large/nerf_grasp_dataset/val_dataset.h5
 ```
 
 ```
 python get_a_grip/model_training/scripts/create_nerf_grasp_dataset.py \
---input_nerfcheckpoints_path data/NEW_DATASET/nerfcheckpoints \
---input_evaled_grasp_config_dicts_path data/NEW_DATASET/final_evaled_grasp_config_dicts_test \
---output_filepath data/NEW_DATASET/nerf_grasp_dataset/test_dataset.h5
+--input_nerfcheckpoints_path data/dataset/large/nerfcheckpoints \
+--input_evaled_grasp_config_dicts_path data/dataset/large/final_evaled_grasp_config_dicts_test \
+--output_filepath data/dataset/large/nerf_grasp_dataset/test_dataset.h5
 ```
 
 ## BPS Evaluator Model Training
 
 ```
 python get_a_grip/model_training/scripts/train_bps_evaluator_model.py \
---train_dataset_path data/NEW_DATASET/bps_grasp_dataset/train_dataset.h5 \
---val_dataset_path data/NEW_DATASET/bps_grasp_dataset/val_dataset.h5
+--train_dataset_path data/dataset/large/bps_grasp_dataset/train_dataset.h5 \
+--val_dataset_path data/dataset/large/bps_grasp_dataset/val_dataset.h5
+--output_dir data/models/NEW/bps_evaluator_model/my_model_name
 ```
 
 <p align="center">
@@ -93,9 +95,11 @@ python get_a_grip/model_training/scripts/train_bps_evaluator_model.py \
 
 ```
 python get_a_grip/model_training/scripts/train_nerf_evaluator_model.py \
---train-dataset-path data/NEW_DATASET/nerf_grasp_dataset/train_dataset.h5 \
---val-dataset-path data/NEW_DATASET/nerf_grasp_dataset/val_dataset.h5 \
---test-dataset-path data/NEW_DATASET/nerf_grasp_dataset/test_dataset.h5 \
+--nerf_grasp_dataset_config_path data/dataset/large/nerf_grasp_dataset/config.yml \
+--train-dataset-path data/dataset/large/nerf_grasp_dataset/train_dataset.h5 \
+--val-dataset-path data/dataset/large/nerf_grasp_dataset/val_dataset.h5 \
+--test-dataset-path data/dataset/large/nerf_grasp_dataset/test_dataset.h5 \
+--checkpoint_workspace.output_dir data/models/NEW/nerf_evaluator_model/my_model_name
 --task-type Y_PICK_AND_Y_COLL_AND_Y_PGS \
 --dataloader.batch-size 128 \
 --name MY_NERF_EXPERIMENT_NAME \
@@ -112,8 +116,9 @@ model-config:cnn-xyz-global-cnn-model-config
 
 ```
 python get_a_grip/model_training/scripts/train_bps_sampler_model.py \
---train_dataset_path data/NEW_DATASET/bps_grasp_dataset/train_dataset.h5 \
---val_dataset_path data/NEW_DATASET/bps_grasp_dataset/val_dataset.h5
+--train_dataset_path data/dataset/large/bps_grasp_dataset/train_dataset.h5 \
+--val_dataset_path data/dataset/large/bps_grasp_dataset/val_dataset.h5
+--output_dir data/models/NEW/bps_sampler_model/my_model_name
 ```
 
 <p align="center">
@@ -124,10 +129,35 @@ python get_a_grip/model_training/scripts/train_bps_sampler_model.py \
 
 ```
 python get_a_grip/model_training/scripts/train_nerf_sampler_model.py \
---train_dataset_path data/NEW_DATASET/nerf_grasp_dataset/train_dataset.h5 \
---val_dataset_path data/NEW_DATASET/nerf_grasp_dataset/val_dataset.h5
+--train_dataset_path data/dataset/large/nerf_grasp_dataset/train_dataset.h5 \
+--val_dataset_path data/dataset/large/nerf_grasp_dataset/val_dataset.h5
+--output_dir data/models/NEW/nerf_sampler_model/my_model_name
 ```
 
 <p align="center">
   <img src="https://github.com/tylerlum/get_a_grip/assets/26510814/782d7a18-8ac6-462d-b434-513387494fe2" alt="bps_sampler" style="width:30%;">
 </p>
+
+## Create Fixed Sampler Grasp Config Dict
+
+All good grasps:
+
+```
+python get_a_grip/grasp_planning/scripts/create_fixed_sampler_grasp_config_dict.py \
+--input-evaled-grasp-config-dicts-path data/dataset/large/final_evaled_grasp_config_dicts_train \
+--output-grasp-config-dict-path data/fixed_sampler_grasp_config_dicts/NEW/all_good_grasps.npy \
+--y_PGS_threshold 0.9 \
+--max_grasps_per_object None \
+--overwrite True
+```
+
+One good grasp per object:
+
+```
+python get_a_grip/grasp_planning/scripts/create_fixed_sampler_grasp_config_dict.py \
+--input-evaled-grasp-config-dicts-path data/TINY_DATASET/final_evaled_grasp_config_dicts_train \
+--output-grasp-config-dict-path data/fixed_sampler_grasp_config_dicts/NEW/one_good_grasp_per_object.npy \
+--y_PGS_threshold 0.9 \
+--max_grasps_per_object 1 \
+--overwrite True
+```

@@ -13,21 +13,21 @@ from get_a_grip.dataset_generation.scripts.generate_nerfdata_one_object_one_scal
     GenerateNerfDataOneObjectOneScaleArgs,
     generate_nerfdata_one_object_one_scale,
 )
-from get_a_grip.dataset_generation.utils.parse_object_code_and_scale import (
-    parse_object_code_and_scale,
-)
 from get_a_grip.dataset_generation.utils.process_utils import (
     get_object_codes_and_scales_to_process,
+)
+from get_a_grip.utils.parse_object_code_and_scale import (
+    parse_object_code_and_scale,
 )
 
 
 @dataclass
 class GenerateNerfDataArgs:
-    meshdata_root_path: pathlib.Path = get_data_folder() / "large/meshes"
+    meshdata_root_path: pathlib.Path = get_data_folder() / "meshdata"
     input_object_code_and_scales_txt_path: pathlib.Path = (
-        get_data_folder() / "NEW_DATASET/object_code_and_scales.txt"
+        get_data_folder() / "dataset/NEW/object_code_and_scales.txt"
     )
-    output_nerfdata_path: pathlib.Path = get_data_folder() / "NEW_DATASET/nerfdata"
+    output_nerfdata_path: pathlib.Path = get_data_folder() / "dataset/NEW/nerfdata"
     num_cameras: int = 250
     randomize_order_seed: Optional[int] = None
     gpu: int = 0

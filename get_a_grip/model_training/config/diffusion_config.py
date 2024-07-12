@@ -35,7 +35,7 @@ class TrainingConfig:
     n_epochs: int = 20000
     print_freq: int = 10
     snapshot_freq: int = 100
-    log_path: pathlib.Path = get_data_folder() / (
+    output_dir: pathlib.Path = get_data_folder() / (
         f"trained_models/sampler/{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     )
 

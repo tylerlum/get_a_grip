@@ -30,9 +30,6 @@ from get_a_grip.model_training.scripts.create_nerf_grasp_dataset import (
     create_mesh,
     get_data,
 )
-from get_a_grip.model_training.utils.nerf_load_utils import (
-    get_nerf_configs,
-)
 from get_a_grip.model_training.utils.nerf_ray_utils import (
     get_ray_origins_finger_frame,
 )
@@ -41,7 +38,10 @@ from get_a_grip.model_training.utils.plot_utils import (
     plot_mesh_and_query_points,
     plot_mesh_and_transforms,
 )
-from get_a_grip.model_training.utils.point_utils import (
+from get_a_grip.utils.nerf_load_utils import (
+    get_nerf_configs,
+)
+from get_a_grip.utils.point_utils import (
     transform_points,
 )
 
@@ -84,11 +84,11 @@ if is_notebook():
     # Manually insert arguments here
     arguments = [
         "--input_nerfcheckpoints_path",
-        "data/NEW_DATASET/nerfcheckpoints",
+        "data/dataset/NEW/nerfcheckpoints",
         "--input_evaled_grasp_config_dicts_path",
-        "data/NEW_DATASET/final_evaled_grasp_config_dicts_train",
+        "data/dataset/NEW/final_evaled_grasp_config_dicts_train",
         "--output_filepath",
-        "data/NEW_DATASET/nerf_grasp_dataset/train_dataset.h5",
+        "data/dataset/NEW/nerf_grasp_dataset/train_dataset.h5",
     ]
 else:
     arguments = sys.argv[1:]

@@ -5,11 +5,11 @@ from typing import Literal, Optional
 
 from nerfstudio.pipelines.base_pipeline import Pipeline
 
-from get_a_grip.grasp_planning.utils.train_nerf import (
+from get_a_grip.utils.nerf_load_utils import load_nerf_pipeline
+from get_a_grip.utils.train_nerf import (
     TrainNerfArgs,
     train_nerf_return_trainer,
 )
-from get_a_grip.model_training.utils.nerf_load_utils import load_nerf_pipeline
 
 
 @dataclass
@@ -50,7 +50,7 @@ class NerfArgs:
         self,
         test_mode: Literal[
             "test", "inference"
-        ] = "test",  # Must be test for point cloud
+        ] = "test",  # Must be test for point cloud and BPS, can be inference for sampling densities
         print_timing: bool = True,
     ) -> Pipeline:
         assert self.nerf_config is not None, "nerf_config must be specified"
