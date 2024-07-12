@@ -11,11 +11,11 @@ import numpy as np
 import plotly.graph_objects as go
 import torch
 import tyro
+import wandb
 from clean_loop_timer import LoopTimer
 from torch.multiprocessing import set_start_method
 from tqdm import tqdm
 
-import wandb
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.energy import (
     ENERGY_NAME_TO_SHORTHAND_DICT,

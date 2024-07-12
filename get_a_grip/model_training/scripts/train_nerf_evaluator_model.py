@@ -17,6 +17,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import trimesh
 import tyro
+import wandb
 from clean_loop_timer import LoopTimer
 from sklearn.metrics import (
     accuracy_score,
@@ -30,8 +31,9 @@ from torch.utils.data import (
     random_split,
 )
 from tqdm import tqdm as std_tqdm
+from wandb.util import generate_id
+from wandb.viz import CustomChart
 
-import wandb
 from get_a_grip import get_data_folder
 from get_a_grip.grasp_planning.utils.allegro_grasp_config import (
     sample_random_rotate_transforms_only_around_y,
@@ -68,8 +70,6 @@ from get_a_grip.utils.parse_object_code_and_scale import (
     parse_object_code_and_scale,
 )
 from get_a_grip.utils.seed import set_seed
-from wandb.util import generate_id
-from wandb.viz import CustomChart
 
 tqdm = partial(std_tqdm, dynamic_ncols=True)
 
