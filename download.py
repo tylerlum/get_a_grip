@@ -83,8 +83,7 @@ def main() -> None:
     # Meshdata
     if args.include_meshdata:
         url = urljoin(args.download_url, "meshdata.zip")
-        print(f"url = {url}")
-        extract_to = get_data_folder() / "meshdata"
+        extract_to = get_data_folder()
         download_and_extract_zip(url=url, extract_to=extract_to)
 
     # Final evaled grasp config dicts
@@ -93,18 +92,13 @@ def main() -> None:
             args.download_url,
             f"dataset/{args.dataset_size}/final_evaled_grasp_config_dicts.zip",
         )
-        extract_to = (
-            get_data_folder()
-            / "dataset"
-            / args.dataset_size
-            / "final_evaled_grasp_config_dicts"
-        )
+        extract_to = get_data_folder() / "dataset" / args.dataset_size
         download_and_extract_zip(url=url, extract_to=extract_to)
 
     # Nerfdata
     if args.include_nerfdata:
         url = urljoin(args.download_url, f"dataset/{args.dataset_size}/nerfdata.zip")
-        extract_to = get_data_folder() / "dataset" / args.dataset_size / "nerfdata"
+        extract_to = get_data_folder() / "dataset" / args.dataset_size
         download_and_extract_zip(url=url, extract_to=extract_to)
 
     # Point clouds
@@ -112,7 +106,7 @@ def main() -> None:
         url = urljoin(
             args.download_url, f"dataset/{args.dataset_size}/point_clouds.zip"
         )
-        extract_to = get_data_folder() / "dataset" / args.dataset_size / "point_clouds"
+        extract_to = get_data_folder() / "dataset" / args.dataset_size
         download_and_extract_zip(url=url, extract_to=extract_to)
 
     # Nerf checkpoints
@@ -120,21 +114,19 @@ def main() -> None:
         url = urljoin(
             args.download_url, f"dataset/{args.dataset_size}/nerfcheckpoints.zip"
         )
-        extract_to = (
-            get_data_folder() / "dataset" / args.dataset_size / "nerfcheckpoints"
-        )
+        extract_to = get_data_folder() / "dataset" / args.dataset_size
         download_and_extract_zip(url=url, extract_to=extract_to)
 
     # Pretrained models
     if args.include_pretrained_models:
         url = urljoin(args.download_url, "models/pretrained.zip")
-        extract_to = get_data_folder() / "models" / "pretrained"
+        extract_to = get_data_folder() / "models"
         download_and_extract_zip(url=url, extract_to=extract_to)
 
     # Fixed sampler grasp config dicts
     if args.include_fixed_sampler_grasp_config_dicts:
         url = urljoin(args.download_url, "fixed_sampler_grasp_config_dicts.zip")
-        extract_to = get_data_folder() / "fixed_sampler_grasp_config_dicts" / "given"
+        extract_to = get_data_folder()
         download_and_extract_zip(url=url, extract_to=extract_to)
 
     # Real world nerfdata
