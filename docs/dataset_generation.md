@@ -15,6 +15,18 @@ python get_a_grip/dataset_generation/scripts/generate_object_code_and_scales_txt
 --num_scales_per_object 3
 ```
 
+If you want to generate for fewer objects to test, you can set the `--max_num_object_codes` like so:
+
+```
+python get_a_grip/dataset_generation/scripts/generate_object_code_and_scales_txt.py \
+--meshdata_root_path data/meshdata \
+--output_object_code_and_scales_txt_path data/dataset/NEW/object_code_and_scales.txt \
+--min_object_scale 0.05 \
+--max_object_scale 0.1 \
+--num_scales_per_object 3 \
+--max_num_object_codes 20
+```
+
 ## 1. NeRF Data Generation + Object Filtering
 
 For each object, drop it on a table, wait for it to settle upright, then capture posed images of it on a table. If the object doesn't settle upright on the table, it is filtered out with a new txt file (<output_nerfdata_path_data>_settled_successes.txt).
