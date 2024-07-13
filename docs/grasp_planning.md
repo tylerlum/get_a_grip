@@ -109,7 +109,7 @@ planner.optimizer:nerf-random-sampling-optimizer-config \
 
 ## Grasp Evaluation
 
-You can evaluate the saved grasps with the following:
+You can evaluate the planned grasps in simulation with the following:
 
 ```
 python get_a_grip/dataset_generation/scripts/eval_grasp_config_dicts.py \
