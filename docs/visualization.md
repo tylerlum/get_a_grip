@@ -1,0 +1,156 @@
+# Visualization Tools
+
+## Debugging Eval Grasp Config Dicts (Isaac Validator)
+
+The following assumes you have `data/meshdata_small` and `data/dataset/tiny_random` downloaded.
+
+```
+export MESHDATA_ROOT_PATH=data/meshdata_small
+export DATASET_NAME=tiny_random
+
+export OBJECT_CODE_AND_SCALE_STR=core-mug-5c48d471200d2bf16e8a121e6886e18d_0_0622
+export NERF_CONFIG=data/dataset/${DATASET_NAME}/nerfcheckpoints/core-mug-5c48d471200d2bf16e8a121e6886e18d_0_0622/nerfacto/2024-07-13_111325/config.yml
+```
+
+### Debug Prints
+
+Change the `DEBUG` flag in `eval_grasp_config_dict.py` and/or `isaac_validator.py` to get more detailed debug info.
+
+### Sim Visualization with GUI
+
+You can visualize all grasp simulations in a GUI like so:
+
+```
+python get_a_grip/dataset_generation/scripts/eval_grasp_config_dict.py \
+--meshdata_root_path ${MESHDATA_ROOT_PATH} \
+--input_grasp_config_dicts_path data/dataset/${DATASET_NAME}/grasp_config_dicts \
+--output_evaled_grasp_config_dicts_path None \
+--object_code_and_scale_str ${OBJECT_CODE_AND_SCALE_STR} \
+--max_grasps_per_batch 5000 \
+--save_to_file False \
+--use_gui True
+```
+
+You can visualize a specific grasp simulation in a GUI like so:
+
+```
+python get_a_grip/dataset_generation/scripts/eval_grasp_config_dict.py \
+--meshdata_root_path ${MESHDATA_ROOT_PATH} \
+--input_grasp_config_dicts_path data/dataset/${DATASET_NAME}/grasp_config_dicts \
+--output_evaled_grasp_config_dicts_path None \
+--object_code_and_scale_str ${OBJECT_CODE_AND_SCALE_STR} \
+--max_grasps_per_batch 5000 \
+--save_to_file False \
+--use_gui True \
+--debug_index 0
+```
+
+You can visualize a specific grasp simulation in a GUI with step mode like so:
+
+```
+python get_a_grip/dataset_generation/scripts/eval_grasp_config_dict.py \
+--meshdata_root_path ${MESHDATA_ROOT_PATH} \
+--input_grasp_config_dicts_path data/dataset/${DATASET_NAME}/grasp_config_dicts \
+--output_evaled_grasp_config_dicts_path None \
+--object_code_and_scale_str ${OBJECT_CODE_AND_SCALE_STR} \
+--max_grasps_per_batch 5000 \
+--save_to_file False \
+--use_gui True \
+--debug_index 0 \
+--start_with_step_mode True
+```
+
+When GUI is in normal mode, press `<space>` to pause/start.
+
+When GUI is in step mode, the simulation is paused. Press `<space>` to take one sim step forward before pausing again. This is useful for detailed debugging and analysis.
+
+Press `s` to switch between normal mode and step mode.
+
+You can visualize a specific grasp simulation in a GUI with step mode with the fingers moved back extra far at pregrasp (different grasp strategy) like so:
+
+```
+python get_a_grip/dataset_generation/scripts/eval_grasp_config_dict.py \
+--meshdata_root_path ${MESHDATA_ROOT_PATH} \
+--input_grasp_config_dicts_path data/dataset/${DATASET_NAME}/grasp_config_dicts \
+--output_evaled_grasp_config_dicts_path None \
+--object_code_and_scale_str ${OBJECT_CODE_AND_SCALE_STR} \
+--max_grasps_per_batch 5000 \
+--save_to_file False \
+--use_gui True \
+--debug_index 0 \
+--start_with_step_mode True \
+--move_fingers_back_at_init True
+```
+
+### Sim Visualization with Output Video Files
+
+You can visualize specific simulations with output video files like so:
+
+```
+python get_a_grip/dataset_generation/scripts/eval_grasp_config_dict.py \
+--meshdata_root_path ${MESHDATA_ROOT_PATH} \
+--input_grasp_config_dicts_path data/dataset/${DATASET_NAME}/grasp_config_dicts \
+--output_evaled_grasp_config_dicts_path None \
+--object_code_and_scale_str ${OBJECT_CODE_AND_SCALE_STR} \
+--max_grasps_per_batch 5000 \
+--save_to_file False \
+--record_indices 0 1 2 3 4 5 6 7 8 9
+```
+
+### Visualize Grasps with Plotly
+
+Visualize one grasp on one object:
+
+```
+python get_a_grip/visualization/scripts/visualize_config_dict.py \
+--meshdata_root_path ${MESHDATA_ROOT_PATH} \
+--input_config_dicts_path data/dataset/${DATASET_NAME}/grasp_config_dicts \
+--object_code_and_scale_str ${OBJECT_CODE_AND_SCALE_STR} \
+--idx_to_visualize 0
+```
+
+Visualize multiple grasps on one object:
+
+```
+python get_a_grip/visualization/scripts/visualize_config_dict.py \
+--meshdata_root_path ${MESHDATA_ROOT_PATH} \
+--input_config_dicts_path data/dataset/${DATASET_NAME}/grasp_config_dicts \
+--object_code_and_scale_str ${OBJECT_CODE_AND_SCALE_STR} \
+--visualize_all True
+```
+
+Visualize the optimization of one grasp on one object (must have run stored mid optimization grasps during `generate_hand_config_dicts.py` with `--store_grasps_mid_optimization_freq 25` or `--store_grasps_mid_optimization_iters 7 11 15`, then run `generate_grasp_config_dicts.py` and `eval_all_grasp_config_dicts.py` with `--all_mid_optimization_steps True`):
+
+```
+python get_a_grip/visualization/scripts/visualize_config_dict_optimization.py \
+--meshdata_root_path ${MESHDATA_ROOT_PATH} \
+--input_config_dicts_mid_optimization_path data/dataset/${DATASET_NAME}/evaled_grasp_config_dicts/mid_optimization \
+--object_code_and_scale_str ${OBJECT_CODE_AND_SCALE_STR} \
+--idx_to_visualize 0
+```
+
+### Visualize Meshes with Plotly
+
+Visualize multiple meshes files (very useful when looking at meshes generated by nerf):
+
+```
+python get_a_grip/visualization/scripts/visualize_objs.py \
+--meshdata_root_path ${MESHDATA_ROOT_PATH}
+```
+
+### Visualize Meshes with Isaacgym
+
+Visualize the meshes in isaacgym like so:
+
+```
+python get_a_grip/visualization/scripts/visualize_objs_in_isaacgym.py \
+--meshdata_root_path ${MESHDATA_ROOT_PATH}
+```
+
+## Visualizing NeRFs
+
+Run nerfstudio's interactive viewer:
+
+```
+ns-viewer --load-config ${NERF_CONFIG}
+```
