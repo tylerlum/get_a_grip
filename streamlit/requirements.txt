@@ -6,10 +6,8 @@ tqdm
 transforms3d
 h5py
 open3d
-bps
 pypose
 pytorch_kinematics
-ruff
 urdf_parser_py
 git+https://github.com/sergeyprokudin/bps
 -e .
