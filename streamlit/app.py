@@ -30,8 +30,8 @@ from get_a_grip.utils.parse_object_code_and_scale import parse_object_code_and_s
 
 # Caching parameters: balance fast loading with memory usage
 # See https://docs.streamlit.io/develop/api-reference/caching-and-state/st.cache_data
-CACHE_TIME_TO_LIVE = datetime.timedelta(minutes=60)
-CACHE_MAX_ENTRIES = 20
+CACHE_TIME_TO_LIVE = datetime.timedelta(minutes=5)
+CACHE_MAX_ENTRIES = 2
 
 # Centered or Wide mode
 st.set_page_config(layout="centered")
