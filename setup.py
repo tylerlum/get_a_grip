@@ -29,5 +29,5 @@ setup(
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.7, <3.9",
+    # python_requires=">=3.7, <3.9",  # Comment this out because streamlit no longer support Python 3.8 (https://docs.streamlit.io/knowledge-base/using-streamlit/sanity-checks)
 )
