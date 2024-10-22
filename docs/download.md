@@ -1,77 +1,25 @@
 # Download
 
-## Overview
+## Useful Info
 
-Fill out this [form](https://forms.gle/qERExXPn5wKrGr1G8) to download the Get a Grip dataset and pretrained models. After filling out this form, you will receive a URL `<download_url>`, which will be used next.
+Please read the main README to get the `<download_url>`.
 
-Next, we will download the tiny version of the dataset and the pretrained models. Change `<download_url>` to the URL you received, then run:
-
-```
-python get_a_grip/utils/download.py \
---download_url <download_url> \
---include_meshdata_small True \
---dataset_name tiny_random \
---include_final_evaled_grasp_config_dicts True \
---include_nerfdata True \
---include_point_clouds True \
---include_nerfcheckpoints True \
---include_pretrained_models True \
---include_fixed_sampler_grasp_config_dicts True \
---include_real_world_nerfdata True \
---include_real_world_nerfcheckpoints True \
---include_real_world_point_clouds True
-```
-
-The resulting directory structure should look like this:
-
-```
-data
-├── dataset
-│   └── tiny_random
-│       ├── final_evaled_grasp_config_dicts
-│       ├── nerfdata
-│       ├── nerfcheckpoints
-│       └── point_clouds
-├── fixed_sampler_grasp_config_dicts
-│   └── given
-│       ├── all_good_grasps.npy
-│       └── one_good_grasp_per_object.npy
-├── meshdata_small
-│   ├── <object_code>
-│   ├── ...
-│   └── <object_code>
-└── models
-│   └── pretrained
-│       ├── bps_evaluator_model
-│       ├── bps_sampler_model
-│       ├── nerf_evaluator_model
-│       └── nerf_sampler_model
-└── real_world
-    ├── nerfdata
-    ├── nerfcheckpoints
-    └── point_clouds
-```
-
-You can change `tiny_random` (25 random objects) to `tiny_best` (25 best-grasped objects), `small_random` (100 random objects), `small_best` (100 best-grasped objects), or `large` (all objects). `large` is >2 TB (only recommended for model training).
-
-Additional details:
-
-- We recommend using the tiny version for testing and visualization, and we recommend using the large version for model training.
-
-- `meshdata_small` contains all the objects in `tiny_random`, `tiny_best`, `small_random`, and `small_best` for simple visualization and testing (above)
+- We only recommend using the `large` version for model training (very slow to download). Use `nano` to start using the codebase as quickly as possible.
 
 - For dataset generation, you only need the `meshdata` (all objects):
 
 ```
-python download.py \
+python get_a_grip/utils/download.py \
 --download_url <download_url> \
 --include_meshdata True
 ```
 
+- You can replace `--include_meshdata` with `--include_meshdata_small` to get `meshdata_small`. This has all the objects in all datasets that are not `large`.
+
 - For model training, you only need the `meshdata`, `final_evaled_grasp_config_dicts`, `nerfdata`, `nerfcheckpoints`, and `point_clouds`.
 
 ```
-python download.py \
+python get_a_grip/utils/download.py \
 --download_url <download_url> \
 --include_meshdata True \
 --dataset_name large \
