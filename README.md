@@ -90,11 +90,20 @@ Next, we will download the tiny version of the dataset and the pretrained models
 export DOWNLOAD_URL=<download_url>
 ```
 
+Set the following environment variables for the next steps:
+
+```
+export DATASET_NAME=tiny_random
+export MESHDATA_ROOT_PATH=data/meshdata
+```
+
+You can change `tiny_random` (25 random objects) to `tiny_best` (25 best-grasped objects), `small_random` (100 random objects), `small_best` (100 best-grasped objects), or `large` (all objects). `large` is >2 TB (only recommended for model training).
+
 ```
 python get_a_grip/utils/download.py \
 --download_url ${DOWNLOAD_URL} \
---include_meshdata_small True \
---dataset_name tiny_random \
+--include_meshdata True \
+--dataset_name ${DATASET_NAME} \
 --include_final_evaled_grasp_config_dicts True \
 --include_nerfdata True \
 --include_point_clouds True \
@@ -120,7 +129,7 @@ data
 │   └── given
 │       ├── all_good_grasps.npy
 │       └── one_good_grasp_per_object.npy
-├── meshdata_small
+├── meshdata
 │   ├── <object_code>
 │   ├── ...
 │   └── <object_code>
@@ -134,15 +143,6 @@ data
     ├── nerfdata
     ├── nerfcheckpoints
     └── point_clouds
-```
-
-You can change `tiny_random` (25 random objects) to `tiny_best` (25 best-grasped objects), `small_random` (100 random objects), `small_best` (100 best-grasped objects), or `large` (all objects). `large` is >2 TB (only recommended for model training).
-
-Set the following environment variables for the next steps:
-
-```
-export DATASET_NAME=tiny_random
-export MESHDATA_ROOT_PATH=data/meshdata_small
 ```
 
 See [here](docs/download.md) for more download details.
