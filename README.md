@@ -82,6 +82,8 @@ Please run all commands from the root directory of this repository.
 
 Fill out this [form](https://forms.gle/qERExXPn5wKrGr1G8) to download the Get a Grip dataset and pretrained models. After filling out this form, you will receive a URL `<download_url>`, which will be used next.
 
+NOTE: Navigating to `<download_url>` will take you to a forbidden page. This is expected. We use it in the steps below.
+
 Next, we will download the tiny version of the dataset and the pretrained models. Change `<download_url>` to the URL you received, then run:
 
 ```
