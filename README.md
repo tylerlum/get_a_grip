@@ -161,7 +161,7 @@ Visualize a specific grasp on one object:
 ```
 python get_a_grip/visualization/scripts/visualize_config_dict.py \
 --meshdata_root_path ${MESHDATA_ROOT_PATH} \
---input_config_dicts_path data/dataset/${DATASET_NAME}/grasp_config_dicts \
+--input_config_dicts_path data/dataset/${DATASET_NAME}/final_evaled_grasp_config_dicts \
 --object_code_and_scale_str ${OBJECT_CODE_AND_SCALE_STR} \
 --idx_to_visualize 0
 ```
@@ -173,7 +173,7 @@ Visualize a specific grasp simulation on one object in a GUI like so:
 ```
 python get_a_grip/dataset_generation/scripts/eval_grasp_config_dict.py \
 --meshdata_root_path ${MESHDATA_ROOT_PATH} \
---input_grasp_config_dicts_path data/dataset/${DATASET_NAME}/grasp_config_dicts \
+--input_grasp_config_dicts_path data/dataset/${DATASET_NAME}/final_evaled_grasp_config_dicts \
 --output_evaled_grasp_config_dicts_path None \
 --object_code_and_scale_str ${OBJECT_CODE_AND_SCALE_STR} \
 --max_grasps_per_batch 5000 \
