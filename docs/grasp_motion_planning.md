@@ -35,6 +35,8 @@ Please be sure to correctly specify the `--nerf_is_z_up` flag when running the g
 
 First run the following (change as needed):
 ```
+export DATASET_NAME=nano
+
 export BPS_SAMPLER=data/models/pretrained/bps_sampler_model/ckpt.pth
 export BPS_EVALUATOR=data/models/pretrained/bps_evaluator_model/ckpt.pth
 export NERF_SAMPLER=data/models/pretrained/nerf_sampler_model/ckpt.pth
@@ -42,7 +44,7 @@ export NERF_EVALUATOR=data/models/pretrained/nerf_evaluator_model/TODO_EXPERIMEN
 export FIXED_SAMPLER_GRASPS=data/fixed_sampler_grasp_config_dicts/given/all_good_grasps.npy
 
 export OBJECT_CODE_AND_SCALE_STR=core-mug-5c48d471200d2bf16e8a121e6886e18d_0_0622
-export NERF_CONFIG=data/dataset/tiny_random/nerfcheckpoints/core-mug-5c48d471200d2bf16e8a121e6886e18d_0_0622/nerfacto/2024-07-13_111325/config.yml
+export NERF_CONFIG=data/dataset/${DATASET_NAME}/nerfcheckpoints/core-mug-5c48d471200d2bf16e8a121e6886e18d_0_0622/nerfacto/2024-07-13_111325/config.yml
 ```
 
 ## BPS Sampler + BPS Evaluator + BPS Random Sampling Optimizer
