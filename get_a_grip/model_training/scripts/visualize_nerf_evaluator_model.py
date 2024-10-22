@@ -18,11 +18,11 @@ import numpy as np
 import plotly.graph_objects as go
 import torch
 import tyro
+import wandb
 from clean_loop_timer import LoopTimer
 from plotly.subplots import make_subplots
 from tqdm import tqdm as std_tqdm
 
-import wandb
 from get_a_grip import get_repo_folder
 from get_a_grip.model_training.config.nerf_evaluator_model_config import (
     NerfEvaluatorModelConfig,

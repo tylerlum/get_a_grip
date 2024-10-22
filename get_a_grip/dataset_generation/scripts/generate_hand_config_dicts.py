@@ -11,11 +11,11 @@ import numpy as np
 import plotly.graph_objects as go
 import torch
 import tyro
+import wandb
 from clean_loop_timer import LoopTimer
 from torch.multiprocessing import set_start_method
 from tqdm import tqdm
 
-import wandb
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.energy import (
     ENERGY_NAME_TO_SHORTHAND_DICT,
@@ -298,7 +298,9 @@ def generate(
                 os.environ["CUDA_VISIBLE_DEVICES"] = gpu_list[worker - 1]
             else:
                 assert len(gpu_list) > 0, f"len(gpu_list) = {len(gpu_list)}"
-                os.environ["CUDA_VISIBLE_DEVICES"] = gpu_list[0] if len(gpu_list) == 1 else ",".join(gpu_list)
+                os.environ["CUDA_VISIBLE_DEVICES"] = (
+                    gpu_list[0] if len(gpu_list) == 1 else ",".join(gpu_list)
+                )
 
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

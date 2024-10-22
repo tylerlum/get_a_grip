@@ -1,7 +1,7 @@
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -21,9 +21,11 @@ class DownloadArgs:
     include_meshdata_small: bool = False
 
     # Dataset
-    dataset_name: Optional[Literal[
-        "nano", "tiny_best", "tiny_random", "small_best", "small_random", "large"
-    ]] = None
+    dataset_name: Optional[
+        Literal[
+            "nano", "tiny_best", "tiny_random", "small_best", "small_random", "large"
+        ]
+    ] = None
     include_final_evaled_grasp_config_dicts: bool = False
     include_nerfdata: bool = False
     include_nerfcheckpoints: bool = False
