@@ -186,6 +186,17 @@ python get_a_grip/dataset_generation/scripts/eval_grasp_config_dict.py \
 
 Note: Isaacgym may not run on all GPUs (e.g., H100s seem to not work). Please refer to their documentation for more details (in `<path/to/isaacgym>/docs/index.html`).
 
+If you get this error:
+```
+ImportError: libpython3.8m.so.1.0: cannot open shared object file: No such file or directory
+```
+
+Try this:
+```
+# Environment variable that may be needed from isaacgym docs
+export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${CONDA_PREFIX}/lib
+```
+
 Run nerfstudio's interactive viewer:
 
 ```
