@@ -184,6 +184,8 @@ python get_a_grip/dataset_generation/scripts/eval_grasp_config_dict.py \
 
 [Visualize_Grasp_IsaacGym_simplescreenrecorder-2024-09-27_17.38.06.mp4](https://github.com/user-attachments/assets/bdfe121f-1c36-4741-a294-0e2604c5c05a)
 
+Note: Isaacgym may not run on all GPUs (e.g., H100s seem to not work). Please refer to their documentation for more details (in `<path/to/isaacgym>/docs/index.html`).
+
 Run nerfstudio's interactive viewer:
 
 ```
