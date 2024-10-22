@@ -82,34 +82,54 @@ Please run all commands from the root directory of this repository.
 
 Fill out this [form](https://forms.gle/qERExXPn5wKrGr1G8) to download the Get a Grip dataset and pretrained models. After filling out this form, you will receive a URL `<download_url>`, which will be used next.
 
-NOTE: Navigating to `<download_url>` will take you to a forbidden page. This is expected. We use it in the steps below.
-
-Next, we will download the tiny version of the dataset and the pretrained models. Change `<download_url>` to the URL you received, then run:
+NOTE: Navigating to `<download_url>` will take you to a forbidden page. This is expected. We use it in the steps below by setting this environment variable:
 
 ```
 export DOWNLOAD_URL=<download_url>
 ```
 
-Set the following environment variables for the next steps:
+First, we will download the meshdata for all objects (recommended for all use cases):
 
 ```
-export DATASET_NAME=tiny_random
-export MESHDATA_ROOT_PATH=data/meshdata
+python get_a_grip/utils/download.py \
+--download_url <download_url> \
+--include_meshdata True
 ```
 
-You can change `tiny_random` (25 random objects) to `tiny_best` (25 best-grasped objects), `small_random` (100 random objects), `small_best` (100 best-grasped objects), or `large` (all objects). `large` is >2 TB (only recommended for model training).
+We will be choosing the `nano` version of the dataset for testing and visualization:
+
+```
+export DATASET_NAME=nano
+```
+
+You can change `nano` (2 random objects) to `tiny_random` (25 random objects), `tiny_best` (25 best-grasped objects), `small_random` (100 random objects), `small_best` (100 best-grasped objects), or `large` (all objects). `large` is >2 TB (only recommended for model training).
+
+Next, we will download the dataset:
 
 ```
 python get_a_grip/utils/download.py \
 --download_url ${DOWNLOAD_URL} \
---include_meshdata True \
 --dataset_name ${DATASET_NAME} \
 --include_final_evaled_grasp_config_dicts True \
 --include_nerfdata True \
---include_point_clouds True \
 --include_nerfcheckpoints True \
+--include_point_clouds True
+```
+
+Next, we will download the pretrained models and associated files:
+
+```
+python get_a_grip/utils/download.py \
+--download_url ${DOWNLOAD_URL} \
 --include_pretrained_models True \
---include_fixed_sampler_grasp_config_dicts True \
+--include_fixed_sampler_grasp_config_dicts True 
+```
+
+Next, we will download real-world object data:
+
+```
+python get_a_grip/utils/download.py \
+--download_url ${DOWNLOAD_URL} \
 --include_real_world_nerfdata True \
 --include_real_world_nerfcheckpoints True \
 --include_real_world_point_clouds True
@@ -120,7 +140,7 @@ The resulting directory structure should look like this:
 ```
 data
 ├── dataset
-│   └── tiny_random
+│   └── nano
 │       ├── final_evaled_grasp_config_dicts
 │       ├── nerfdata
 │       ├── nerfcheckpoints
@@ -148,6 +168,11 @@ data
 See [here](docs/download.md) for more download details.
 
 ### 2. Visualize Grasps and NeRFs
+
+Set the following environment variable for the next steps:
+```
+export MESHDATA_ROOT_PATH=data/meshdata
+```
 
 We will be using the following object for the next steps:
 
