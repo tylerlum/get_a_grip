@@ -1,3 +1,4 @@
+import time
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -110,6 +111,15 @@ def download_and_extract_zip(url: str, extract_to: Path) -> None:
 
     print("DONE!")
     print("~" * 80 + "\n")
+
+    # HACK:
+    # Sometimes get error like
+    # zipfile.BadZipFile: File is not a zip file
+    # I believe this is when we request too many files too quickly
+    # Thus, we sleep for a bit between downloads
+    SLEEP_TIME_SECONDS = 1
+    print(f"Sleeping for {SLEEP_TIME_SECONDS} seconds...")
+    time.sleep(SLEEP_TIME_SECONDS)
 
 
 def run_download(args: DownloadArgs) -> None:
