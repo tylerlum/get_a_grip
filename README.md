@@ -67,7 +67,7 @@ get_a_grip
   │   └── ...
   └── packages.txt          // Streamlit required packages
                             // https://docs.streamlit.io/knowledge-base/dependencies/libgl
-                            // https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/app-dependencies)
+                            // https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/app-dependencies
 ```
 
 ## Installation
@@ -92,7 +92,7 @@ First, we will download the meshdata for all objects (recommended for all use ca
 
 ```
 python get_a_grip/utils/download.py \
---download_url <download_url> \
+--download_url ${DOWNLOAD_URL} \
 --include_meshdata True
 ```
 
