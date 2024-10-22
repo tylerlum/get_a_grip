@@ -2,11 +2,11 @@
 
 ## Debugging Eval Grasp Config Dicts (Isaac Validator)
 
-The following assumes you have `data/meshdata_small` and `data/dataset/tiny_random` downloaded.
+The following assumes you have `data/meshdata` and `data/dataset/nano` downloaded.
 
 ```
-export MESHDATA_ROOT_PATH=data/meshdata_small
-export DATASET_NAME=tiny_random
+export MESHDATA_ROOT_PATH=data/meshdata
+export DATASET_NAME=nano
 
 export OBJECT_CODE_AND_SCALE_STR=core-mug-5c48d471200d2bf16e8a121e6886e18d_0_0622
 export NERF_CONFIG=data/dataset/${DATASET_NAME}/nerfcheckpoints/core-mug-5c48d471200d2bf16e8a121e6886e18d_0_0622/nerfacto/2024-07-13_111325/config.yml
