@@ -298,7 +298,7 @@ def generate(
                 os.environ["CUDA_VISIBLE_DEVICES"] = gpu_list[worker - 1]
             else:
                 assert len(gpu_list) > 0, f"len(gpu_list) = {len(gpu_list)}"
-                os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(gpu_list)
+                os.environ["CUDA_VISIBLE_DEVICES"] = gpu_list[0] if len(gpu_list) == 1 else ",".join(gpu_list)
 
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
