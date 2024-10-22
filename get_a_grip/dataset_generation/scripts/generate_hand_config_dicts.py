@@ -293,14 +293,16 @@ def generate(
                     config=args,
                 )
 
-            # prepare models
             if args.use_multiprocess:
                 worker = multiprocessing.current_process()._identity[0]
                 os.environ["CUDA_VISIBLE_DEVICES"] = gpu_list[worker - 1]
             else:
-                os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+                assert len(gpu_list) > 0, f"len(gpu_list) = {len(gpu_list)}"
+                os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(gpu_list)
+
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        # prepare models
         with loop_timer.add_section_timer("create hand model"):
             hand_model = HandModel(
                 hand_model_type=args.hand_model_type,
