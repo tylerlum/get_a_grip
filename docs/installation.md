@@ -1,5 +1,7 @@
 # Installation
 
+Below, there are some steps you need to do manually (e.g., installing isaacgym), so pay attention to the comments :)
+
 ```
 cd <path_to_get_a_grip_root>
 conda create -n get_a_grip_env python=3.8
@@ -31,11 +33,12 @@ export IGNORE_TORCH_VER=1  # Build from source on new version
 python setup.py develop
 cd ..  # back to thirdparty
 
-# install isaacgym (https://developer.nvidia.com/isaac-gym)
-cd isaacgym/python
+# Install isaacgym (https://developer.nvidia.com/isaac-gym)
+# Must extract the file "IsaacGym_Preview_4_Package.tar.gz" anywhere after downloading from above link
+cd <path/to/isaacgym>/isaacgym/python
 pip install -e .
 pip install numpy==1.23.5  # Compatible with isaacgym (np.float removed in 1.24)
-cd ..  # back to thirdparty
+cd <path/to/thirdparty>  # back to thirdparty
 
 # Install custom curobo (Library Installation step in https://curobo.org/get_started/1_install_instructions.html#library-installation)
 sudo apt install git-lfs
@@ -44,13 +47,6 @@ cd curobo
 git lfs pull  # Maybe need to add this (https://github.com/NVlabs/curobo/issues/10)
 pip install -e . --no-build-isolation  # ~20 min
 cd ..  # back to thirdparty
-
-# Install frogger (TODO: Potentially remove. Frogger is currently only compatible with Python 3.10, while isaacgym requires Python 3.7 or 3.8)
-# git clone https://github.com/tylerlum/frogger.git
-# cd frogger
-# git checkout 2024-04-05_Tyler_Frogger_to_DGN
-# pip install -e .
-# cd ..  # back to thirdparty
 
 cd <path_to_get_a_grip_root>
 
