@@ -21,9 +21,9 @@ class DownloadArgs:
     include_meshdata_small: bool = False
 
     # Dataset
-    dataset_name: Literal[
-        "tiny_best", "tiny_random", "small_best", "small_random", "large"
-    ] = "tiny_best"
+    dataset_name: Optional[Literal[
+        "nano", "tiny_best", "tiny_random", "small_best", "small_random", "large"
+    ]] = None
     include_final_evaled_grasp_config_dicts: bool = False
     include_nerfdata: bool = False
     include_nerfcheckpoints: bool = False
@@ -125,24 +125,28 @@ def run_download(args: DownloadArgs) -> None:
 
     # Final evaled grasp config dicts
     if args.include_final_evaled_grasp_config_dicts:
+        assert args.dataset_name is not None
         url = f"{args.download_url_no_trailing_slash}/dataset/{args.dataset_name}/final_evaled_grasp_config_dicts.zip"
         extract_to = args.data_folder / "dataset" / args.dataset_name
         download_and_extract_zip(url=url, extract_to=extract_to)
 
     # Nerfdata
     if args.include_nerfdata:
+        assert args.dataset_name is not None
         url = f"{args.download_url_no_trailing_slash}/dataset/{args.dataset_name}/nerfdata.zip"
         extract_to = args.data_folder / "dataset" / args.dataset_name
         download_and_extract_zip(url=url, extract_to=extract_to)
 
     # Nerf checkpoints
     if args.include_nerfcheckpoints:
+        assert args.dataset_name is not None
         url = f"{args.download_url_no_trailing_slash}/dataset/{args.dataset_name}/nerfcheckpoints.zip"
         extract_to = args.data_folder / "dataset" / args.dataset_name
         download_and_extract_zip(url=url, extract_to=extract_to)
 
     # Point clouds
     if args.include_point_clouds:
+        assert args.dataset_name is not None
         url = f"{args.download_url_no_trailing_slash}/dataset/{args.dataset_name}/point_clouds.zip"
         extract_to = args.data_folder / "dataset" / args.dataset_name
         download_and_extract_zip(url=url, extract_to=extract_to)
