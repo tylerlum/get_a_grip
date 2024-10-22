@@ -66,6 +66,9 @@ pip install rich ipdb jupyterlab jupytext pandas black clean_loop_timer isaacgym
 # Install get_a_grip
 cd <path_to_get_a_grip_root>
 pip install -e .
+
+# Environment variable that may be needed from isaacgym docs
+export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${CONDA_PREFIX}/lib
 ```
 
 ## Notes on Installation
