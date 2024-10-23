@@ -78,6 +78,32 @@ Installation instructions [here](docs/installation.md).
 
 Please run all commands from the root directory of this repository.
 
+### 0. Setup Zsh Tab Completion (Optional)
+
+Run this to get tab completion for most scripts in this codebase. This is experimental and only works for `zsh` (not `bash`).
+
+One-time run to set up tab completion (takes a few minutes):
+```
+python get_a_grip/utils/setup_zsh_tab_completion.py
+```
+
+Run this in every new session (or put in `~/.zshrc`):
+```
+fpath+=`pwd`/.zsh_tab_completion
+autoload -Uz compinit && compinit
+```
+
+Now, most scripts in the database, you will have tab autocompletion. For example:
+
+```
+python get_a_grip/grasp_motion_planning/scripts/run_grasp_motion_planning.py \
+-
+```
+
+After the script filepath, you can enter a `-` and then press "TAB" to get auto-completion!
+
+[zsh_tab_completion.webm](https://github.com/user-attachments/assets/2eab49d0-c176-438f-9833-99bd79d7f172)
+
 ### 1. Download Dataset
 
 Fill out this [form](https://forms.gle/qERExXPn5wKrGr1G8) to download the Get a Grip dataset and pretrained models. After filling out this form, you will receive a URL `<download_url>`, which will be used next.
@@ -125,7 +151,7 @@ python get_a_grip/utils/download.py \
 --include_fixed_sampler_grasp_config_dicts True 
 ```
 
-Next, we will download real-world object data:
+Next, we will download real-world object data (optional, takes a few minutes to download):
 
 ```
 python get_a_grip/utils/download.py \
@@ -262,7 +288,7 @@ planner.optimizer:bps-random-sampling-optimizer-config \
 
 [Visualize_Mug_Generated_Grasp_simplescreenrecorder-2024-09-30_15.46.14.mp4](https://github.com/user-attachments/assets/c89b84fc-55e6-4ac2-90ca-d0cab31f6933)
 
-Visualize BPS sampler and BPS evaluator on real world NeRF:
+Visualize BPS sampler and BPS evaluator on real world NeRF (optional):
 
 ```
 python get_a_grip/grasp_planning/scripts/run_grasp_planning.py \
@@ -306,7 +332,7 @@ planner.optimizer:bps-random-sampling-optimizer-config \
 
 [Visualize_Mug_Generated_Grasp_Motion_simplescreenrecorder-2024-09-30_15.55.17.mp4](https://github.com/user-attachments/assets/19bfc592-367b-47b2-99da-0ec9503ddcc5)
 
-Visualize BPS sampler and BPS evaluator on real world NeRF:
+Visualize BPS sampler and BPS evaluator on real world NeRF (optional):
 
 ```
 python get_a_grip/grasp_motion_planning/scripts/run_grasp_motion_planning.py \
