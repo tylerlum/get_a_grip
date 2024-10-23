@@ -1,3 +1,11 @@
+# gymtorch must be imported before torch (thus isaac_validator should be first)
+# isort: off
+from get_a_grip.dataset_generation.utils.isaac_validator import (
+    IsaacValidator,
+    ValidationType,
+)
+# isort: on
+
 import pathlib
 from dataclasses import dataclass
 
@@ -7,10 +15,6 @@ from clean_loop_timer import LoopTimer
 from get_a_grip import get_data_folder
 from get_a_grip.dataset_generation.utils.hand_model import (
     HandModelType,
-)
-from get_a_grip.dataset_generation.utils.isaac_validator import (
-    IsaacValidator,
-    ValidationType,
 )
 from get_a_grip.utils.parse_object_code_and_scale import (
     object_code_and_scale_to_str,

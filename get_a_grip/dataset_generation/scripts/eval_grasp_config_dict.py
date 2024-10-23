@@ -1,10 +1,11 @@
-# gymtorch must be imported before torch
+# gymtorch must be imported before torch (thus isaac_validator should be first)
+# isort: off
 from get_a_grip.dataset_generation.utils.isaac_validator import (
     IsaacValidator,
     ValidationType,
 )
-
-import torch  # isort: skip
+import torch
+# isort: on
 
 import math
 import pathlib

@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+# gymtorch must be imported before torch (thus isaac_validator should be first)
+# isort: off
+from get_a_grip.dataset_generation.utils.isaac_validator import (
+    ValidationType,
+)
+from get_a_grip.dataset_generation.scripts.eval_grasp_config_dict import (
+    EvalGraspConfigDictArgs,
+    eval_grasp_config_dict,
+)
+# isort: on
+
 import multiprocessing
 import pathlib
 import random
@@ -13,12 +24,7 @@ import tyro
 from tqdm import tqdm
 
 from get_a_grip import get_data_folder, get_package_folder
-from get_a_grip.dataset_generation.scripts.eval_grasp_config_dict import (
-    EvalGraspConfigDictArgs,
-    eval_grasp_config_dict,
-)
 from get_a_grip.dataset_generation.utils.hand_model import HandModelType
-from get_a_grip.dataset_generation.utils.isaac_validator import ValidationType
 from get_a_grip.dataset_generation.utils.process_utils import (
     get_object_codes_and_scales_to_process,
 )

@@ -1,3 +1,11 @@
+# gymtorch must be imported before torch (thus generate_nerfdata_one_object_one_scale should be first)
+# isort: off
+from get_a_grip.dataset_generation.scripts.generate_nerfdata_one_object_one_scale import (
+    GenerateNerfDataOneObjectOneScaleArgs,
+    generate_nerfdata_one_object_one_scale,
+)
+# isort: on
+
 import multiprocessing
 import pathlib
 import random
@@ -10,10 +18,6 @@ import tyro
 from tqdm import tqdm
 
 from get_a_grip import get_data_folder, get_package_folder
-from get_a_grip.dataset_generation.scripts.generate_nerfdata_one_object_one_scale import (
-    GenerateNerfDataOneObjectOneScaleArgs,
-    generate_nerfdata_one_object_one_scale,
-)
 from get_a_grip.dataset_generation.utils.process_utils import (
     get_object_codes_and_scales_to_process,
 )

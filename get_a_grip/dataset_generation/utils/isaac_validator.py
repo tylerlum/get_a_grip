@@ -1,7 +1,8 @@
 # gymtorch must be imported before torch
+# isort: off
 from isaacgym import gymapi, gymtorch, gymutil, torch_utils
-
-import torch  # isort: skip
+import torch
+# isort: on
 
 import json
 import math

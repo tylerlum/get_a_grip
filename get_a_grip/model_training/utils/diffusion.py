@@ -12,15 +12,15 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as data
-import wandb
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-from wandb.util import generate_id
 
+import wandb
 from get_a_grip.model_training.config.diffusion_config import (
     DiffusionConfig,
 )
+from wandb.util import generate_id
 
 
 def get_beta_schedule(beta_schedule, *, beta_start, beta_end, num_diffusion_timesteps):
