@@ -93,7 +93,7 @@ fpath+=`pwd`/.zsh_tab_completion
 autoload -Uz compinit && compinit
 ```
 
-Now, most scripts in the database, you will have tab autocompletion. For example:
+Now, for most scripts in the database, you will have tab autocompletion. For example:
 
 ```
 python get_a_grip/grasp_motion_planning/scripts/run_grasp_motion_planning.py \
