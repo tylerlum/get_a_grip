@@ -152,6 +152,7 @@ class IsaacValidator:
     ) -> None:
         self.gpu = gpu
         self.validation_type = validation_type
+        self.hand_model_type = hand_model_type
 
         if hand_model_type == HandModelType.ALLEGRO:
             joint_names = ALLEGRO_HAND_JOINT_NAMES
@@ -546,6 +547,12 @@ class IsaacValidator:
         hand_shape_props = gym.get_actor_rigid_shape_properties(env, hand_actor_handle)
         for i in range(len(hand_shape_props)):
             hand_shape_props[i].friction = 0.9
+
+            # HACK: For some reason, the LEAP hand simulations look very slippery
+            #       so we increase the friction for this hand to get reasonable results
+            if self.hand_model_type == HandModelType.LEAP:
+                hand_shape_props[i].friction = 5.0
+
         gym.set_actor_rigid_shape_properties(env, hand_actor_handle, hand_shape_props)
         return
 
