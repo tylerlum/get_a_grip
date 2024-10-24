@@ -2,6 +2,12 @@
 
 Below, there are some steps you need to do manually (e.g., installing isaacgym), so pay attention to the comments :)
 
+We recommend that you follow the below instructions as given, but if you encounter issues installing these specific dependencies, you can potentially skip them and still do what you need to do.
+
+* `isaacgym`: Needed only for simulating grasps (for grasp label generation and evaluation) and nerfdata generation (for getting posed RGB images of objects)
+* `kaolin`: Needed for GPU-accelerated mesh-distance computations (for grasp generation)
+* `pytorch3d`: Needed for farthest point sampling on objects and hands
+
 ```
 cd <path_to_get_a_grip_root>
 conda create -n get_a_grip_env python=3.8
