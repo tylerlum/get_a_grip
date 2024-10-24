@@ -78,7 +78,7 @@ Installation instructions [here](docs/installation.md).
 
 Please run all commands from the root directory of this repository.
 
-### 0. Setup Zsh Tab Completion (Optional)
+### 0. Set Up Zsh Tab Completion (Optional)
 
 Run this to get tab completion for most scripts in this codebase. This is experimental and only works for `zsh` (not `bash`). This is just a small quality of life improvement, so feel free to skip it!
 
