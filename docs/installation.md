@@ -5,7 +5,7 @@ Below, there are some steps you need to do manually (e.g., installing isaacgym),
 We recommend that you follow the below instructions as given, but if you encounter issues installing these specific dependencies, you can potentially skip them and still do what you need to do.
 
 * `isaacgym`: Needed only for simulating grasps (for grasp label generation and evaluation) and nerfdata generation (for getting posed RGB images of objects)
-* `kaolin`: Needed for GPU-accelerated mesh-distance computations (for grasp generation)
+* `kaolin`: Needed for GPU-accelerated mesh-distance computations (for grasp generation). This is not required for the quick-start instructions.
 * `pytorch3d`: Needed for farthest point sampling on objects and hands
 
 ```
