@@ -142,7 +142,9 @@ python get_a_grip/utils/download.py \
 --include_point_clouds True
 ```
 
-Next, we will download the pretrained models and associated files:
+Note: You can remove the `--include_...` if you don't need a certain component (for example, if you only want the grasps and not the perceptual data, remove all `--include_...` except for --include_final_evaled_grasp_config_dicts True`).
+
+Next, we will download the pretrained models and the fixed sampler grasps:
 
 ```
 python get_a_grip/utils/download.py \
@@ -237,16 +239,7 @@ python get_a_grip/dataset_generation/scripts/eval_grasp_config_dict.py \
 
 Note: Isaacgym may not run on all GPUs (e.g., H100s seem to not work). Please refer to their documentation for more details (in `<path/to/isaacgym>/docs/index.html`).
 
-If you get this error:
-```
-ImportError: libpython3.8m.so.1.0: cannot open shared object file: No such file or directory
-```
-
-Try this:
-```
-# Environment variable that may be needed from isaacgym docs
-export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${CONDA_PREFIX}/lib
-```
+If you get this error: `ImportError: libpython3.8m.so.1.0: cannot open shared object file: No such file or directory`, you can try `export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${CONDA_PREFIX}/lib`.
 
 Run nerfstudio's interactive viewer:
 
@@ -288,7 +281,7 @@ planner.optimizer:bps-random-sampling-optimizer-config \
 
 [Visualize_Mug_Generated_Grasp_simplescreenrecorder-2024-09-30_15.46.14.mp4](https://github.com/user-attachments/assets/c89b84fc-55e6-4ac2-90ca-d0cab31f6933)
 
-Visualize BPS sampler and BPS evaluator on real world NeRF (optional):
+Visualize BPS sampler and BPS evaluator on real world NeRF (optional, only if you included the real world object data):
 
 ```
 python get_a_grip/grasp_planning/scripts/run_grasp_planning.py \
@@ -332,7 +325,7 @@ planner.optimizer:bps-random-sampling-optimizer-config \
 
 [Visualize_Mug_Generated_Grasp_Motion_simplescreenrecorder-2024-09-30_15.55.17.mp4](https://github.com/user-attachments/assets/19bfc592-367b-47b2-99da-0ec9503ddcc5)
 
-Visualize BPS sampler and BPS evaluator on real world NeRF (optional):
+Visualize BPS sampler and BPS evaluator on real world NeRF (optional, only if you included the real world object data):
 
 ```
 python get_a_grip/grasp_motion_planning/scripts/run_grasp_motion_planning.py \
