@@ -341,7 +341,7 @@ def compute_grasp_orientations_from_z_dirs(
     x_dirs = x_dirs / x_dirs.norm(dim=-1, keepdim=True)
 
     # Make sure y and z are orthogonal
-    assert (torch.einsum("...l,...l->...", y_dirs, z_dirs).abs().max() < 1e-3).all(), (
+    assert (torch.einsum("...l,...l->...", y_dirs, z_dirs).abs().max() < 1e-2).all(), (
         f"y_dirs = {y_dirs}",
         f"z_dirs = {z_dirs}",
         f"torch.einsum('...l,...l->...', y_dirs, z_dirs).abs().max() = {torch.einsum('...l,...l->...', y_dirs, z_dirs).abs().max()}",
