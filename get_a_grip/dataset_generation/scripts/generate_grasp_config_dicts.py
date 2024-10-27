@@ -1,7 +1,7 @@
 import pathlib
 import random
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Optional
 
 import numpy as np
 import torch
@@ -33,6 +33,7 @@ class GenerateGraspConfigDictsArgs:
     input_hand_config_dicts_path: pathlib.Path = (
         get_data_folder() / "dataset/NEW/hand_config_dicts"
     )
+    input_object_code_and_scales_txt_path: Optional[pathlib.Path] = None
     output_grasp_config_dicts_path: pathlib.Path = (
         get_data_folder() / "dataset/NEW/grasp_config_dicts"
     )
@@ -93,6 +94,26 @@ def generate_grasp_config_dicts(
         output_folder_path=output_grasp_config_dicts_path,
         continue_ok=args.continue_ok,
     )
+
+    # Only do the objects in the text file
+    if args.input_object_code_and_scales_txt_path is not None:
+        print(
+            f"Reading object codes and scales from {args.input_object_code_and_scales_txt_path}"
+        )
+        with open(args.input_object_code_and_scales_txt_path, "r") as f:
+            input_object_code_and_scale_strs_from_file = f.read().splitlines()
+        print(f"From folder, there are {len(input_object_code_and_scale_strs)} objects")
+        print(
+            f"From file, there are {len(input_object_code_and_scale_strs_from_file)} objects"
+        )
+        input_object_code_and_scale_strs = list(
+            set(input_object_code_and_scale_strs).intersection(
+                input_object_code_and_scale_strs_from_file
+            )
+        )
+        print(
+            f"In intersection of both, there are {len(input_object_code_and_scale_strs)} objects"
+        )
 
     random.Random(args.seed).shuffle(input_object_code_and_scale_strs)
 
