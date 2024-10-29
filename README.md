@@ -128,8 +128,6 @@ We will be choosing the `nano` version of the dataset for testing and visualizat
 export DATASET_NAME=nano
 ```
 
-You can change `nano` (2 random objects) to `tiny_random` (25 random objects), `tiny_best` (25 best-grasped objects), `small_random` (100 random objects), `small_best` (100 best-grasped objects), or `large` (all objects). `large` is >2 TB (only recommended for model training).
-
 Next, we will download the dataset:
 
 ```
@@ -142,15 +140,13 @@ python get_a_grip/utils/download.py \
 --include_point_clouds True
 ```
 
-Note: You can remove the `--include_...` if you don't need a certain component (for example, if you only want the grasps and not the perceptual data, remove all `--include_...` except for --include_final_evaled_grasp_config_dicts True`).
-
 Next, we will download the pretrained models and the fixed sampler grasps:
 
 ```
 python get_a_grip/utils/download.py \
 --download_url ${DOWNLOAD_URL} \
 --include_pretrained_models True \
---include_fixed_sampler_grasp_config_dicts True 
+--include_fixed_sampler_grasp_config_dicts True
 ```
 
 Next, we will download real-world object data (optional, takes a few minutes to download):
@@ -191,6 +187,59 @@ data
     ├── nerfdata
     ├── nerfcheckpoints
     └── point_clouds
+```
+
+### 1.5 Download Specific Components (Optional)
+
+Our download script is flexible for your use case.
+
+**Dataset Size:** You can set `export DATASET_NAME=<your choice>` to `nano` (2 random objects), `tiny_random` (25 random objects), `tiny_best` (25 best-grasped objects), `small_random` (100 random objects), `small_best` (100 best-grasped objects), or `large` (all objects). `large` is >2 TB (takes a long time to download, only recommended for model training). We recommend `nano` for this quick start guide.
+
+**Components:** You can remove the `--include_...` if you don't need a certain component.
+
+Example 1: If you only want the full dataset of Allegro hand grasps (no perceptual data):
+
+```
+export DATASET_NAME=large
+
+python get_a_grip/utils/download.py \
+--download_url ${DOWNLOAD_URL} \
+--dataset_name ${DATASET_NAME} \
+--include_final_evaled_grasp_config_dicts True
+```
+
+Example 2: If you only want the full dataset of LEAP hand grasps (no perceptual data):
+
+```
+export DATASET_NAME=large
+
+python get_a_grip/utils/download.py \
+--download_url ${DOWNLOAD_URL} \
+--dataset_name ${DATASET_NAME} \
+--include_leap_final_evaled_grasp_config_dicts True
+```
+
+Example 3: If you only want a small dataset of point clouds (no grasps):
+
+```
+export DATASET_NAME=small_random
+
+python get_a_grip/utils/download.py \
+--download_url ${DOWNLOAD_URL} \
+--dataset_name ${DATASET_NAME} \
+--include_point_clouds True
+```
+
+Example 4: If you only want a small dataset of nerf data and nerf checkpoints:
+
+```
+export DATASET_NAME=small_random
+
+python get_a_grip/utils/download.py \
+--download_url ${DOWNLOAD_URL} \
+--dataset_name ${DATASET_NAME} \
+--include_nerfdata True \
+--include_nerfcheckpoints True
 ```
 
 See [here](docs/download.md) for more download details.

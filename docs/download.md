@@ -4,8 +4,6 @@
 
 Please read the main README to get the `<download_url>`.
 
-- We only recommend using the `large` version for model training (very slow to download). Use `nano` to start using the codebase as quickly as possible.
-
 - For dataset generation, you only need the `meshdata` (all objects):
 
 ```

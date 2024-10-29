@@ -31,6 +31,7 @@ class DownloadArgs:
     include_nerfdata: bool = False
     include_nerfcheckpoints: bool = False
     include_point_clouds: bool = False
+    include_leap_final_evaled_grasp_config_dicts: bool = False
 
     # Models
     include_pretrained_models: bool = False
@@ -160,6 +161,13 @@ def run_download(args: DownloadArgs) -> None:
     if args.include_point_clouds:
         assert args.dataset_name is not None
         url = f"{args.download_url_no_trailing_slash}/dataset/{args.dataset_name}/point_clouds.zip"
+        extract_to = args.data_folder / "dataset" / args.dataset_name
+        download_and_extract_zip(url=url, extract_to=extract_to)
+
+    # Leap final evaled grasp config dicts
+    if args.include_leap_final_evaled_grasp_config_dicts:
+        assert args.dataset_name is not None
+        url = f"{args.download_url_no_trailing_slash}/dataset/{args.dataset_name}/leap_final_evaled_grasp_config_dicts.zip"
         extract_to = args.data_folder / "dataset" / args.dataset_name
         download_and_extract_zip(url=url, extract_to=extract_to)
 
