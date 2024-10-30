@@ -33,6 +33,23 @@ python get_a_grip/utils/download.py \
 
 - Under the hood, each component of the dataset is contained in a zip file that can be accessed through a link. The download script will download these zip files and unzip them into the correct directory.
 
+- `--include_final_evaled_grasp_config_dicts` for Allegro hand grasps. `--include_leap_final_evaled_grasp_config_dicts` for Leap hand grasps.
+
+Note: There are fewer objects with grasp data than there are with perceptual data. Not all objects have been evaluated with grasps because (1) they weren't able to be dropped onto a table and remain stable or (2) they were not able to be simulated (because the object was too complex for the simulator).
+
+If an object was too complex for the simulator, you will get something like:
+```
+[Error] [carb.gym.plugin] Gym cuda error: an illegal memory access was encountered: ../../../source/plugins/carb/gym/impl/Gym/GymPhysX.cpp: 3480
+[Error] [carb.gym.plugin] Gym cuda error: an illegal memory access was encountered: ../../../source/plugins/carb/gym/impl/Gym/GymPhysX.cpp: 3546
+[Error] [carb.gym.plugin] Gym cuda error: an illegal memory access was encountered: ../../../source/plugins/carb/gym/impl/Gym/GymPhysX.cpp: 3610
+                                                                                                                                                [Error] [carb.gym.plugin] Gym cuda error: an illegal memory access was encountered: ../../../source/plugins/carb/gym/impl/Gym/GymPhysX.cpp: 3454s]
+/buildAgent/work/99bede84aa0a52c2/source/physx/src/NpScene.cpp (3189) : internal error : PhysX Internal CUDA error. Simulation can not continue!
+
+/buildAgent/work/99bede84aa0a52c2/source/physx/src/NpScene.cpp (3496) : invalid operation : PxScene::fetchResults: fetchResults() called illegally! It must be called after advance() or simulate()
+```
+
+This could potentially be fixed by adjusting the simulation parameters or convex decomposition parameters, or by simulating fewer objects/grasps at once.
+
 ## Dataset Details
 
 ### final_evaled_grasp_config_dicts
