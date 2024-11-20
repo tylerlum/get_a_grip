@@ -41,7 +41,7 @@ Note that in some intermediate computation, we first compute the camera transfor
 
 ### Allegro Hand
 
-Although our framework is agnostic to the specific hand hardware, this codebase currently only supports the Allegro hand, which has four fingers.
+Although our framework is agnostic to the specific hand hardware, this codebase primarily supports the Allegro hand, which has four fingers.
 
 Allegro wrist pose frame:
 
