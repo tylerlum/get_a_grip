@@ -404,6 +404,10 @@ See [here](docs/dataset_generation.md) for details about generating the dataset 
 
 See [here](docs/model_training.md) for details about training your own models yourself.
 
+## Custom Hand
+
+See [here](docs/custom_hand.md) for details about creating the dataset for your own hand.
+
 ## Additional Details
 
 See [here](docs/additional_details.md) for additional useful details about this codebase (highly recommended).
