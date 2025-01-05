@@ -9,5 +9,6 @@ open3d
 pypose
 pytorch_kinematics
 urdf_parser_py
+arm_pytorch_utilities  # Adding this to avoid the following issue: https://github.com/UM-ARM-Lab/pytorch_kinematics/issues/38
 git+https://github.com/sergeyprokudin/bps
 -e .
