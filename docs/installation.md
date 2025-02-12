@@ -32,7 +32,8 @@ mkdir thirdparty
 cd thirdparty
 
 # Install custom kaolin (https://kaolin.readthedocs.io/en/latest/notes/installation.html)
-git clone --recursive https://github.com/tylerlum/kaolin  # Last tested on commit hash fe697d4ba32e528acc285939a9f36b6322db7c0c, may still work on more updated versions
+git clone --recursive https://github.com/tylerlum/kaolin
+git checkout GetAGrip  # Last tested on commit hash fe697d4ba32e528acc285939a9f36b6322db7c0c, may still work on more updated versions
 cd kaolin
 pip install -r tools/build_requirements.txt -r tools/viz_requirements.txt -r tools/requirements.txt
 export IGNORE_TORCH_VER=1  # Build from source on new version
@@ -48,7 +49,8 @@ cd <path/to/thirdparty>  # back to thirdparty
 
 # Install custom curobo (Library Installation step in https://curobo.org/get_started/1_install_instructions.html#library-installation)
 sudo apt install git-lfs
-git clone https://github.com/tylerlum/curobo.git  # Last tested on commit hash d08cc34ea0f3b23a588ab440aae66590c0380ab9, may still work on more updated versions
+git clone https://github.com/tylerlum/curobo.git
+git checkout GetAGrip  # Last tested on commit hash d08cc34ea0f3b23a588ab440aae66590c0380ab9, may still work on more updated versions
 cd curobo
 git lfs pull  # Maybe need to add this (https://github.com/NVlabs/curobo/issues/10)
 pip install -e . --no-build-isolation  # ~20 min
